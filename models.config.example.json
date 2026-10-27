@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "connections": [
+    {
+      "id": "lmstudio-locale",
+      "name": "LM Studio sul PC",
+      "providerType": "lmstudio",
+      "protocol": "openai-completions",
+      "baseUrl": "http://127.0.0.1:1234/v1",
+      "auth": {
+        "type": "none"
+      },
+      "models": [
+        {
+          "id": "modello-locale",
+          "name": "Modello subagenti",
+          "limits": {
+            "contextWindow": 32768,
+            "maxOutputTokens": 4096
+          },
+          "capabilities": {
+            "toolCalling": true,
+            "vision": false,
+            "streaming": true
+          },
+          "reasoning": {
+            "enabled": false,
+            "levels": []
+          }
+        }
+      ]
+    }
+  ],
+  "profiles": {
+    "orchestrator": {
+      "connectionId": "lmstudio-locale",
+      "modelId": "modello-locale",
+      "effort": "off"
+    },
+    "worker": {
+      "connectionId": "lmstudio-locale",
+      "modelId": "modello-locale",
+      "effort": "off"
+    }
+  }
+}

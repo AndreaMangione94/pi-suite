@@ -1,0 +1,31 @@
+[
+  {
+    "name": "Endpoint personalizzato",
+    "vendor": "customendpoint",
+    "apiKey": "${key}",
+    "apiType": "chat-completions",
+    "models": [
+      {
+        "id": "custom-model",
+        "name": "Modello personalizzato",
+        "url": "https://api.example.com/v1/chat/completions",
+        "toolCalling": true,
+        "vision": true,
+        "thinking": true,
+        "supportsReasoningEffort": [
+          "none",
+          "low",
+          "medium",
+          "xhigh"
+        ],
+        "contextWindow": 32000,
+        "maxOutputTokens": 4096
+      }
+    ],
+    "settings": {
+      "custom-model": {
+        "reasoningEffort": "xhigh"
+      }
+    }
+  }
+]

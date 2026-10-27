@@ -1,0 +1,26 @@
+{
+  "name": "pi-suite",
+  "version": "0.6.5",
+  "private": true,
+  "description": "Pi Suite: chat orchestratore, incarichi Markdown ai subagenti e grafo locale",
+  "keywords": [
+    "pi-package"
+  ],
+  "pi": {
+    "extensions": [
+      "./suite-extension.ts"
+    ],
+    "skills": [
+      "./skills"
+    ]
+  },
+  "scripts": {
+    "test:syntax": "node --check adapter.mjs && node --check byok-format.mjs && node --check byok-network.mjs && node --check suite-ui/app.js && node --check suite-ui/evidence-panel.js && node --check suite-ui/benchmark-panel.js"
+  },
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "1.0.0",
+    "pi-subagents": "0.79.0",
+    "yaml": "2.8.3"
+  },
+  "license": "MIT"
+}
