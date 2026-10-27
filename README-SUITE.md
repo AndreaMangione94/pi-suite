@@ -104,6 +104,22 @@ Non sono inclusi un installer firmato, aggiornamenti automatici o inferenza offl
 
 ## Aggiornare o disinstallare
 
+### Reinstallare dai sorgenti modificati
+
+Per applicare le modifiche locali a un'installazione esistente, chiudi le chat e termina i lavori in corso, poi avvia `Reinstalla-PiSuite.cmd` dalla cartella dei sorgenti aggiornati. Non occorrono privilegi amministrativi. Il launcher usa `ExecutionPolicy Bypass` solo per quel processo, senza cambiare la policy del sistema.
+
+Lo script arresta i processi identificati come appartenenti all'applicazione, sostituisce i file installati, conserva un backup `app-precedente-*` e riavvia il pannello. La cartella `data`, inclusi progetti, configurazioni e chiavi cifrate, resta invariata. Le dipendenze gia installate vengono riutilizzate; se i relativi manifest sono cambiati, lo script si ferma prima di modificare l'applicazione e richiede `Install.cmd`. In caso di errore durante la sostituzione o le verifiche, ripristina i precedenti file applicativi.
+
+Per una verifica senza modifiche:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Reinstalla-PiSuite.ps1 -ValidateOnly
+```
+
+La destinazione predefinita e `%LOCALAPPDATA%\PiSuite`; `-Destination` consente di specificarne un'altra. `-NoLaunch` evita il riavvio del pannello. Non eliminare la cartella `data` per aggiornare l'applicazione.
+
+### Pacchetto Di Distribuzione
+
 Nella cartella di consegna `pi-suite`, accanto allo ZIP, trovi `Gestisci-PiSuite.ps1`. Per aggiornare esegui:
 
 ```powershell

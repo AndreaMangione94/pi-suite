@@ -232,6 +232,14 @@ class Suite:
             models=p.get('models',[])
             if p.get('custom'):
                 item.update(baseUrl=p['baseUrl'],api=p['api'])
+                if p['api']=='openai-completions':
+                    models=[dict(model) for model in models]
+                    for model in models:
+                        levels=model.get('reasoningLevels',[])
+                        if model.get('reasoning') and levels:
+                            model['thinkingLevelMap']={level:level if level in levels else None for level in byok.EFFORTS if level!='off'}
+                            model['thinkingLevelMap']['max']=None
+                            if 'off' in levels:model['thinkingLevelMap']['off']='none'
             elif p.get('providerType',p['id'])!=p['id'] or models:
                 base=[m for m in self._builtin_models() if m['provider']==p['providerType'] and m['api'] in APIS]
                 if not base:raise ValueError('Connessione aggiuntiva non supportata per questo provider nativo')
@@ -282,6 +290,36 @@ class Suite:
             if c is None:raise ValueError('Salva prima la connessione')
             c['auth']={'type':'secret','ref':'byok/'+c['id'],**{k:v for k,v in c['auth'].items() if k in ('ref','header','prefix')}}
             return self._commit_byok(config,[{'id':c['id'],'apiKey':data.get('value',''),'clearKey':data.get('remove',False)}])
+
+    def save_connection(self,data):
+        with self.guard:
+            if self.busy:raise ValueError('Attendi il completamento del lavoro in corso')
+            current=self.byok.config()
+            if data.get('revision')!=self.byok.revision():raise ValueError('Configurazione cambiata: selezionala di nuovo prima di salvare')
+            notices=[]
+            incoming=byok.parse(data.get('content',''),'json')
+            if len(incoming['connections'])!=1:raise ValueError('Inserisci una sola connessione per configurazione')
+            connection=incoming['connections'][0]
+            selected=data.get('connectionId','')
+            previous=next((c for c in current['connections'] if c['id']==selected),None)
+            if selected and previous is None:raise ValueError('Configurazione non disponibile')
+            if previous:
+                connection['id']=previous['id']
+                if connection['auth']['type']=='secret' and previous['auth']['type']=='secret':
+                    connection['auth']['ref']=previous['auth']['ref']
+            elif any(c['id']==connection['id'] for c in current['connections']):
+                raise ValueError('Configurazione gia presente: selezionala dalla lista per modificarla')
+            key=data.get('apiKey','')
+            if key and connection['auth']['type']=='none':connection['auth']={'type':'secret','ref':'byok/'+connection['id']}
+            if key and connection['auth']['type']!='secret':raise ValueError('Per inserire una chiave usa autenticazione secret nel JSON')
+            config={**current,'connections':[connection if c['id']==selected else c for c in current['connections']]}
+            if not previous:config['connections'].append(connection)
+            result=self._commit_byok(config,[{'id':connection['id'],'apiKey':key}])
+            if connection.get('baseUrl','').startswith('http://'):
+                notices.append('Endpoint HTTP: richieste e chiave API viaggiano in chiaro; usa solo una rete fidata o un tunnel cifrato.')
+            if connection['auth']['type']=='secret' and not self.byok.has_key(connection):
+                notices.append('Chiave API mancante: inseriscila nel campo protetto della Suite.')
+            return {**result,'connectionNotices':notices}
 
     def save_settings(self,data):
         with self.guard:
@@ -587,6 +625,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             elif route=='/api/byok/import/preview' and post:result=app.import_byok(data)
             elif route=='/api/byok/import/apply' and post:result=app.import_byok(data,apply=True)
             elif route=='/api/byok/secrets' and post:result=app.save_secret(data)
+            elif route=='/api/byok/connections' and post:result=app.save_connection(data)
             elif route=='/api/byok/export' and not post:
                 format=params.get('format',['json'])[0]
                 result={'format':format,'content':app.byok.export(format)}

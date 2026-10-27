@@ -12,6 +12,7 @@ from pathlib import Path
 
 APIS=('openai-completions','openai-responses','anthropic-messages','google-generative-ai')
 EFFORTS=('off','minimal','low','medium','high','xhigh')
+PRIVATE_NETWORKS=tuple(ipaddress.ip_network(network) for network in ('10.0.0.0/8','172.16.0.0/12','192.168.0.0/16','fc00::/7'))
 ROOT=Path(__file__).resolve().parent
 
 def atomic(path,value):
@@ -54,7 +55,7 @@ def endpoint(value,path):
         address=ipaddress.ip_address(host)
         if address.is_link_local or address.is_unspecified or address.is_multicast:
             raise ValueError(path+': indirizzo speciale non consentito')
-        local=address.is_loopback
+        local=address.is_loopback or any(address.version==network.version and address in network for network in PRIVATE_NETWORKS)
     except ValueError as e:
         if 'speciale' in str(e):raise
         local=host=='localhost'
@@ -153,23 +154,25 @@ def from_custom_endpoints(groups):
     connections=[]
     for i,g in enumerate(groups):
         p=f'customendpoint[{i}]'
-        obj(g,('name','vendor','apiKey','apikey','apykey','apiType','models','settings'),p,('name','vendor','models'))
+        obj(g,('name','vendor','apiKey','apikey','apykey','apiType','models','settings'),p,('name','vendor'))
         name=string(g['name'],p+'.name')
         if g['vendor']!='customendpoint':raise ValueError(p+'.vendor: supportato solo customendpoint')
         keys=[k for k in ('apiKey','apikey','apykey') if k in g]
         if len(keys)>1:raise ValueError(p+': specificare un solo campo apiKey')
         if keys and g[keys[0]]!='${key}':
             raise ValueError(p+'.apiKey: usa solo ${key}; inserisci la chiave nel campo protetto separato')
-        if not isinstance(g['models'],list) or not 1<=len(g['models'])<=1000:raise ValueError(p+'.models: richiesti da 1 a 1000 modelli')
+        if not isinstance(g.get('models'),list) or not 1<=len(g['models'])<=1000:raise ValueError(p+'.models: richiesti da 1 a 1000 modelli')
         settings=g.get('settings',{})
         if not isinstance(settings,dict):raise ValueError(p+'.settings: richiesto oggetto')
         models=[];destination=None
         for j,m in enumerate(g['models']):
             q=p+f'.models[{j}]'
-            obj(m,('id','name','url','apiType','toolCalling','vision','thinking','supportsReasoningEffort','contextWindow','maxInputTokens','maxOutputTokens'),q,('id','name','url'))
+            obj(m,('id','name','url','apiType','toolCalling','vision','thinking','supportsReasoningEffort','reasoningEffortFormat','contextWindow','maxInputTokens','maxOutputTokens'),q,('id','name','url'))
             mid=string(m['id'],q+'.id');label=string(m['name'],q+'.name')
             api=m.get('apiType',g.get('apiType','chat-completions'))
             if not isinstance(api,str) or api not in protocols:raise ValueError(q+'.apiType: usare chat-completions, responses o messages')
+            if 'reasoningEffortFormat' in m and m['reasoningEffortFormat']!=api:
+                raise ValueError(q+'.reasoningEffortFormat: deve corrispondere ad apiType')
             protocol,route=protocols[api]
             url=string(m['url'],q+'.url',2000)
             # Only known protocol routes can be represented by the Pi transport.
@@ -213,7 +216,9 @@ def parse(content,format):
     def unique(pairs):
         result={}
         for k,v in pairs:
-            if k in result:raise ValueError('JSON: chiave duplicata')
+            if k in result:
+                raise ValueError('JSON: chiave duplicata '+json.dumps(k,ensure_ascii=True)+
+                    ' nello stesso oggetto. Correggi il campo ripetuto nel JSON; non riguarda le configurazioni salvate o la chiave API.')
             result[k]=v
         return result
     try:

@@ -90,111 +90,74 @@ function projects(){options($('project'),[['','Seleziona un progetto'],...settin
 async function refresh(initial=false){state=await api('state');if(initial||!settings)settings=state.settings;else settings.projects=state.settings.projects;setup();renderJob();if(activePage==='runs')await loadDelegations();if(initial){projects();renderProviders();renderRoles();renderSkills();}const signature=state.job.id+':'+state.job.state;if(signature!==lastJob){lastJob=signature;if(state.job.state==='done'){notice('Operazione completata.');projects();if(state.job.operation==='graph'&&project){project=await api('project?id='+project.id);await loadGraph();}if(['sync-source','prepare-asis','auto-asis','index-sources','register-asis'].includes(state.job.operation)){await loadSources();if(project)await refreshWorkspaceFiles();if(state.job.result?.workspace)notice('Dossier pronto in '+state.job.result.workspace+'. La chat scriverà la documentazione.');}if(state.job.operation==='probe'){settings.modelChecks=state.settings.modelChecks;renderProviders();}if(state.job.operation==='probe')notice('Connessione e tool calling verificati. Ragionamento effettivo: '+state.job.result.effective);}if(state.job.state==='failed')notice(state.job.error,true);}document.querySelectorAll('[data-job-button]').forEach(b=>b.disabled=state.busy);asisAvailability();}
 bind('open-chat',async()=>{if(!project)throw Error('Seleziona un progetto.');const result=await api('chat',{project:project.id});notice('Chat Pi aperta per '+project.name+' in '+result.folder);});
 async function loadDelegations(){const batches=await api('delegations'),host=$('delegation-list'),signature=JSON.stringify(batches);if(signature===lastDelegations)return;lastDelegations=signature;host.replaceChildren();for(const batch of batches){const card=el('div',undefined,'card');card.append(el('h2','Delega dalla chat · '+batch.state),el('p',batch.plan));for(const task of batch.tasks){const detail=el('details');detail.append(el('summary',task.title+' · '+task.state),el('pre',task.assignment),el('p','Artefatti: '+task.directory),el('pre',task.result?.result?.text||task.result?.error||task.error||'In attesa del risultato.'));card.append(detail);}host.append(card);}}
-async function save(){settings=await api('settings',settings);catalog=await api('models');renderProviders();renderRoles();renderSkills();setup();notice('Configurazione salvata.');}
-function modelCard(p,m){
-  const box=el('div',undefined,'model-editor');
-  box.append(el('h3',m.name||m.id||'Nuovo modello'));
-  const row=el('div',undefined,'row');
-  const id=input(m.id),name=input(m.name||m.id),context=input(m.contextWindow||32000,'number'),output=input(m.maxTokens||4096,'number');
-  id.oninput=()=>{const old=m.id;m.id=id.value.trim();for(const profile of Object.values(settings.roles))if(profile.provider===p.id&&profile.model===old)profile.model=m.id;};name.oninput=()=>m.name=name.value;
-  context.oninput=()=>m.contextWindow=Number(context.value);output.oninput=()=>m.maxTokens=Number(output.value);
-  row.append(field('ID remoto / deployment',id),field('Nome visualizzato',name),field('Contesto totale (token)',context),field('Output massimo',output));box.append(row);
-  const caps=el('div',undefined,'row');
-  for(const [label,key,value] of [['Strumenti','toolCalling',m.toolCalling],['Streaming','streaming',m.streaming]]){
-    const select=el('select');options(select,[['unknown','Non verificato'],['true','Supportato'],['false','Non supportato']],value==null?'unknown':String(value));
-    select.onchange=()=>m[key]=select.value==='unknown'?null:select.value==='true';caps.append(field(label,select));
-  }
-  const vision=input('','checkbox');vision.checked=(m.input||[]).includes('image');vision.onchange=()=>m.input=vision.checked?['text','image']:['text'];caps.append(field('Supporta immagini',vision));
-  const defaultEffort=el('select');const updateDefault=()=>options(defaultEffort,[['off','Disattivato'],...(m.reasoningLevels||[]).filter(x=>x!=='off').map(x=>[x,x])],m.defaultEffort||'off');defaultEffort.onchange=()=>m.defaultEffort=defaultEffort.value;updateDefault();
-  const reasoning=input('','checkbox');reasoning.checked=!!m.reasoning;reasoning.onchange=()=>{m.reasoning=reasoning.checked;if(!m.reasoning){m.reasoningLevels=[];m.defaultEffort='off';levels.value='';}levels.disabled=!m.reasoning;updateDefault();};caps.append(field('Ragionamento configurabile',reasoning));
-  const levels=input((m.reasoningLevels||[]).join(', '));levels.placeholder='low, medium, high';levels.disabled=!m.reasoning;levels.oninput=()=>{m.reasoningLevels=levels.value.split(',').map(x=>x.trim()).filter(Boolean);if(!m.reasoningLevels.includes(m.defaultEffort))m.defaultEffort='off';updateDefault();};caps.append(field('Livelli accettati (separati da virgola)',levels),field('Ragionamento predefinito per nuove assegnazioni',defaultEffort));box.append(caps);
-  box.append(btn('Verifica modello',async()=>{await save();await api('byok/probe',{provider:p.id,model:m.id,effort:'off'});notice('Verifica avviata: può consumare token sul provider selezionato.');}),btn('Rimuovi modello',()=>{p.models=p.models.filter(x=>x!==m);for(const [role,profile] of Object.entries(settings.roles))if(profile.provider===p.id&&profile.model===m.id)delete settings.roles[role];renderProviders();},'text-button'));
-  const reports=Object.values(settings.modelChecks||{}).filter(c=>c.provider===p.id&&c.model===m.id);
-  if(reports.length){const check=reports[0];box.append(el('p',(check.current?'':'Da riverificare · ')+(check.status==='verified'?'Ciclo strumenti verificato':'Verifica fallita')+' · '+new Date(check.checkedAt*1000).toLocaleString('it-IT')+(check.error?' · '+check.error:''),'muted'));}
-  return box;
+async function save(){settings=await api('settings',settings);connectionRevision=settings.byokRevision;catalog=await api('models');renderProviders();renderRoles();renderSkills();setup();notice('Configurazione salvata.');}
+let connectionMode='custom',selectedConnection='',connectionDraft=null,connectionRevision='',connectionGeneration=0,connectionLoading=false,connectionSaving=false;
+function connectionMessage(text='',error=false){const host=$('connection-status');host.textContent=text;host.hidden=!text;host.classList.toggle('error',error);}
+function connectionAvailability(){
+  $('native-connection').hidden=connectionMode!=='provider';$('custom-connection').hidden=connectionMode!=='custom';
+  $('mode-provider').checked=connectionMode==='provider';$('mode-custom').checked=connectionMode==='custom';
+  $('connection-fields').disabled=connectionLoading||connectionSaving;
+  for(const id of ['saved-connection','mode-provider','mode-custom'])$(id).disabled=connectionSaving;
+  $('save-connection').disabled=connectionLoading||connectionSaving||!connectionDraft||(connectionMode==='custom'?!$('byok-editor').value.trim():!$('native-provider').value||!$('connection-name').value.trim());
+  $('save-connection').textContent=connectionSaving?'Salvataggio...':selectedConnection?'Salva configurazione':'Aggiungi configurazione';
+}
+async function loadConnection(){
+  const generation=++connectionGeneration;connectionLoading=true;connectionDraft=null;$('byok-key').value='';$('byok-editor').value='';connectionMessage();connectionAvailability();
+  try{
+    const result=await api('byok/config');if(generation!==connectionGeneration)return;
+    connectionRevision=result.revision;
+    const saved=result.config.connections.find(c=>c.id===selectedConnection);
+    if(selectedConnection&&!saved)throw Error('Configurazione non disponibile. Ricarica la pagina.');
+    if(saved)connectionMode=saved.baseUrl?'custom':'provider';
+    connectionDraft=saved||{id:'',name:'',providerType:'',auth:{type:'secret',ref:''},models:[]};
+    const aliases=new Set(settings.providers.filter(p=>p.custom||p.providerType&&p.providerType!==p.id).map(p=>p.id));
+    const available=[...new Set([...catalog.filter(m=>!aliases.has(m.provider)).map(m=>m.provider),...settings.providers.filter(p=>!p.custom).map(p=>p.providerType||p.id)])].sort();
+    options($('native-provider'),[['','Scegli un fornitore'],...available.map(p=>[p,p])],connectionMode==='provider'?connectionDraft.providerType:'');
+    $('connection-name').value=connectionMode==='provider'?connectionDraft.name:'';
+    if(saved&&connectionMode==='custom')$('byok-editor').value=JSON.stringify({schemaVersion:1,connections:[saved]},null,2);
+    const hasKey=settings.providers.find(p=>p.id===selectedConnection)?.hasKey;
+    const environment=saved?.auth.type==='env';
+    $('connection-key-field').hidden=environment;
+    $('byok-key').placeholder=hasKey?'Chiave salvata: lascia vuoto per conservarla':'API key';
+    $('connection-key-status').textContent=environment?'Credenziale da variabile ambiente: '+saved.auth.name:hasKey?'Chiave protetta salvata su questo PC.':connectionMode==='custom'?'Chiave facoltativa per server senza autenticazione.':'Chiave protetta su questo PC.';
+  }catch(error){if(generation===connectionGeneration)connectionMessage(error.message,true);}
+  finally{if(generation===connectionGeneration){connectionLoading=false;connectionAvailability();}}
 }
 function renderProviders(){
-  const customIds=new Set(settings.providers.filter(p=>p.custom||p.providerType&&p.providerType!==p.id).map(p=>p.id));
-  const available=[...new Set(catalog.filter(m=>!customIds.has(m.provider)).map(m=>m.provider))].sort();
-  options($('new-provider'),[['__local','Server locale (senza account)'],['__custom','Endpoint personalizzato'],...available.map(p=>[p,p])]);
+  if(selectedConnection&&!settings.providers.some(p=>p.id===selectedConnection)){selectedConnection='';connectionDraft=null;}
+  options($('saved-connection'),[['','Nuova configurazione'],...settings.providers.map(p=>[p.id,p.name||p.id])],selectedConnection);
   $('byok-directory').textContent='Dati locali: '+settings.dataDirectory;
-  const host=$('provider-list');host.replaceChildren();
-  for(const p of settings.providers){
-    const card=el('div',undefined,'card');card.dataset.provider=p.id;
-    const top=el('div',undefined,'provider-header');top.append(el('h2',p.name||p.id),btn('Rimuovi connessione',()=>{settings.providers=settings.providers.filter(x=>x!==p);for(const [r,v]of Object.entries(settings.roles))if(v.provider===p.id)delete settings.roles[r];renderProviders();},'text-button'));card.append(top);
-    const name=input(p.name||p.id);name.oninput=()=>p.name=name.value;card.append(field('Nome connessione',name),el('p','ID: '+p.id+' · Tipo: '+(p.providerType||p.id),'muted'));
-    if(p.custom){
-      const row=el('div',undefined,'row'),url=input(p.baseUrl);url.oninput=()=>p.baseUrl=url.value;
-      const protocol=el('select');options(protocol,[['openai-completions','OpenAI Chat Completions'],['openai-responses','OpenAI Responses'],['anthropic-messages','Anthropic Messages'],['google-generative-ai','Google Generative AI']],p.api);protocol.onchange=()=>p.api=protocol.value;
-      row.append(field('Base URL (senza /chat/completions, /responses o /messages)',url),field('Protocollo',protocol));card.append(row);
-    }
-    p.auth=p.auth||{type:'none'};
-    const auth=el('select');options(auth,[['none','Nessuna autenticazione'],['secret','Chiave protetta su questo PC'],['env','Variabile ambiente']],p.auth.type);
-    auth.onchange=()=>{p.auth=auth.value==='secret'?{type:'secret',ref:'byok/'+p.id}:auth.value==='env'?{type:'env',name:'PI_SUITE_KEY_'+p.id.toUpperCase().replace(/[^A-Z0-9]/g,'_')}:{type:'none'};delete p.apiKey;renderProviders();};card.append(field('Autenticazione del server',auth));
-    if(p.auth.type==='secret'){
-      const key=input(p.apiKey||'','password');key.autocomplete='new-password';key.placeholder=p.hasKey?'Chiave salvata: lascia vuoto per conservarla':'Chiave non ancora inserita';key.oninput=()=>p.apiKey=key.value;card.append(field('API key',key));
-      if(p.hasKey){const clear=input('','checkbox');clear.checked=!!p.clearKey;clear.onchange=()=>p.clearKey=clear.checked;card.append(field('Rimuovi la chiave al salvataggio',clear));}
-    } else if(p.auth.type==='env'){const env=input(p.auth.name);env.oninput=()=>p.auth.name=env.value;card.append(field('Nome della variabile (valore mai esportato)',env));}
-    else card.append(el('p','Nessun account o chiave richiesto dalla suite per questa connessione. Il server deve consentire accesso senza autenticazione.','muted'));
-    for(const m of p.models||[])card.append(modelCard(p,m));
-    if(p.custom)card.append(btn('Aggiungi modello',()=>{p.models.push({id:'',name:'',contextWindow:32000,maxTokens:4096,input:['text'],reasoning:false,reasoningLevels:[],toolCalling:null,streaming:true});renderProviders();}));
-    else {
-      const choice=input();const list=el('datalist');list.id='native-'+p.id;choice.setAttribute('list',list.id);
-      const type=p.providerType||p.id;catalog.filter(m=>m.provider===type).forEach(m=>{const o=el('option');o.value=m.model;o.label=m.name;list.append(o);});
-      card.append(field('Personalizza un modello del catalogo',choice),list,btn('Aggiungi scheda modello',()=>{
-        const m=catalog.find(m=>m.provider===type&&m.model===choice.value);if(!m)throw Error('Seleziona un ID presente nel catalogo.');
-        if(!p.models.some(x=>x.id===m.model))p.models.push({id:m.model,name:m.name,contextWindow:m.contextWindow,maxTokens:m.maxTokens,input:m.input,reasoning:m.reasoning,reasoningLevels:m.reasoningLevels||[],toolCalling:null,streaming:true});renderProviders();
-      }));
-    }
-    host.append(card);
-  }
+  if(!connectionDraft&&!connectionLoading)return loadConnection();
 }
-bind('add-provider',()=>{
-  const type=$('new-provider').value,custom=type.startsWith('__');let n=1,id=custom?'local-1':type;
-  while(settings.providers.some(p=>p.id===id))id=(custom?'local':type)+'-'+(++n);
-  settings.providers.push({id,name:custom?'Server locale':type,providerType:custom?(type==='__local'?'lmstudio':'custom'):type,custom,models:[],
-    ...(custom?{api:'openai-completions',baseUrl:'http://127.0.0.1:1234/v1'}:{}),auth:custom?{type:'none'}:{type:'secret',ref:'byok/'+id}});renderProviders();
-});
-bind('save-providers',save);
-let byokPreview=null,byokGeneration=0;
-function resetByokPreview(){byokGeneration++;byokPreview=null;$('apply-byok').disabled=true;$('byok-preview').textContent='';}
-$('byok-editor').oninput=resetByokPreview;$('byok-format').onchange=resetByokPreview;$('byok-profiles').onchange=resetByokPreview;
-$('byok-file').onchange=async()=>{
-  resetByokPreview();$('byok-key').value='';const file=$('byok-file').files[0];if(!file)return;
-  try{if(file.size>700000)throw Error('Massimo 700 KB.');const generation=byokGeneration,content=await file.text();if(generation!==byokGeneration)return;
-    $('byok-editor').value=content;$('byok-format').value=/\.ya?ml$/i.test(file.name)?'yaml':'json';notice('File caricato nell’editor. Controlla la configurazione e apri l’anteprima.');
-  }catch(e){notice(e.message,true);}
-};
-bind('example-byok',()=>{
-  resetByokPreview();$('byok-key').value='';$('byok-file').value='';$('byok-format').value='json';
-  $('byok-editor').value=JSON.stringify([{name:'Il mio endpoint',vendor:'customendpoint',apiKey:'${key}',apiType:'chat-completions',models:[{
-    id:'custom-model',name:'Modello personalizzato',url:'https://api.example.com/v1/chat/completions',apiType:'chat-completions',toolCalling:true,vision:true,thinking:true,
-    supportsReasoningEffort:['none','low','medium','xhigh'],contextWindow:32000,maxOutputTokens:4096}],settings:{'custom-model':{reasoningEffort:'xhigh'}}}],null,2);
-  notice('Esempio caricato. Sostituisci URL, ID e capacità con quelli del server; verifica i limiti di token.');
-});
-bind('format-byok',async()=>{
-  if($('byok-format').value!=='json')throw Error('La formattazione è disponibile per JSON.');
-  // Validate first, so JSON.parse cannot silently discard duplicate keys.
-  const content=$('byok-editor').value,generation=byokGeneration;
-  await api('byok/import/preview',{content,format:'json',includeProfiles:$('byok-profiles').checked});
-  if(generation!==byokGeneration)return;
-  $('byok-editor').value=JSON.stringify(JSON.parse(content.replace(/^\uFEFF/,'')),null,2);resetByokPreview();
-});
-bind('preview-byok',async()=>{
-  resetByokPreview();const content=$('byok-editor').value;if(!content.trim())throw Error('Incolla una configurazione o carica un file JSON/YAML.');
-  const generation=byokGeneration,request={content,format:$('byok-format').value,includeProfiles:$('byok-profiles').checked};
-  const preview=await api('byok/import/preview',request);if(generation!==byokGeneration)return;byokPreview={...request,revision:preview.revision};
-  $('byok-preview').textContent=preview.changes.map(c=>c.action+' · '+c.name+' ('+c.id+')\nDestinazione: '+c.endpoint+'\nAutenticazione: '+c.auth.type+' '+(c.auth.ref||c.auth.name||'')+(c.missingSecret?' · credenziale da configurare':'')).join('\n\n')+'\n\n'+preview.notice+'\n\nModelli: '+preview.config.connections.filter(c=>preview.changes.some(x=>x.id===c.id)).flatMap(c=>c.models.map(m=>m.name+' · '+m.id+' · reasoning predefinito: '+(m.reasoning.defaultEffort||'off'))).join('\n');
-  $('apply-byok').disabled=false;
-});
-bind('apply-byok',async()=>{
-  if(!byokPreview)throw Error('Ripeti l’anteprima.');$('apply-byok').disabled=true;
-  try{settings=await api('byok/import/apply',{...byokPreview,apiKey:$('byok-key').value});$('byok-key').value='';resetByokPreview();renderProviders();setup();catalog=await api('models');renderProviders();renderRoles();notice('Configurazione importata. Le chiavi inserite sono cifrate su questo PC. Seleziona i modelli nella squadra e apri una nuova chat.');}
-  finally{$('apply-byok').disabled=!byokPreview;}
-});
-for(const format of ['json','yaml'])bind('export-'+format,async()=>{
-  const result=await api('byok/export?format='+format);const blob=new Blob([result.content],{type:format==='json'?'application/json':'application/yaml'});const url=URL.createObjectURL(blob),a=el('a');a.href=url;a.download='pi-models.'+format;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);notice('Esportata la configurazione salvata, senza chiavi.');
-});
+$('saved-connection').onchange=()=>{selectedConnection=$('saved-connection').value;loadConnection();};
+for(const mode of ['provider','custom'])$('mode-'+mode).onchange=()=>{connectionMode=mode;selectedConnection='';$('saved-connection').value='';loadConnection();};
+for(const id of ['byok-editor','byok-key','connection-name'])$(id).oninput=()=>{connectionMessage();connectionAvailability();};
+$('native-provider').onchange=()=>{if(!$('connection-name').value||$('connection-name').value===connectionDraft.providerType)$('connection-name').value=$('native-provider').value;connectionMessage();connectionAvailability();};
+async function saveConnection(){
+  if(connectionLoading||connectionSaving||!connectionDraft)return;
+  let content=$('byok-editor').value;
+  if(connectionMode==='provider'){
+    const type=$('native-provider').value;if(!type)throw Error('Scegli un fornitore.');
+    let id=selectedConnection||type,index=1;while(!selectedConnection&&settings.providers.some(p=>p.id===id))id=type+'-'+(++index);
+    const changed=connectionDraft.providerType&&connectionDraft.providerType!==type;
+    const connection={...connectionDraft,id,name:$('connection-name').value.trim(),providerType:type,models:changed?[]:connectionDraft.models};
+    if(!selectedConnection||connection.auth.type==='none')connection.auth={type:'secret',ref:'byok/'+id};
+    content=JSON.stringify({schemaVersion:1,connections:[connection]});
+  }
+  if(!content.trim())throw Error('Inserisci la configurazione JSON.');
+  connectionSaving=true;connectionMessage();connectionAvailability();
+  try{
+    const ids=new Set(settings.providers.map(p=>p.id));
+    settings=await api('byok/connections',{content,connectionId:selectedConnection,revision:connectionRevision,apiKey:$('byok-key').value});
+    const savedMessage=['Configurazione salvata.',...(settings.connectionNotices||[])].join(' ');
+    $('byok-key').value='';selectedConnection=selectedConnection||settings.providers.find(p=>!ids.has(p.id))?.id||'';
+    connectionDraft=null;await renderProviders();setup();
+    try{catalog=await api('models');renderRoles();}catch(error){connectionMessage(savedMessage+' Catalogo non aggiornato: '+error.message,true);return;}
+    connectionMessage(savedMessage);
+  }catch(error){connectionMessage(error.message,true);}
+  finally{connectionSaving=false;connectionAvailability();}
+}
+$('connection-form').onsubmit=event=>{event.preventDefault();saveConnection().catch(error=>connectionMessage(error.message,true));};
 function renderRoles(){
   const host=$('role-list');host.replaceChildren();
   for(const [role,[name,description]] of Object.entries(roleNames)){
