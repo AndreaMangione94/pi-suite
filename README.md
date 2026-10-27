@@ -3,6 +3,10 @@
 Suite Windows per una chat con orchestratore, subagenti con incarichi Markdown,
 fonti documentali e grafi di conoscenza locali. Versione applicativa: **0.6.5**.
 
+**Autore:** [AndreaMangione94](https://github.com/AndreaMangione94).
+Copyright (c) 2026 AndreaMangione94 and Pi Suite contributors.
+Licenza [MIT](LICENSE).
+
 ## Clona e installa
 
 Con Git gia disponibile, apri PowerShell:
