@@ -1,6 +1,6 @@
 # Fonti del progetto, SharePoint e Azure — Pi Suite 0.6.5
 
-Guida aggiornata alla distribuzione Windows del 27 ottobre 2026.
+Guida aggiornata alla distribuzione Windows del 28 ottobre 2026.
 
 Vedi anche [Conoscenza e grafi](GUIDA-CONOSCENZA-E-GRAFI.md) per ricerca opzionale, lettura completa, registrazione AS-IS e relazioni semantiche revisionabili.
 
@@ -15,31 +15,31 @@ Dopo aver configurato una volta le connessioni e i modelli, puoi automatizzare i
 /asis Ricostruisci il ciclo ordine confrontando SharePoint, backend, frontend e database
 ```
 
-Il comando aggiorna le fonti, crea un nuovo dossier e invia l’incarico all’orchestratore nella chat Pi corrente, senza aprire una seconda finestra. Se la chat ha già un dossier attivo, ne conserva la selezione delle fonti. In un progetto registrato, anche da una sua sottocartella, usa invece le fonti salvate in **As-is** e, se non scrivi un nuovo obiettivo, riusa quello salvato. Se non ci sono fonti salvate, chiede di selezionarle nel pannello. Soltanto fuori dai progetti registrati usa tutte le fonti configurate. Il contesto del dossier viene salvato nella sessione Pi e usato anche dai successivi subagenti. `/asis --help` mostra queste regole senza avviare nulla. Per scegliere un sottoinsieme diverso usa il pannello.
+Il comando aggiorna le fonti, crea un nuovo dossier e invia l’incarico all’orchestratore nella chat Pi corrente, senza aprire una seconda finestra. Se la chat ha già un dossier attivo, ne conserva la selezione delle fonti. In un progetto registrato, anche da una sua sottocartella, usa invece le fonti salvate in **Grafi di conoscenza** e, se non scrivi un nuovo obiettivo, riusa quello salvato. Se non ci sono fonti salvate, chiede di selezionarle nel pannello. Per produrre un grafo documentale semantico occorre un progetto registrato a cui associare le fonti. Il contesto del dossier viene salvato nella sessione Pi e usato anche dai successivi subagenti. `/asis --help` mostra queste regole senza avviare nulla. Per scegliere un sottoinsieme diverso usa il pannello.
 
-Dal browser apri **As-is** e seleziona almeno un grafo nella sezione **Grafi di riferimento**. Sono disponibili il grafo locale del progetto e i grafi delle fonti collegate e già indicizzate. Senza grafi selezionabili i pulsanti di creazione restano disabilitati: usa **Grafi di conoscenza** per creare quello del progetto, oppure collega, seleziona e sincronizza una fonte, quindi salva i riferimenti. **Aggiorna fonti e crea AS-IS** sincronizza le fonti dei grafi selezionati, prepara il dossier e apre la chat. **Usa snapshot esistenti** riusa gli snapshot delle fonti; per il grafo locale acquisisce la cartella corrente. Il vincolo viene verificato anche dal backend e i grafi di altri progetti non sono accettati. La riga iniziale mostra i Markdown già prodotti e salvati nei dossier associati al progetto, con icona, nome, data di creazione e anteprima testuale al clic; non include `INCARICO-AS-IS.md`. La consultazione dal pannello è limitata a file di 5 MB. La presenza in questa riga non richiede la registrazione del dossier e non attesta che sia completo o verificato.
+Dal browser apri **As-is** e seleziona almeno un grafo nella sezione **Grafi di riferimento**. Sono disponibili il grafo documentale semantico finale del progetto e il grafo del codice. Gli indici espliciti delle fonti non sostituiscono il grafo semantico. Senza grafi selezionabili i pulsanti di creazione restano disabilitati: usa **Grafi di conoscenza** per creare quello del progetto, oppure, nella stessa modale, collega una fonte e premi **Crea / aggiorna grafo documentale del progetto**. **Aggiorna fonti e crea AS-IS** sincronizza le fonti dei grafi selezionati, prepara il dossier e apre la chat. **Usa snapshot esistenti** riusa gli snapshot delle fonti; per il grafo locale acquisisce la cartella corrente. Il vincolo viene verificato anche dal backend e i grafi di altri progetti non sono accettati. La riga iniziale mostra i Markdown già prodotti e salvati nei dossier associati al progetto, con icona, nome, data di creazione e anteprima testuale al clic; non include `INCARICO-AS-IS.md`. La consultazione dal pannello è limitata a file di 5 MB. La presenza in questa riga non richiede la registrazione del dossier e non attesta che sia completo o verificato.
 
 La sincronizzazione è eseguita prima dell’avvio del modello. Se una fonte fallisce, non viene avviato un dossier parziale; le fonti già aggiornate mantengono il loro nuovo snapshot. L’esecuzione richiede credenziali valide e può consumare API modello quando parte la scrittura. Non comprende login Microsoft automatico, pubblicazione su SharePoint o esecuzioni programmate. L’analisi e la verifica restano lavoro del modello: il comando automatizza l’avvio, non garantisce la correttezza dell’AS-IS.
 
 ## Usare soltanto la cartella del progetto
 
-Non servono connessioni SharePoint o Azure. Seleziona il progetto in **Il tuo workspace**, apri **Grafi di conoscenza** e premi **Crea / aggiorna grafo**. Poi apri **As-is**, seleziona il grafo locale e avvia la creazione. La suite crea o riusa un collegamento locale in lettura alla cartella e ne acquisisce uno snapshot, anche con **Usa snapshot esistenti**. Questo collegamento usa internamente il tipo `sharepoint-local`, ma non richiede SharePoint o OneDrive.
+Non servono connessioni SharePoint o Azure. Seleziona il progetto in **Il tuo workspace**, apri **Grafi di conoscenza** e premi **Crea / aggiorna grafo del codice**. Se la cartella contiene documentazione, puoi collegarla nella sezione **Grafi documentali** e creare il suo grafo documentale senza generare un AS-IS. Poi apri **As-is**, seleziona il grafo locale e avvia la creazione. La suite crea o riusa un collegamento locale in lettura alla cartella e ne acquisisce uno snapshot, anche con **Usa snapshot esistenti**. Questo collegamento usa internamente il tipo `sharepoint-local`, ma non richiede SharePoint o OneDrive.
 
 Il grafo locale del workspace indicizza i file Git tracciati oppure la cartella senza Git. Lo snapshot locale per il dossier acquisisce invece i file correnti della cartella secondo i limiti delle fonti, compresi eventuali file non registrati in Git. Per un’acquisizione del solo commit scegli esplicitamente il tipo **Azure · repository Git locale**.
 
 ## Flusso completo con fonti collegate
 
 1. Configura un modello disponibile per la chat; il profilo Subagenti è facoltativo e, se selezionato, rende obbligatoria la delega.
-2. Apri **Il tuo workspace → As-is**. Dai un nome a ogni collegamento e scegli il tipo.
-3. Salva il collegamento, seleziona la fonte nella sua scheda e premi **Sincronizza**. Controlla numero di documenti, esclusioni e data/commit.
-4. Premi **Salva riferimenti** per associare le fonti al progetto e rendere disponibili i loro grafi. Seleziona i grafi da usare in **Grafi di riferimento** e descrivi il perimetro dell’AS-IS.
+2. Apri **Il tuo workspace → Grafi di conoscenza → Grafi documentali**. Dai un nome a ogni collegamento e scegli il tipo.
+3. Salva i collegamenti, seleziona le cartelle e premi **Crea / aggiorna grafo documentale del progetto**. La suite acquisisce i file, estrae i riferimenti espliciti e usa il modello Orchestratore per ricostruire concetti e relazioni fra documenti, con eventuali costi API. Controlla numero di documenti, esclusioni e data/commit.
+4. Premi **Salva riferimenti** per associare le fonti al progetto e rendere disponibili i loro grafi. Apri **As-is**, seleziona i grafi da usare in **Grafi di riferimento per l’AS-IS** e descrivi il perimetro del dossier.
 5. Premi **Aggiorna fonti e crea AS-IS**. La suite crea una cartella di lavoro con INCARICO-AS-IS.md e FONTI.json e apre Pi su quella cartella con la richiesta di scrivere il dossier.
-6. L’orchestratore legge il contesto necessario, pianifica e, se è selezionato un modello Subagenti, delega sempre il lavoro operativo con gli incarichi Markdown già usati dalla suite. Ogni figlio ha accesso alle evidenze selezionate, alle citazioni e al grafo del codice.
+6. L’orchestratore esplora prima il grafo documentale e legge i documenti originali, poi confronta il codice. Legge il contesto necessario, pianifica e, se è selezionato un modello Subagenti, delega sempre il lavoro operativo con gli incarichi Markdown già usati dalla suite. Ogni figlio ha accesso alle evidenze selezionate, alle citazioni e al grafo del codice.
 7. L’orchestratore verifica e integra le consegne. I risultati finali sono i Markdown nella cartella del dossier; incarichi e proposte dei figli restano consultabili in Attività e risultati.
 
 La preparazione del dossier non produce da sola un AS-IS finito: prepara input e incarico. La generazione richiede un modello disponibile nella chat con tool calling e può comportare costi API. Il codice e i testi letti vengono inviati ai provider selezionati, come per gli altri task della suite.
 
-Le caselle delle **fonti** e dei **grafi** hanno scopi distinti: le prime fissano i riferimenti della chat, di `/asis`, della ricerca e dell’aggiornamento degli indici; le seconde scelgono gli input dei pulsanti AS-IS del pannello. Avviare la creazione dal pannello salva le scelte, ma non rende automaticamente coincidenti i due elenchi. Per riusare nella chat una fonte locale creata dal percorso del grafo, selezionala nell’elenco e salva i riferimenti. I dossier preparati dal pannello conservano anche `PROGETTO.json` con l’associazione al progetto e ai grafi; `FONTI.json` fissa gli snapshot e gli indici effettivamente usati.
+Le caselle delle **fonti** in Grafi di conoscenza e dei **grafi** in As-is hanno scopi distinti: le prime fissano i riferimenti della chat, di `/asis`, della ricerca e dell’aggiornamento degli indici; le seconde scelgono gli input dei pulsanti AS-IS del pannello. Avviare la creazione dal pannello salva le scelte, ma non rende automaticamente coincidenti i due elenchi. Per riusare nella chat una fonte locale creata dal percorso del grafo, selezionala nell’elenco della modale Grafi di conoscenza e salva i riferimenti. I dossier preparati dal pannello conservano anche `PROGETTO.json` con l’associazione al progetto e ai grafi; `FONTI.json` fissa gli snapshot e gli indici effettivamente usati.
 
 ## SharePoint: cartella sincronizzata
 
@@ -86,7 +86,9 @@ La suite conserva un mirror locale, esegue fetch del branch e legge il commit ri
 - PDF: testo estraibile fino a 200 pagine; niente OCR. Un PDF senza testo è registrato fra gli esclusi.
 - Massimo 1000 file esaminati, 5 MB per file, 100 MB acquisiti per fonte. Testo estratto limitato a 5.000.000 caratteri per documento, con segnalazione di troncamento. Directory di dipendenze/build e link simbolici sono esclusi. File non supportati risultano nel manifest.
 
-Il codice Python, JavaScript e TypeScript acquisito genera anche un grafo Graphify nello snapshot. Il modello può consultarlo con **connected_graph**; gli ID dei documenti permettono di tornare alla fonte. È un grafo AST per file e non risolve tutte le dipendenze semantiche o tutte le chiamate fra repository.
+Il codice Python, JavaScript e TypeScript acquisito genera anche un grafo Graphify nello snapshot. Il modello consulta prima il grafo documentale finale con **document_graph**, poi il grafo del codice con **connected_graph**; gli ID dei documenti permettono di tornare alla fonte. È un grafo AST per file e non risolve tutte le dipendenze semantiche o tutte le chiamate fra repository.
+
+Il genitore può delegare la lettura con `evidenceScope`: assegna domande, fonti/documenti iniziali e limiti, mentre il figlio sceglie full/section/passage e gestisce nextOffset. `report_evidence_reading` restituisce citazioni e lacune; la copertura viene registrata dagli strumenti e torna al genitore in `evidenceReading`. Le versioni restano quelle fissate nel dossier.
 
 ## Consegne del dossier
 
@@ -100,7 +102,7 @@ Le fonti collegate restano in lettura; eventuali pubblicazioni su SharePoint, co
 
 I collegamenti sono in `data/sources/connections.json`, i segreti sono cifrati. Ogni sincronizzazione crea un nuovo snapshot con manifest, testi estratti e, quando presente, grafo. Il puntatore corrente cambia solo dopo un’acquisizione completata. Un fallimento lascia disponibile l’ultimo snapshot riuscito.
 
-Il dossier conserva in FONTI.json gli snapshot selezionati: sincronizzare nuovamente una fonte non cambia le evidenze di un dossier già creato. Per analizzare lo stato aggiornato crea un nuovo dossier. Gli snapshot precedenti restano su disco; non c’è ancora una politica di pulizia automatica.
+Il dossier conserva in `GRAFO-DOCUMENTALE.json` la versione del grafo semantico e in FONTI.json gli snapshot e gli indici selezionati: sincronizzare nuovamente una fonte non cambia le evidenze di un dossier già creato. Per analizzare lo stato aggiornato crea un nuovo dossier. Gli snapshot precedenti restano su disco; non c’è ancora una politica di pulizia automatica.
 
 Nella copia sorgente, `data` corrisponde a `suite-data`; nell’installazione standard è `%LOCALAPPDATA%/PiSuite/data`. Le chiavi DPAPI vanno reinserite se cambi PC/account.
 

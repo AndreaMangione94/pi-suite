@@ -15,7 +15,7 @@
     ]
   },
   "scripts": {
-    "test:syntax": "node --check adapter.mjs && node --check byok-format.mjs && node --check byok-network.mjs && node --check suite-ui/app.js && node --check suite-ui/evidence-panel.js && node --check suite-ui/benchmark-panel.js"
+    "test:syntax": "node --check adapter.mjs && node --check document-graph-tools.mjs && node --check connected-sources.mjs && node --check evidence-tools.mjs && node --check evidence-reading.mjs && node --check delegation-core.mjs && node --check byok-format.mjs && node --check byok-network.mjs && node --check suite-ui/app.js && node --check suite-ui/evidence-panel.js && node --check suite-ui/benchmark-panel.js"
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "1.0.0",

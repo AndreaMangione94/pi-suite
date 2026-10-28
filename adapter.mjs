@@ -22,7 +22,7 @@ const payloads = [];
 const stream = runtime.streamSimple.bind(runtime);
 runtime.streamSimple = (m, context, options={}) => {
   if (m.provider !== job.provider || m.id !== job.model) throw Error('Cambio di modello vietato');
-  return stream(m, context, {...options, onPayload:async(payload,...rest)=>{
+  return stream(m, context, {...options,...(job.documentGraph?{maxTokens:job.maxOutputTokens}:{}), onPayload:async(payload,...rest)=>{
     const previous = await options.onPayload?.(payload,...rest);
     const p = previous ?? payload;
     // Explicit compatibility mode for endpoints using chat template options.
@@ -38,7 +38,8 @@ runtime.streamSimple = (m, context, options={}) => {
     return p;
   }});
 };
-const customTools = [];
+const graphTools=job.documentGraph?(await import('./document-graph-tools.mjs')).documentGraphTools(job):null;
+const customTools = graphTools?.tools||[];
 let probeToolCalled=false;
 if(job.probe) customTools.push({name:'capability_check',label:'Verifica connessione',description:'Call this tool with value OK to verify tool calling.',
   parameters:{type:'object',properties:{value:{type:'string'}},required:['value'],additionalProperties:false},
@@ -47,7 +48,7 @@ if(job.probe) customTools.push({name:'capability_check',label:'Verifica connessi
 const loader={
   getExtensions:()=>({extensions:[],errors:[],runtime:createExtensionRuntime()}),
   getSkills:()=>({skills:[],diagnostics:[]}),getPrompts:()=>({prompts:[],diagnostics:[]}),getThemes:()=>({themes:[],diagnostics:[]}),
-  getAgentsFiles:()=>({agentsFiles:[]}),getSystemPrompt:()=> 'Verifica il ciclo strumenti del modello: esegui capability_check con il valore richiesto, leggi il risultato e rispondi CHECK_COMPLETE.',
+  getAgentsFiles:()=>({agentsFiles:[]}),getSystemPrompt:()=>job.systemPrompt||'Verifica il ciclo strumenti del modello: esegui capability_check con il valore richiesto, leggi il risultato e rispondi CHECK_COMPLETE.',
   getSystemPromptSource:()=>undefined,getAppendSystemPrompt:()=>[],getAppendSystemPromptSources:()=>[],extendResources:()=>{},reload:async()=>{}
 };
 let session, timer, turns=0, failure;
@@ -64,9 +65,10 @@ try {
   if (!messages.length || messages.some(m=>['error','aborted','length'].includes(m.stopReason))) throw Error(messages.at(-1)?.errorMessage || 'Risposta interrotta o incompleta');
   if (failure) throw Error(failure);
   if (!payloads.length) throw Error('Nessuna richiesta verificata');
+  if(job.documentGraph&&!graphTools.result())throw Error('Il modello non ha consegnato il grafo documentale con submit_document_graph');
   for(const m of messages) if(m.provider!==job.provider || m.model!==job.model) throw Error('Identità del modello diversa da quella configurata');
   if(job.probe&&(!probeToolCalled||messages.length<2))throw Error('Ciclo strumenti non verificato: manca chiamata valida o risposta dopo il risultato');
   if(job.probe&&job.effort!=='off'&&payloads.some(p=>p.sent==null))throw Error('Livello reasoning non trasmesso: serve un preset compatibile con questo endpoint');
   console.log(JSON.stringify({text:session.getLastAssistantText(),requested:job.effort,piLevel:session.thinkingLevel,payloads,probeToolCalled,
-    seconds:(Date.now()-start)/1000,turns,usage:messages.map(m=>m.usage)}));
+    seconds:(Date.now()-start)/1000,turns,usage:messages.map(m=>m.usage),...(graphTools?{documentGraph:graphTools.result()}:{})}));
 } finally {clearTimeout(timer);session?.dispose();}

@@ -3,7 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 
 export function sourceBundle(home,project) {
-  const dossier=path.join(project,'FONTI.json');let refs;
+  const dossier=path.join(project,'FONTI.json');let refs,documentGraph;
   if(fs.existsSync(dossier)&&fs.existsSync(path.join(project,'INCARICO-AS-IS.md')))refs=JSON.parse(fs.readFileSync(dossier,'utf8'));
   else {
     const root=path.join(home,'sources');refs=[];
@@ -11,12 +11,21 @@ export function sourceBundle(home,project) {
     const cwd=normalize(project);
     const registered=fs.existsSync(settingsPath)?JSON.parse(fs.readFileSync(settingsPath,'utf8')).projects||[]:[];
     const selected=registered.filter(p=>cwd===normalize(p.path)||cwd.startsWith(normalize(p.path)+path.sep)).sort((a,b)=>b.path.length-a.path.length)[0];
-    const allowed=selected?new Set(selected.workspace?.asis?.sources||[]):null;
+    const allowed=selected?new Set(selected.workspace?.graph?.sources??selected.workspace?.asis?.sources??[]):null;
+    const graphPointer=selected?path.join(home,'graphs',selected.id,'documental','current.json'):null;
+    let dependencies=[];
+    if(graphPointer&&fs.existsSync(graphPointer)){
+      const ref=JSON.parse(fs.readFileSync(graphPointer,'utf8'));
+      if(!/^[a-zA-Z0-9_-]{1,100}$/.test(ref.project)||ref.project!==selected.id||!/^[a-f0-9]{64}$/.test(ref.version))throw Error('Riferimento al grafo documentale non valido');
+      const graph=JSON.parse(fs.readFileSync(path.join(home,'graphs',ref.project,'documental','versions',ref.version,'graph.json'),'utf8'));
+      if(graph.dependencies.every(d=>allowed.has(d.source))){documentGraph={project:ref.project,version:ref.version};dependencies=graph.dependencies;}
+    }
     if(fs.existsSync(root))for(const id of fs.readdirSync(root)){
       if(!/^[a-f0-9]{32}$/.test(id))continue;
       if(allowed&&!allowed.has(id))continue;
       const pointer=path.join(root,id,'current.json');if(!fs.existsSync(pointer))continue;
-      refs.push({source:id,snapshot:JSON.parse(fs.readFileSync(pointer,'utf8')).snapshot});
+      const dependency=dependencies.find(d=>d.source===id);
+      refs.push({source:id,snapshot:dependency?.snapshot||JSON.parse(fs.readFileSync(pointer,'utf8')).snapshot,...(dependency?{indexVersion:dependency.indexVersion}:{}),...(documentGraph?{documentGraph}:{})});
     }
   }
   refs=[...refs];
@@ -27,9 +36,14 @@ export function sourceBundle(home,project) {
     const manifest=JSON.parse(fs.readFileSync(path.join(home,'sources',r.source,r.snapshot,'manifest.json'),'utf8'));
     return manifest.contentFingerprint===d.contentFingerprint;
   });
+  const sameDocumentGraph=ref=>{
+    if(!/^[a-zA-Z0-9_-]{1,100}$/.test(ref.project))return false;
+    const pointer=path.join(home,'graphs',ref.project,'documental','current.json');
+    return fs.existsSync(pointer)&&JSON.parse(fs.readFileSync(pointer,'utf8')).semanticFingerprint===ref.semanticFingerprint;
+  };
   if(fs.existsSync(registry))for(const item of JSON.parse(fs.readFileSync(registry,'utf8'))){
     if(item.dependencies?.length&&item.dependencies.every(d=>refs.some(r=>r.source===d.source))&&!refs.some(r=>r.source===item.source))
-      refs.push({source:item.source,snapshot:item.snapshot,freshness:item.dependencies.every(sameEvidence)?'current_for_selection':'needs_revalidation'});
+      refs.push({source:item.source,snapshot:item.snapshot,freshness:item.dependencies.every(sameEvidence)&&(item.documentGraphs||[]).every(sameDocumentGraph)?'current_for_selection':'needs_revalidation'});
   }
   return refs.map(ref=>{
     if(!/^[a-f0-9]{32}$/.test(ref.source)||!/^[a-f0-9]{32}$/.test(ref.snapshot))throw Error('Riferimento alla fonte non valido');
@@ -37,7 +51,7 @@ export function sourceBundle(home,project) {
     const manifest=JSON.parse(fs.readFileSync(path.join(directory,'manifest.json'),'utf8'));
     const index=path.join(directory,'evidence.json');
     const indexVersion=ref.indexVersion||(fs.existsSync(index)?JSON.parse(fs.readFileSync(index,'utf8')).fingerprint:undefined);
-    return {source:ref.source,snapshot:ref.snapshot,name:manifest.name,directory,manifest,indexVersion,freshness:ref.freshness||'pinned'};
+    return {source:ref.source,snapshot:ref.snapshot,name:manifest.name,directory,manifest,indexVersion,freshness:ref.freshness||'pinned',...(ref.documentGraph?{documentGraph:ref.documentGraph}:{})};
   });
 }
 export function connectedTools(bundle) {
@@ -55,6 +69,11 @@ export function connectedTools(bundle) {
       if(!doc.original&&crypto.createHash('sha256').update(text).digest('hex')!==doc.textSha256){const legacy=text.replace(/\r\n/g,'\n');if(crypto.createHash('sha256').update(legacy).digest('hex')===doc.textSha256)text=legacy;}
       if(crypto.createHash('sha256').update(text).digest('hex')!==doc.textSha256)throw Error('Snapshot alterato; sincronizza nuovamente');
       const all=text.split('\n'),start=Math.max(0,(args.startLine||1)-1),count=Math.min(300,Math.max(1,args.lines||150));
-      return response({citation:`[${s.source}:${doc.id}]`,source:s.name,snapshot:s.snapshot,createdAt:s.manifest.createdAt,revision:s.manifest.revision,...doc,totalLines:all.length,text:all.slice(start,start+count).map((line,i)=>`${start+i+1}: ${line}`).join('\n'),nextLine:start+count<all.length?start+count+1:null});}}
+      if(start>=all.length)throw Error('Intervallo oltre il documento');
+      const selected=all.slice(start,start+count).join('\n'),characters=value=>{let total=0;for(const _char of value)total++;return total;};
+      return response({citation:`[${s.source}:${doc.id}]`,source:s.name,sourceId:s.source,document:doc.id,snapshot:s.snapshot,createdAt:s.manifest.createdAt,revision:s.manifest.revision,...doc,totalLines:all.length,
+        mode:'passage',startLine:start+1,endLine:Math.min(all.length,start+count),offset:0,nextOffset:null,rangeStartOffset:characters(all.slice(0,start).join('\n'))+(start?1:0),
+        totalRangeChars:characters(selected),returnedChars:characters(selected),documentTotalChars:characters(text),documentTotalLines:all.length,extractionTruncated:doc.truncated,
+        text:all.slice(start,start+count).map((line,i)=>`${start+i+1}: ${line}`).join('\n'),nextLine:start+count<all.length?start+count+1:null});}}
   ];
 }

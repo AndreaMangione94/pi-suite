@@ -1,4 +1,4 @@
-# Subset AST only: no semantic/vision model and no Graphify skill installation.
+# Graphify AST subset only; document semantics use the configured Pi model. No Graphify skill installation.
 graphifyy==0.1.14
 tree-sitter==0.25.2
 tree-sitter-python==0.25.0

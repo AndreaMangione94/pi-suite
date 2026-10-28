@@ -443,11 +443,13 @@ def read_evidence(bundle, args):
     elif mode != 'full': raise ValueError('Modalita di lettura non valida')
     if start > len(all_lines): raise ValueError('Intervallo oltre il documento')
     selected = '\n'.join(all_lines[start-1:end]); value = selected[offset:offset+maximum]
+    range_start=sum(len(line)+1 for line in all_lines[:start-1])
     if offset>len(selected):raise ValueError('Offset oltre il contenuto richiesto')
     next_offset = offset+len(value) if offset+len(value) < len(selected) else None
     return {'source':ref['source'],'snapshot':ref['snapshot'],'document':doc['id'],'path':doc['path'],
             'citation':'['+ref['source']+':'+doc['id']+']','citationRange':'['+ref['source']+':'+doc['id']+']#L'+str(start)+'-L'+str(end),'textSha256':doc['textSha256'], 'originalSha256':doc.get('sha256'),
             'mode':mode,'startLine':start,'endLine':end,'offset':offset,'nextOffset':next_offset,'text':value,
+            'rangeStartOffset':range_start,'totalRangeChars':len(selected),'returnedChars':len(value),'documentTotalChars':len(text),'documentTotalLines':len(all_lines),
             'completeRequestedRange':next_offset is None and offset == 0, 'extractionTruncated':doc.get('truncated',False),
             'originalAvailable':bool(doc.get('original')),'locators':[b for b in mapping['blocks'] if b['startLine']<=end and b['endLine']>=start][:200],
             'coverageNotes':mapping.get('notes',[]),'freshness':ref.get('freshness','pinned')}

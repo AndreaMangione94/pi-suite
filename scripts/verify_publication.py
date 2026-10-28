@@ -31,6 +31,14 @@ REVIEWED = {
     ('suite.py', 'credential literal', 'api-key'),
     ('suite.py', 'credential literal', 'x-api-key'),
     ('suite.py', 'credential literal', 'x-goog-api-key'),
+    # Literal environment references and synthetic fixtures; no live secrets or tenant.
+    ('GUIDA-BYOK.md', 'credential literal', '${pi_suite_key_<id_normalizzato>}'),
+    ('test_byok_connections.py', 'credential literal', 'test-env-key'),
+    ('test_byok_connections.py', 'credential literal', 'test-key'),
+    ('test_document_graph.py', 'organization URL', 'example.sharepoint.com'),
+    ('scripts/verify_publication.py', 'organization URL', 'example.sharepoint.com'),
+    ('test_reinstall.ps1', 'personal filesystem path', 'c:\\users\\user'),
+    ('scripts/verify_publication.py', 'personal filesystem path', 'c:\\users\\user'),
 }
 PRIVATE_DIRS = {'.work', '.test-suite', '__pycache__', 'node_modules', '.venv',
                 'suite-data', 'data', 'sessions', 'snapshots', 'delegations',

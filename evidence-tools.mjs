@@ -6,6 +6,7 @@ import {spawn} from 'node:child_process';
 const root=path.dirname(fileURLToPath(import.meta.url));
 const string={type:'string'},integer={type:'integer',minimum:1};
 export const knowledgeSchemas={
+  document_graph:{properties:{query:string,nodes:{type:'array',items:string,maxItems:20},depth:{type:'integer',minimum:0,maximum:3},limit:{...integer,maximum:60}},required:[]},
   knowledge_search:{properties:{query:string,source:string,limit:{...integer,maximum:40}},required:['query']},
   knowledge_trace:{properties:{nodes:{type:'array',items:string,maxItems:20,minItems:1},depth:{...integer,maximum:3},limit:{...integer,maximum:40},includeInferred:{type:'boolean'}},required:['nodes']},
   read_evidence:{properties:{source:string,snapshot:string,document:string,mode:{type:'string',enum:['passage','section','full']},startLine:integer,lines:{...integer,maximum:1000},offset:{type:'integer',minimum:0},maxChars:{type:'integer',minimum:100,maximum:200000}},required:['source','document']},
@@ -14,8 +15,9 @@ export const knowledgeSchemas={
   register_asis:{properties:{},required:[]}
 };
 const descriptions={
-  knowledge_search:'Opzionale: cerca testo, requisiti e simboli negli snapshot fissati. I risultati brevi orientano; puoi leggere gli originali completi. Non crea o aggiorna indici.',
-  knowledge_trace:'Opzionale: esplora nodi vicini e relazioni con evidenze. Vicinanza non prova significato o completezza. includeInferred mostra separatamente proposte semantiche con stato di revisione.',
+  document_graph:'Consulta il grafo documentale SEMANTICO finale salvato per il progetto e fissato nel dossier: concetti e relazioni esplicite o inferite dal modello con evidenze. Per scrivere AS-IS parti da questo grafo, poi apri gli originali e confronta il grafo del codice. Non genera nuovi grafi.',
+  knowledge_search:'Cerca testo, requisiti e simboli negli snapshot fissati. Per creare AS-IS parti dal grafo documentale e apri gli originali; nelle normali consultazioni la ricerca e facoltativa. Non crea o aggiorna indici.',
+  knowledge_trace:'Esplora nodi vicini e relazioni con evidenze; per AS-IS esplora prima i collegamenti documentali. Vicinanza non prova significato o completezza. includeInferred mostra separatamente proposte semantiche con stato di revisione.',
   read_evidence:'Legge una fonte congelata verificandone integrita. mode full legge il contenuto completo disponibile, paginato se necessario: segui nextOffset. Dichiara sempre troncamenti e parti non lette.',
   propose_relation:'Salva una deduzione semantica con evidenze valide come proposta NON revisionata. Non modifica fonti, non certifica verita e non approva la propria proposta.',
   prepare_asis:'SOLO per una richiesta esplicita di creare/aggiornare AS-IS: sincronizza se refresh=true, verifica/aggiorna prima grafi e indici e prepara il dossier. Poi leggi i suoi originali e scrivi i documenti. Non chiamare per semplici domande.',

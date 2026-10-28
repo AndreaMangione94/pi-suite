@@ -24,10 +24,12 @@ from suite_benchmarks import Benchmarks
 from suite_graph import build_graph, project_files, scan, fingerprint, query_graph
 import suite_byok as byok
 import suite_workspace as workspace
+import suite_document_graph as document_graph
+from suite_evidence import ensure_index, local_path
 
 ROOT = Path(__file__).resolve().parent
 APIS = ('openai-completions','openai-responses','anthropic-messages','google-generative-ai')
-OPERATIONS = ('graph','probe','sync-source','prepare-asis','auto-asis','index-sources','register-asis')
+OPERATIONS = ('graph','probe','sync-source','document-graphs','prepare-asis','auto-asis','index-sources','register-asis')
 
 def read_json(path):
     return json.loads(Path(path).read_text(encoding='utf-8-sig'))
@@ -486,7 +488,7 @@ class Suite:
             if not project: raise ValueError('Progetto sconosciuto')
             if not isinstance(data,dict): raise ValueError('Riferimenti non validi')
             if section=='asis':
-                ids=data.get('sources',[])
+                ids=data.get('sources',workspace.source_references(project))
                 available={s['id'] for s in self.sources.connections()}
                 if not isinstance(ids,list) or any(not isinstance(s,str) or s not in available for s in ids):
                     raise ValueError('Seleziona fonti esistenti')
@@ -497,7 +499,11 @@ class Suite:
                 references['graphs']=list(dict.fromkeys(graph_ids))
                 fields={'objective':20000,'dossierWorkspace':4000}
             elif section=='graph':
-                references={};fields={'query':1000}
+                ids=data.get('sources',workspace.source_references(project))
+                available={s['id'] for s in self.sources.connections()}
+                if not isinstance(ids,list) or any(not isinstance(s,str) or s not in available for s in ids):
+                    raise ValueError('Seleziona fonti esistenti')
+                references={'sources':list(dict.fromkeys(ids))};fields={'query':1000,'evidenceQuery':2000}
             else: raise ValueError('Sezione riferimenti sconosciuta')
             for key,limit in fields.items():
                 value=data.get(key,'')
@@ -514,6 +520,84 @@ class Suite:
         if not path.exists(): raise ValueError('Crea prima il grafo del progetto.')
         return query_graph(read_json(path),query,node_id)
 
+    def document_graph_profile(self):
+        profile=self.settings['roles'].get('orchestrator')
+        if not profile:raise ValueError('Configura il modello Orchestratore per costruire il grafo documentale semantico.')
+        model=next((m for m in self.models() if m['provider']==profile['provider'] and m['model']==profile['model']),None)
+        if not model or model.get('toolCalling') is False:raise ValueError('Il grafo documentale richiede un modello disponibile con strumenti.')
+        context=int(model.get('contextWindow') or 32000)
+        if context<16000:raise ValueError('Il grafo documentale richiede un modello con almeno 16.000 token di contesto.')
+        return {**profile,'transport':profile.get('transport','auto'),'contextWindow':context,
+                'maxOutputTokens':min(int(model.get('maxTokens') or 4096),8192,context//4)}
+
+    def _document_graph_completion(self,request,profile,directory):
+        directory=local_path(directory)
+        job={**profile,'keyEnv':key_env(profile['provider']),'agentDir':str(self.model_dir(directory/'agent')),
+             'cwd':str(directory),'evidenceHome':str(self.home),'timeoutSeconds':600,'maxTurns':24,
+             'systemPrompt':request['systemPrompt'],'documentGraph':{k:request[k] for k in ('bundle','draftPath','phase','context')},
+             'prompt':json.dumps({k:request[k] for k in ('phase','context','validationError')},ensure_ascii=False)}
+        path=directory/('pass-'+uuid.uuid4().hex+'.json');save_json(path,job)
+        env=self.secret_environment({**self.settings,'roles':{'orchestrator':profile}})
+        report=json.loads(self._process(['node',str(ROOT/'adapter.mjs'),str(path)],env,log_output=False))
+        if not report.get('documentGraph'):raise ValueError('Il modello non ha consegnato il grafo documentale.')
+        return {'graph':report['documentGraph'],'usage':report.get('usage',[]),'seconds':report.get('seconds')}
+
+    def build_document_graph(self,pid,ids,refresh=True,bundle=None,progress=None):
+        workspace.project_record(self,pid)
+        profile=self.document_graph_profile()
+        progress=progress or (lambda message:self.job.update(log=(self.job.get('log','')+'\n'+message)[-30000:]))
+        ids=list(dict.fromkeys(ids));known={s['id'] for s in self.sources.connections()}
+        if not ids or any(s not in known for s in ids):raise ValueError('Seleziona fonti documentali esistenti.')
+        if bundle is None:
+            if refresh:
+                for sid in ids:
+                    progress('Acquisizione e relazioni esplicite: '+sid);self.sources.sync(sid)
+            bundle=self.sources.bundle(ids)
+        directory=self.home/'jobs'/('document-'+uuid.uuid4().hex)
+        model={k:profile[k] for k in ('provider','model','effort')}
+        model['configurationFingerprint']=byok.digest({'profile':profile,'connection':next((p for p in self.settings['providers'] if p['id']==profile['provider']),{})})
+        builder=document_graph.DocumentGraphBuilder(self.home,pid,bundle,model,
+            lambda request:self._document_graph_completion(request,profile,directory),directory,progress,
+            batch_chars=min(24000,max(2000,profile['contextWindow']-profile['maxOutputTokens']-10000)))
+        graph=builder.build();progress('Grafo documentale semantico salvato per il progetto.')
+        return graph
+
+    def project_for_workspace(self,path):
+        folder=Path(path).resolve();marker=folder/'PROGETTO.json'
+        if marker.is_file():return workspace.project_record(self,read_json(marker)['project'])['id']
+        matching=sorted((p for p in self.settings['projects'] if folder.is_relative_to(Path(p['path']).resolve())),key=lambda p:len(p['path']),reverse=True)
+        return matching[0]['id'] if matching else None
+
+    def prepare_documented_asis(self,ids,objective='',refresh=True,project=None,graph_ref=None,use_document_graph=True,progress=None):
+        progress=progress or (lambda message:self.job.update(log=(self.job.get('log','')+'\n'+message)[-30000:]))
+        ids=list(dict.fromkeys(ids));snapshots={}
+        if graph_ref and not refresh:
+            graph=document_graph.load_graph(self.home,graph_ref)
+            if project and graph['project']!=project:raise ValueError('Grafo documentale di un altro progetto.')
+            snapshots={d['source']:d['snapshot'] for d in graph['dependencies']}
+        if refresh:
+            for sid in ids:
+                progress('Acquisizione e relazioni esplicite: '+sid);snapshots[sid]=self.sources.sync(sid)['id']
+        bundle=self.sources.bundle(ids,snapshots)
+        for item in bundle:item['indexVersion']=ensure_index(item['directory'],item['manifest'])['fingerprint']
+        if use_document_graph and document_graph.document_refs(bundle):
+            if not project:raise ValueError('Associa le fonti a un progetto in Grafi di conoscenza per salvare il grafo documentale semantico.')
+            if not graph_ref or refresh:
+                candidate=document_graph.current_ref(self.home,project)
+                if candidate and not refresh:
+                    try:
+                        existing=document_graph.load_graph(self.home,candidate,bundle)
+                        if {d['source'] for d in existing['dependencies']}=={r['source'] for r,_docs in document_graph.document_refs(bundle)}:graph_ref=candidate
+                    except ValueError:pass
+                if not graph_ref or refresh:
+                    graph=self.build_document_graph(project,ids,refresh=False,bundle=bundle,progress=progress)
+                    graph_ref={'project':project,'version':graph['fingerprint']}
+            document_graph.load_graph(self.home,graph_ref,bundle)
+        else:graph_ref=None
+        result=self.sources.prepare_asis(ids,objective,snapshots,graph_ref)
+        if project:save_json(Path(result['workspace'])/'PROGETTO.json',{'project':project,'documentGraph':graph_ref})
+        return result
+
     def start(self,operation,data):
         with self.guard:
             if self.busy: raise ValueError('È già in corso un’operazione.')
@@ -521,6 +605,13 @@ class Suite:
                 raise ValueError('Operazione non supportata')
             if operation in ('prepare-asis','auto-asis'):
                 workspace.selected_graphs(self,data)
+            if operation=='document-graphs':
+                ids=data.get('sources')
+                linked=workspace.source_references(workspace.project_record(self,data.get('project')))
+                if not isinstance(ids,list) or not ids or any(not isinstance(s,str) or s not in linked for s in ids):
+                    raise ValueError('Seleziona almeno una fonte collegata al progetto per creare i grafi documentali.')
+                data={**data,'sources':list(dict.fromkeys(ids))}
+                self.document_graph_profile()
             self.busy=True; self.job={'id':uuid.uuid4().hex,'operation':operation,'state':'running','startedAt':time.time(),'log':''}
             save_json(self.home/'last-job.json',self.job)
             threading.Thread(target=self._work,args=(operation,data),daemon=True).start()
@@ -534,13 +625,17 @@ class Suite:
             if operation=='sync-source':
                 manifest=self.sources.sync(data['source'])
                 self.job['result']={'source':data['source'],'documents':len(manifest['documents']),'excluded':len(manifest['excluded'])}
+            elif operation=='document-graphs':
+                graph=self.build_document_graph(data['project'],data['sources'])
+                self.job['result']={'documentGraph':{'project':data['project'],'version':graph['fingerprint']},'stats':graph['stats']}
             elif operation=='index-sources':self.job['result']=self.sources.index_sources(data['sources'])
             elif operation=='register-asis':self.job['result']=self.sources.register_asis(data['workspace'])
             elif operation in ('prepare-asis','auto-asis'):
                 def progress(message):self.job['log']=(self.job.get('log','')+'\n'+message)[-30000:]
                 data['sources']=workspace.prepare_sources(self,data,operation)
-                result=self.sources.automatic_asis(data['sources'],data.get('objective',''),progress) if operation=='auto-asis' else self.sources.prepare_asis(data['sources'],data.get('objective',''))
-                save_json(Path(result['workspace'])/'PROGETTO.json',{'project':data['project'],'graphs':data['graphs']})
+                result=self.prepare_documented_asis(data['sources'],data.get('objective',''),operation=='auto-asis',data['project'],
+                    data.get('documentGraph'),bool(data.get('documentGraph')),progress)
+                save_json(Path(result['workspace'])/'PROGETTO.json',{'project':data['project'],'graphs':data['graphs'],'documentGraph':result.get('documentGraph')})
                 self.job['result']={k:v for k,v in result.items() if k not in ('sources','prompt')}
                 if data.get('openChat',True):self.open_chat(result['workspace'],result['prompt'])
             elif operation=='graph':
@@ -573,10 +668,10 @@ class Suite:
             with self.guard:
                 save_json(self.home/'last-job.json',self.job); self.busy=False
 
-    def _process(self,args,env):
+    def _process(self,args,env,log_output=True):
         process=subprocess.run(args,cwd=ROOT,env=env,capture_output=True,encoding='utf-8',errors='replace',timeout=7200)
         output=self.redact(process.stdout); error=self.redact(process.stderr)
-        self.job['log']=(self.job.get('log','')+output+'\n'+error)[-30000:]
+        self.job['log']=(self.job.get('log','')+(output if log_output else '')+'\n'+error)[-30000:]
         if process.returncode: raise ValueError(error[-3000:] or output[-3000:] or 'Processo terminato con errore')
         return output
 
@@ -647,7 +742,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             elif route=='/api/evidence' and post:
                 from suite_evidence import query
                 if data['action'] not in ('knowledge_search','knowledge_trace','read_evidence'):raise ValueError('Consultazione non supportata')
-                result=query(app.sources.knowledge_bundle(data['sources']),data['action'],data.get('args',{}))
+                if data.get('documentGraph'):
+                    pid=data['project'];workspace.project_record(app,pid)
+                    ref={'project':pid,'version':data['documentGraphVersion']} if data.get('documentGraphVersion') else document_graph.current_ref(app.home,pid)
+                    graph=document_graph.load_graph(app.home,ref)
+                    dependencies=graph['dependencies'];snapshots={d['source']:d['snapshot'] for d in dependencies}
+                    bundle=app.sources.bundle(list(snapshots),snapshots)
+                else:bundle=app.sources.knowledge_bundle(data['sources'])
+                result=query(bundle,data['action'],data.get('args',{}))
             elif route=='/api/relation-proposals' and not post:
                 from suite_evidence import local_path,load
                 result=[load(p) for p in sorted((local_path(app.home)/'knowledge'/'proposals').glob('*/*.json')) if re.fullmatch('[a-f0-9]{32}',p.stem)]
@@ -662,6 +764,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             elif route=='/api/project-files' and not post: result=workspace.inventory(app,params['id'][0])
             elif route=='/api/project-file' and not post: result=workspace.read_file(app,params['id'][0],params['file'][0])
             elif route=='/api/graph' and not post: result=app.graph(params['id'][0],params.get('q',[''])[0],params.get('node',[None])[0])
+            elif route=='/api/document-graph' and not post:
+                pid=params['id'][0];workspace.project_record(app,pid);ref=document_graph.current_ref(app.home,pid)
+                result=document_graph.query_graph(app.home,ref,{'query':params.get('q',[''])[0],'nodes':params.get('node',[]),'limit':30}) if ref else {'available':False,'nodes':[],'edges':[]}
             elif route=='/api/source' and not post:
                 project=app.project(params['id'][0]); name=params['path'][0]
                 if name not in project['files']: raise ValueError('Sorgente non disponibile nel progetto')

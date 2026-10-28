@@ -36,7 +36,7 @@ La chat si apre in una finestra terminale Pi. Il browser serve per configurazion
 
 ## Riferimenti del progetto e primo AS-IS
 
-Dopo aver selezionato un progetto, apri **Grafi di conoscenza** e premi **Crea / aggiorna grafo**. Non occorre Git e l’indicizzazione non chiama modelli. Torna nel workspace, apri **As-is**, seleziona il grafo in **Grafi di riferimento**, descrivi l’obiettivo e premi **Aggiorna fonti e crea AS-IS**. La suite acquisisce la cartella in lettura, prepara un dossier separato e apre la chat che scriverà i documenti. **Usa snapshot esistenti** acquisisce comunque la cartella corrente quando è selezionato il grafo locale.
+Dopo aver selezionato un progetto, apri **Grafi di conoscenza** e premi **Crea / aggiorna grafo del codice**. Non occorre Git e l’indicizzazione non chiama modelli. Nella stessa modale, Grafo documentale del progetto permette di collegare cartelle locali, di rete o SharePoint e generare il grafo semantico da Word/PDF: dopo l’estrazione dei riferimenti espliciti usa il modello Orchestratore per inferire concetti e relazioni, con possibili costi API, senza creare un AS-IS. La produzione AS-IS esplora prima il grafo documentale e gli originali, poi confronta il codice. Torna nel workspace, apri **As-is**, seleziona il grafo in **Grafi di riferimento**, descrivi l’obiettivo e premi **Aggiorna fonti e crea AS-IS**. La suite acquisisce la cartella in lettura, prepara un dossier separato e apre la chat che scriverà i documenti. **Usa snapshot esistenti** acquisisce comunque la cartella corrente quando è selezionato il grafo locale.
 
 Per aggiungere SharePoint o Azure espandi **Collega e gestisci le fonti del progetto**. Salva il collegamento, seleziona la fonte, premi **Sincronizza** e **Salva riferimenti**; poi seleziona il suo grafo. La selezione delle fonti serve alla consultazione nella chat e a `/asis`; quella dei grafi determina gli input dei pulsanti di creazione nel pannello.
 
@@ -88,7 +88,7 @@ I figli restituiscono risultati e proposte. L’orchestratore confronta le conse
 
 ## Grafo locale
 
-Per una cartella locale, anche senza Git, collegala in Il tuo workspace, selezionala e apri la modale Grafi di conoscenza; qui premi Crea / aggiorna grafo. Questo passaggio non usa modelli. Il modello principale usa graph_query; i figli ricevono il riferimento allo stesso grafo quando il progetto è registrato.
+Per una cartella locale, anche senza Git, collegala in Il tuo workspace, selezionala e apri la modale Grafi di conoscenza; qui premi Crea / aggiorna grafo del codice. L’indicizzazione AST non usa modelli; il grafo documentale semantico ha invece una creazione separata con il modello Orchestratore. Il modello principale usa graph_query; i figli ricevono il riferimento allo stesso grafo quando il progetto è registrato.
 
 Il grafo persiste al riavvio e la cache riusa i file invariati. Nella chat legge l’indice salvato e può essere precedente alle ultime modifiche: aggiorna l’indice quando serve. Un grafo incompleto non impedisce di leggere i file.
 

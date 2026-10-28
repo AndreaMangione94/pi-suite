@@ -44,6 +44,18 @@ L'installer prepara l'ambiente; per usare la chat occorre un modello con
 strumenti disponibile localmente o presso il provider scelto. Le chiamate
 cloud possono avere un costo. Credenziali e pesi dei modelli non sono inclusi.
 
+## Grafi ed evidenze documentali
+
+La modale **Grafi di conoscenza** gestisce le fonti da cartelle locali,
+remote e SharePoint, il grafo documentale semantico e quello della codebase.
+Il grafo documentale conserva versioni e prove sulle relazioni esplicite
+e inferite dal modello; la stesura AS-IS usa questo grafo insieme a quello del codice.
+
+I subagenti ricevono un perimetro di lettura delle evidenze e possono leggere
+gli snapshot per intero, per sezione o per passaggio con paginazione.
+La copertura effettiva e le citazioni verificate sono restituite
+all'orchestratore e visibili nelle attivita.
+
 ## Documentazione
 
 - [Panoramica e comandi](README-SUITE.md)

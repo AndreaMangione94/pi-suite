@@ -28,6 +28,8 @@ Le chiavi modello e i token delle fonti sono protetti con Windows DPAPI e legati
 
 ## Comportamenti della versione distribuita
 
+La gestione di fonti, grafi documentali, indici e grafo del codice è riunita nella modale Grafi di conoscenza. Il motore DocumentGraphBuilder usa il modello Orchestratore dopo l’estrazione strutturale, salva il grafo semantico finale per progetto e riusa dalla cache i documenti invariati. La generazione documentale è indipendente dall’AS-IS; i dossier partono dal grafo documentale e dagli originali prima di confrontare il codice. I riferimenti precedenti restano compatibili.
+
 - Il workspace crea cartelle in `data/projects/<nome>` o collega cartelle esistenti tramite selettore Windows, anche senza Git. La scelta della cartella si conferma con **Crea progetto**.
 - **As-is** e **Grafi di conoscenza** si abilitano dopo la selezione del progetto. Le modali mostrano i file salvati con nome, data di creazione e anteprima. **Salva riferimenti** conserva le scelte per progetto.
 - Per creare AS-IS dal pannello serve almeno un grafo disponibile e selezionato. La creazione usa le sue fonti; con un grafo locale acquisisce la cartella corrente anche scegliendo **Usa snapshot esistenti**. `/asis` in chat usa invece le fonti del dossier o quelle salvate per il progetto.
@@ -57,3 +59,11 @@ I collaudi funzionali precedenti usano SDK reali, fonti fittizie e API simulate.
 Il controllo della documentazione non certifica qualità o risparmio con modelli reali, né accesso a tenant aziendali. Usa **Verifica modello** per controllare il ciclo strumenti dell’endpoint scelto; può avere un costo API. Il ramo winget su Windows appena installato e l’interazione con il selettore cartelle nativo richiedono verifica sul PC di destinazione.
 
 La copertura include testo/codice UTF-8, DOCX e PDF con testo, senza OCR. L’AST è per file Python/JS/TS; SQL ha copertura dichiarativa parziale. Limiti, esclusioni e troncamenti sono descritti nelle guide dedicate. Le citazioni validate tecnicamente non certificano la correttezza semantica delle conclusioni.
+
+## Verifiche del grafo documentale semantico
+
+I test locali coprono DOCX/PDF, cartelle locali e acquisizione SharePoint simulata, relazioni inferite senza riferimenti espliciti, sinonimi, cache incrementale, versioni fissate nei dossier e mantenimento del grafo precedente in caso di errore. Il controllo dell’adattatore Pi usa un provider simulato sul PC; non misura la qualità delle inferenze di un modello reale e non collauda un tenant SharePoint reale.
+
+## Verifiche della lettura delegata
+
+Il controllo locale `test_evidence_reading.cjs` verifica il perimetro fissato nel contratto, le scelte full/section/passage, la paginazione Unicode, la copertura senza doppio conteggio, le citazioni rispetto alle righe lette, i documenti iniziali non letti, l’integrità e la compatibilità degli incarichi precedenti. Con `EVIDENCE_RUNTIME_APP` usa il vero caricatore delle estensioni Pi e simula gli eventi della delega per verificare richiamo limitato e restituzione della copertura al genitore; non chiama modelli esterni.

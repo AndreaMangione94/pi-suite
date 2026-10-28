@@ -2,7 +2,7 @@
 import json
 import sys
 from pathlib import Path
-from suite_evidence import query, propose_relation, semantic_proposals, corpus_version
+from suite_evidence import query, propose_relation, semantic_proposals, corpus_version, local_path
 
 
 def main():
@@ -15,14 +15,19 @@ def main():
     home=Path(request['home']).resolve()
     # Bundle paths come from the suite contract, never from tool parameters.
     for ref in bundle:
-        expected=(home/'sources'/ref['source']/ref['snapshot']).resolve()
-        if Path(ref['directory']).resolve()!=expected:raise ValueError('Directory evidenza fuori archivio della suite')
+        expected=local_path(home/'sources'/ref['source']/ref['snapshot'])
+        if local_path(ref['directory'])!=expected:raise ValueError('Directory evidenza fuori archivio della suite')
     if action in ('knowledge_search','knowledge_trace','read_evidence'):
         result=query(bundle,action,args)
         if action=='knowledge_trace' and args.get('includeInferred'):
             ids={n['id'] for n in result['nodes']}|set(args.get('nodes',[]))
             relations=[p for p in semantic_proposals(home,bundle) if p['verification']!='rejected' and (p['source'] in ids or p['target'] in ids)]
             result['inferredRelations']=relations[:40];result['inferredTruncated']=len(relations)>40
+    elif action=='document_graph':
+        from suite_document_graph import query_graph
+        refs={json.dumps(r['documentGraph'],sort_keys=True) for r in bundle if r.get('documentGraph')}
+        if len(refs)>1:raise ValueError('Il corpus contiene versioni documentali incompatibili')
+        result=query_graph(home,json.loads(next(iter(refs))),args,bundle) if refs else {'available':False,'nodes':[],'edges':[],'message':'Crea prima il grafo documentale semantico del progetto in Grafi di conoscenza.'}
     elif action=='propose_relation':result=propose_relation(home,bundle,args)
     elif action in ('prepare_asis','register_asis'):
         from suite import Suite
@@ -31,7 +36,9 @@ def main():
         else:
             ids=args.get('sources') or [r['source'] for r in bundle if r.get('manifest',{}).get('kind')!='asis']
             if not ids:ids=[s['id'] for s in app.sources.connections()]
-            prepared=app.sources.automatic_asis(ids,args.get('objective','')) if args.get('refresh',True) else app.sources.prepare_asis(ids,args.get('objective',''))
+            graph_ref=None if args.get('sources') else next((r['documentGraph'] for r in bundle if r.get('documentGraph')),None)
+            project=app.project_for_workspace(request['workspace']) if request.get('workspace') else None
+            prepared=app.prepare_documented_asis(ids,args.get('objective',''),args.get('refresh',True),project or (graph_ref or {}).get('project'),graph_ref)
             result={k:v for k,v in prepared.items() if k!='sources'}
     else:raise ValueError('Operazione non supportata')
     print(json.dumps(result,ensure_ascii=False))

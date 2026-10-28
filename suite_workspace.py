@@ -1,6 +1,8 @@
 """Project-scoped persisted files and graph prerequisites for the workspace UI."""
 import json
 from pathlib import Path
+from suite_evidence import CODE_EXTENSIONS
+import suite_document_graph as document_graph
 
 
 def load(path):
@@ -14,10 +16,16 @@ def project_record(app, pid):
     return project
 
 
+def source_references(project):
+    """Graph management owns sources; read legacy AS-IS links until first graph save."""
+    workspace = project.get('workspace', {})
+    return workspace.get('graph', {}).get('sources', workspace.get('asis', {}).get('sources', []))
+
+
 def inventory(app, pid):
     project = project_record(app, pid)
     refs = project.get('workspace', {}).get('asis', {})
-    linked = set(refs.get('sources', []))
+    linked = set(source_references(project))
     root = Path(project['path']).resolve()
     graphs, documents = [], []
 
@@ -27,7 +35,14 @@ def inventory(app, pid):
     path = app.home/'graphs'/pid/'graph.json'
     if path.is_file():
         info = load(path)
-        graphs.append(entry('project:'+pid, path, project['name']+' · graph.json', info['createdAt'], kind='project'))
+        graphs.append(entry('project:'+pid, path, project['name']+' · Grafo del codice', info['createdAt'], kind='project'))
+    ref=document_graph.current_ref(app.home,pid)
+    if ref:
+        graph=document_graph.load_graph(app.home,ref)
+        current={s['id']:(s.get('snapshot') or {}).get('id') for s in app.sources.public()}
+        stale=any(current.get(d['source'])!=d['snapshot'] or d['source'] not in linked for d in graph['dependencies'])
+        graphs.append(entry('document:'+pid,document_graph.graph_path(app.home,ref),project['name']+' · Grafo documentale semantico',
+                            graph['createdAt'],kind='document',documentCount=graph['stats']['documents'],reference=ref,stats=graph['stats'],stale=stale))
     for source in app.sources.public():
         local = source.get('path')
         if source['id'] not in linked and not (local and Path(local).resolve().is_relative_to(root)):
@@ -36,8 +51,10 @@ def inventory(app, pid):
         folder = app.sources.root/source['id']/snapshot.get('id', '_missing')
         descriptor = folder/'evidence.json'
         if snapshot.get('index') and descriptor.is_file() and (folder/'evidence.sqlite').is_file():
-            graphs.append(entry('source:'+source['id'], descriptor, source['name']+' · evidence.json',
-                                descriptor.stat().st_birthtime, kind='source', source=source['id']))
+            document_count=sum(Path(doc['path']).suffix.lower() not in CODE_EXTENSIONS for doc in snapshot.get('documents', []))
+            label='Indice delle relazioni esplicite'
+            graphs.append(entry('source:'+source['id'], descriptor, source['name']+' · '+label,
+                                descriptor.stat().st_birthtime, kind='source-index', source=source['id'], documentCount=document_count,selectable=False))
     for dossier in (app.home/'documentation').glob('*/FONTI.json'):
         folder = dossier.parent
         marker = folder/'PROGETTO.json'
@@ -51,15 +68,15 @@ def inventory(app, pid):
                 continue
             documents.append(entry('asis:'+folder.name+':'+path.name, path, path.name,
                                    path.stat().st_birthtime, workspace=str(folder)))
-    return {'graphs': graphs, 'asis': documents}
+    return {'graphs': sorted(graphs, key=lambda graph: (graph['kind']!='document',graph['kind']=='source-index')), 'asis': documents}
 
 
 def selected_graphs(app, data):
-    available = {g['id']: g for g in inventory(app, data.get('project'))['graphs']}
+    available = {g['id']: g for g in inventory(app, data.get('project'))['graphs'] if g.get('selectable',True)}
     ids = data.get('graphs')
     if not isinstance(ids, list) or not ids or any(not isinstance(i, str) or i not in available for i in ids):
         raise ValueError('Seleziona almeno un grafo di conoscenza disponibile per questo progetto.')
-    return [available[i] for i in dict.fromkeys(ids)]
+    return sorted((available[i] for i in dict.fromkeys(ids)), key=lambda graph: graph['kind']!='document')
 
 
 def prepare_sources(app, data, operation):
@@ -67,8 +84,10 @@ def prepare_sources(app, data, operation):
     project = project_record(app, data['project'])
     ids = []
     for graph in graphs:
-        if graph['kind'] == 'source':
-            ids.append(graph['source'])
+        if graph['kind'] == 'document':
+            data['documentGraph']=graph['reference']
+            stored=document_graph.load_graph(app.home,graph['reference'])
+            ids.extend(d['source'] for d in stored['dependencies'])
             continue
         # Reuse the project's local connection when available; the source is read only.
         source = next((s for s in app.sources.connections() if s.get('path') and
