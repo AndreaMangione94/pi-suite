@@ -76,12 +76,11 @@ riguardano la distribuzione Windows separata: per installare dal clone basta
 ## Sviluppo e pubblicazione
 
 Le dipendenze sono fissate in `package-lock.json` e nei file
-`requirements-*.txt`. Per verificare i sorgenti JavaScript usa
-`npm run test:syntax`. Il test Python `python -m unittest test_workspace.py`
-richiede le dipendenze AST installate.
+`requirements-*.txt`. Gli script di test e di controllo della pubblicazione
+restano negli strumenti locali di sviluppo e sono esclusi dal repository.
 
-Prima di ogni push, controlla i file selezionati con `git diff --cached` e
-avvia `python scripts/verify_publication.py --staged`. Configurazioni reali,
+Prima di ogni push, controlla i file selezionati con `git diff --cached`.
+Configurazioni reali,
 dati dell'app, cache, sessioni, backup e pacchetti sono esclusi da `.gitignore`.
 
 Licenza [MIT](LICENSE); [avvisi sulle dipendenze](THIRD-PARTY-NOTICES.md).

@@ -6,6 +6,10 @@ La selezione comprende sorgenti applicativi, interfaccia, installer e launcher,
 skill distribuite, documentazione operativa, test senza risultati salvati,
 esempi dimostrativi, licenza e dipendenze con lockfile.
 
+Aggiornamento del 29 ottobre 2026: gli script di test e di controllo della
+pubblicazione sono stati rimossi dal repository e conservati localmente.
+Le esclusioni in `.gitignore` ne impediscono l'aggiunta accidentale.
+
 La ricerca di credenziali, token noti, chiavi private, JWT, email, identificativi
 italiani, URL con credenziali, percorsi utente e riferimenti a servizi interni
 non ha individuato segreti reali o dati personali nei file selezionati.
@@ -23,8 +27,5 @@ I file locali esclusi possono contenere percorsi personali e restano sul PC.
 Gli ZIP e le copie duplicate delle guide non servono all'installazione dal
 clone e non sono inclusi. Lo storico Git viene creato solo dopo la selezione.
 
-`scripts/verify_publication.py` ripete un controllo euristico sui file Git,
-senza stampare i valori rilevati. `--staged` controlla i byte dell'indice;
-senza opzioni controlla i byte dell'ultimo commit. `--private-term` permette
-di aggiungere nomi o termini privati da cercare senza salvarli nel repository.
-Il controllo non sostituisce la revisione di nuovi documenti o dati futuri.
+I controlli euristici della pubblicazione restano negli strumenti locali di
+sviluppo e non sostituiscono la revisione di nuovi documenti o dati futuri.

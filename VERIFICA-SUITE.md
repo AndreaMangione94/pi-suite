@@ -39,6 +39,13 @@ La gestione di fonti, grafi documentali, indici e grafo del codice è riunita ne
 
 Per i passaggi operativi vedi [Primo avvio](RESOCONTO-E-PRIMO-AVVIO.md), [Fonti e AS-IS](GUIDA-FONTI-AS-IS.md) e [Conoscenza e grafi](GUIDA-CONOSCENZA-E-GRAFI.md).
 
+## Disponibilità degli strumenti di collaudo
+
+Dal 29 ottobre 2026 gli script di test e di controllo della pubblicazione
+sono conservati negli strumenti locali di sviluppo e non sono inclusi nel
+repository. I riferimenti ai test in questo documento descrivono i collaudi
+eseguiti e i contenuti della distribuzione Windows separata.
+
 ## Integrità e controllo documentale
 
 Il controllo documentale confronta le guide con i sorgenti, l’interfaccia e gli script contenuti nello ZIP 0.6.6. Verifica la corrispondenza delle copie in `Documentazione` e `Sorgenti`, i collegamenti locali, le versioni dichiarate, gli hash del manifest e il checksum dello ZIP. Non equivale a un collaudo funzionale con provider o tenant reali.

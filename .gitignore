@@ -69,3 +69,9 @@ Archivio/
 *.zip.sha256
 Thumbs.db
 .DS_Store
+
+# Local checks and test harnesses are not part of the published application
+/scripts/verify_publication.py
+/test_*.py
+/test_*.cjs
+/test_*.ps1
