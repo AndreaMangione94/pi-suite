@@ -75,3 +75,7 @@ Thumbs.db
 /test_*.py
 /test_*.cjs
 /test_*.ps1
+
+# Publish one entry point; runtime commands are generated during installation
+/*.cmd
+!/Install.cmd

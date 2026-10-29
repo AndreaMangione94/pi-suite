@@ -112,7 +112,21 @@ Non sono inclusi un installer firmato, aggiornamenti automatici o inferenza offl
 
 ## Aggiornare o disinstallare
 
-Nella cartella di consegna `pi-suite`, accanto allo ZIP, trovi `Gestisci-PiSuite.ps1`. Per aggiornare esegui:
+Se hai installato dal repository, esegui dalla cartella del clone:
+
+```powershell
+git pull --ff-only
+.\Install.cmd
+```
+
+`Install.cmd` installa Pi Suite se assente; se trova una copia installata applica
+i sorgenti locali, aggiorna le dipendenze quando cambiano e riapre
+il pannello. Configurazioni, progetti e chiavi sono conservati. L'applicazione
+precedente viene salvata e ripristinata in caso di errore. Le chat vanno riaperte.
+Il comando accetta `-Destination` e `-NoLaunch`.
+
+Per la distribuzione ZIP separata, nella cartella di consegna `pi-suite`,
+accanto allo ZIP, trovi `Gestisci-PiSuite.ps1`. Per aggiornare esegui:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Gestisci-PiSuite.ps1 -Azione Aggiorna

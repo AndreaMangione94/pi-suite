@@ -17,6 +17,13 @@ function Test-NodeVersion {
     return ([version]$versionText.TrimStart('v')) -ge [version]'22.19.0'
 }
 try {
+    $existingApplication = Join-Path $Destination 'app'
+    if ((Test-Path -LiteralPath (Join-Path $existingApplication 'suite.py')) -and
+        (Test-Path -LiteralPath (Join-Path $existingApplication '.venv\Scripts\python.exe')) -and
+        (Test-Path -LiteralPath (Join-Path $existingApplication 'node_modules\@earendil-works\pi-coding-agent\package.json'))) {
+        & (Join-Path $PSScriptRoot 'Aggiorna.ps1') -Destination $Destination -Source $PSScriptRoot -ValidateOnly:$ValidateOnly -NoLaunch:$NoLaunch
+        exit $LASTEXITCODE
+    }
     if ($ValidateOnly) {
         foreach ($name in @('node.exe','git.exe','py.exe')) { if (-not (Get-Command $name -ErrorAction SilentlyContinue)) { throw "Manca $name" } }
         if (-not (Test-NodeVersion)) { throw 'Serve Node >= 22.19' }
@@ -35,7 +42,7 @@ try {
     $dataRoot = Join-Path $Destination 'data'
     $binRoot = Join-Path $Destination 'bin'
     New-Item -ItemType Directory -Force -Path $appRoot,$dataRoot,$binRoot | Out-Null
-    $files = @('suite_byok.py','byok-format.mjs','byok-network.mjs','models.schema.json','models.config.example.json','models.config.example.yaml','models.custom.example.json','GUIDA-BYOK.md','LICENSE','THIRD-PARTY-NOTICES.md','suite_evidence.py','suite_evidence_cli.py','evidence-tools.mjs','GUIDA-CONOSCENZA-E-GRAFI.md','adapter.mjs','suite.py','suite_asis.py','suite_sources.py','suite_graph.py','suite_cli.py','suite-extension.ts','suite-delegation.ts','suite-child.ts','delegation-core.mjs','connected-sources.mjs','GUIDA-FONTI-AS-IS.md','package.json','package-lock.json','requirements-ast.txt','README-SUITE.md','RESOCONTO-E-PRIMO-AVVIO.md','VERIFICA-SUITE.md','MEMORY.md','Start-Suite.ps1','pi.cmd','Pi-Suite.cmd')
+    $files = @('suite_byok.py','byok-format.mjs','byok-network.mjs','models.schema.json','models.config.example.json','models.config.example.yaml','models.custom.example.json','GUIDA-BYOK.md','LICENSE','THIRD-PARTY-NOTICES.md','suite_evidence.py','suite_evidence_cli.py','evidence-tools.mjs','GUIDA-CONOSCENZA-E-GRAFI.md','adapter.mjs','suite.py','suite_asis.py','suite_sources.py','suite_graph.py','suite_cli.py','suite-extension.ts','suite-delegation.ts','suite-child.ts','delegation-core.mjs','connected-sources.mjs','GUIDA-FONTI-AS-IS.md','package.json','package-lock.json','requirements-ast.txt','README-SUITE.md','RESOCONTO-E-PRIMO-AVVIO.md','VERIFICA-SUITE.md','MEMORY.md','Start-Suite.ps1')
     $files += @('suite_workspace.py','suite_benchmarks.py','suite_inspect.py','benchmark-catalog.json','requirements-inspect.txt','Install-Inspect.ps1','GUIDA-BENCHMARK.md')
     $files += @('suite_folder_picker.py','suite_document_graph.py','document-graph-tools.mjs','evidence-reading.mjs')
     foreach ($name in $files) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination (Join-Path $appRoot $name) -Force }
@@ -54,7 +61,7 @@ try {
         Run-Checked 'node.exe' @('--check','evidence-reading.mjs')
     } finally { Pop-Location }
     # The user-level command only points at this installation; no existing Pi files are changed.
-    $launcher = '@echo off' + "`r`n" + 'setlocal' + "`r`n" + 'set "PI_SUITE_HOME=%~dp0..\data"' + "`r`n" + 'call "%~dp0..\app\pi.cmd" %*' + "`r`n"
+    $launcher = '@echo off' + "`r`n" + 'setlocal' + "`r`n" + 'set "PI_SUITE_HOME=%~dp0..\data"' + "`r`n" + '"%~dp0..\app\.venv\Scripts\python.exe" "%~dp0..\app\suite_cli.py" %*' + "`r`n" + 'exit /b %errorlevel%' + "`r`n"
     [IO.File]::WriteAllText((Join-Path $binRoot 'pi.cmd'), $launcher, [Text.Encoding]::Default)
     if (-not $NoIntegration) {
     $userPath = [Environment]::GetEnvironmentVariable('Path','User')

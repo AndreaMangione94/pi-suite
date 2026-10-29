@@ -88,7 +88,7 @@ La cartella effettiva dei dati è mostrata nel pannello ed è configurabile con 
 
 Al primo avvio i provider e i profili precedenti vengono migrati automaticamente. Le chiavi gia protette sono spostate come blob cifrati, senza essere scritte in chiaro. Non distribuire la cartella dati o il backup: copia soltanto il JSON senza segreti dall'editor o usa l'API di esportazione.
 
-Aggiornamento e disinstallazione tramite `Gestisci-PiSuite.ps1` conservano la cartella dati, comprese le credenziali cifrate. Per i comandi vedi il [README](README-SUITE.md#aggiornare-o-disinstallare).
+L'aggiornamento dal repository tramite `Install.cmd`, dopo `git pull`, riconosce la copia installata e conserva la cartella dati, comprese le credenziali cifrate. Per la distribuzione ZIP separata, aggiornamento e disinstallazione usano `Gestisci-PiSuite.ps1`. Per i comandi vedi il [README](README-SUITE.md#aggiornare-o-disinstallare).
 
 Le chat aperte e i loro subagenti conservano lo snapshot iniziale. Per usare una modifica apri una nuova chat. I file `models.json` generati non sono il punto da modificare manualmente. Non viene effettuato alcun fallback automatico tra provider.
 

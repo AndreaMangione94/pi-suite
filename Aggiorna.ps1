@@ -12,7 +12,7 @@ function Get-ApplicationFiles([string]$Directory) {
     $parseErrors = $null
     $installer = Join-Path $Directory 'Install.ps1'
     $tree = [System.Management.Automation.Language.Parser]::ParseFile($installer, [ref]$tokens, [ref]$parseErrors)
-    if ($parseErrors.Count) { throw 'Install.ps1 non valido: reinstallazione interrotta.' }
+    if ($parseErrors.Count) { throw 'Install.ps1 non valido: aggiornamento interrotto.' }
     $assignments = $tree.FindAll({
         param($item)
         $item -is [System.Management.Automation.Language.AssignmentStatementAst] -and
@@ -84,7 +84,7 @@ function Stop-ApplicationProcesses([string]$Application) {
             if (-not $running.WaitForExit(10000)) { throw 'Impossibile arrestare un processo Pi Suite.' }
         }
     }
-    if (@(Get-ApplicationProcesses $Application).Count) { throw 'Pi Suite ancora in esecuzione: reinstallazione interrotta.' }
+    if (@(Get-ApplicationProcesses $Application).Count) { throw 'Pi Suite ancora in esecuzione: aggiornamento interrotto.' }
 }
 
 function Test-ApplicationRuntime([string]$Application) {
@@ -98,7 +98,32 @@ function Test-ApplicationRuntime([string]$Application) {
     if ($LASTEXITCODE -ne 0) { throw 'Le dipendenze Python non sono utilizzabili.' }
 }
 
-function Invoke-Reinstallation {
+function Update-ApplicationDependencies([string]$Application, [bool]$NodeChanged, [bool]$PythonChanged) {
+    Push-Location $Application
+    try {
+        if ($NodeChanged) {
+            & npm.cmd ci --omit=dev --no-audit --no-fund
+            if ($LASTEXITCODE -ne 0) { throw 'Aggiornamento delle dipendenze Node non riuscito.' }
+        }
+        if ($PythonChanged) {
+            & (Join-Path $Application '.venv\Scripts\python.exe') -m pip install --no-deps -r requirements-ast.txt
+            if ($LASTEXITCODE -ne 0) { throw 'Aggiornamento delle dipendenze Python non riuscito.' }
+        }
+    } finally { Pop-Location }
+}
+
+function Test-UpdatedApplication([string]$Application) {
+    $python = Join-Path $Application '.venv\Scripts\python.exe'
+    Push-Location $Application
+    try {
+        & $python -c 'import suite; assert callable(suite.Suite.save_connection)'
+        if ($LASTEXITCODE -ne 0) { throw 'Verifica del nuovo backend non riuscita.' }
+        & $python (Join-Path $Application 'suite_evidence_cli.py') --self-check
+        if ($LASTEXITCODE -ne 0) { throw 'Verifica delle dipendenze non riuscita.' }
+    } finally { Pop-Location }
+}
+
+function Invoke-Update {
     $sourceRoot = (Resolve-Path -LiteralPath $Source).Path.TrimEnd('\')
     $targetRoot = [IO.Path]::GetFullPath($Destination).TrimEnd('\')
     $application = Join-Path $targetRoot 'app'
@@ -108,24 +133,35 @@ function Invoke-Reinstallation {
     }
     $files = @(Get-ApplicationFiles $sourceRoot)
     Test-ApplicationRuntime $application
+    $nodeChanged = $false
+    $pythonChanged = $false
     foreach ($manifest in @('package.json', 'package-lock.json', 'requirements-ast.txt')) {
         $old = Join-Path $application $manifest
         if (-not (Test-Path -LiteralPath $old) -or (Get-FileHash -LiteralPath $old).Hash -ne (Get-FileHash -LiteralPath (Join-Path $sourceRoot $manifest)).Hash) {
-            throw "Dipendenze cambiate ($manifest). Serve l'installazione completa con Install.cmd."
+            if ($manifest -eq 'requirements-ast.txt') { $pythonChanged = $true }
+            else { $nodeChanged = $true }
         }
     }
     $processes = @(Get-ApplicationProcesses $application)
     if ($ValidateOnly) {
         Write-Host "Verifica riuscita: $($files.Count) file applicativi; $($processes.Count) processi Pi Suite da arrestare."
         Write-Host "Dati conservati: $data"
+        Write-Host "Aggiornamento dipendenze Node: $nodeChanged; Python: $pythonChanged."
         return
     }
 
     $suffix = (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [Guid]::NewGuid().ToString('N').Substring(0, 8)
     $staging = Join-Path $targetRoot ('app-nuova-' + $suffix)
     $backup = Join-Path $targetRoot ('app-precedente-' + $suffix)
+    $failedApplication = Join-Path $targetRoot ('app-non-riuscita-' + $suffix)
+    foreach ($path in @($application, $staging, $backup, $failedApplication)) {
+        if ([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($path)) -ine $targetRoot) {
+            throw 'Percorso applicativo esterno alla destinazione: aggiornamento interrotto.'
+        }
+    }
     $oldMoved = $false
     $newMoved = $false
+    $movedRuntimes = @()
     try {
         New-Item -ItemType Directory -Path $staging | Out-Null
         foreach ($file in $files) { Copy-Item -LiteralPath (Join-Path $sourceRoot $file) -Destination (Join-Path $staging $file) }
@@ -152,24 +188,28 @@ function Invoke-Reinstallation {
         Move-Item -LiteralPath $staging -Destination $application
         $newMoved = $true
         foreach ($runtime in @('.venv', 'node_modules')) {
+            if ($runtime -eq 'node_modules' -and $nodeChanged) { continue }
+            if ($runtime -eq '.venv' -and $pythonChanged) {
+                Copy-Item -LiteralPath (Join-Path $backup $runtime) -Destination (Join-Path $application $runtime) -Recurse
+                continue
+            }
             Move-Item -LiteralPath (Join-Path $backup $runtime) -Destination (Join-Path $application $runtime)
+            $movedRuntimes += $runtime
         }
-        $python = Join-Path $application '.venv\Scripts\python.exe'
-        Push-Location $application
-        try {
-            & $python -c 'import suite; assert callable(suite.Suite.save_connection)'
-            if ($LASTEXITCODE -ne 0) { throw 'Verifica del nuovo backend non riuscita.' }
-            & $python (Join-Path $application 'suite_evidence_cli.py') --self-check
-            if ($LASTEXITCODE -ne 0) { throw 'Verifica delle dipendenze non riuscita.' }
-        } finally { Pop-Location }
+        Update-ApplicationDependencies $application $nodeChanged $pythonChanged
+        Test-UpdatedApplication $application
+        $binRoot = Join-Path $targetRoot 'bin'
+        New-Item -ItemType Directory -Force -Path $binRoot | Out-Null
+        $launcher = '@echo off' + "`r`n" + 'setlocal' + "`r`n" + 'set "PI_SUITE_HOME=%~dp0..\data"' + "`r`n" + '"%~dp0..\app\.venv\Scripts\python.exe" "%~dp0..\app\suite_cli.py" %*' + "`r`n" + 'exit /b %errorlevel%' + "`r`n"
+        [IO.File]::WriteAllText((Join-Path $binRoot 'pi.cmd'), $launcher, [Text.Encoding]::Default)
     } catch {
         $failure = $_
         if ($oldMoved) {
-            foreach ($runtime in @('.venv', 'node_modules')) {
+            foreach ($runtime in $movedRuntimes) {
                 $moved = Join-Path $application $runtime
                 if ($newMoved -and (Test-Path -LiteralPath $moved)) { Move-Item -LiteralPath $moved -Destination (Join-Path $backup $runtime) }
             }
-            if ($newMoved) { Move-Item -LiteralPath $application -Destination (Join-Path $targetRoot ('app-non-riuscita-' + $suffix)) }
+            if ($newMoved) { Move-Item -LiteralPath $application -Destination $failedApplication }
             Move-Item -LiteralPath $backup -Destination $application
             Write-Host 'Ripristinata la precedente applicazione. I dati non sono stati modificati.' -ForegroundColor Yellow
         }
@@ -177,16 +217,16 @@ function Invoke-Reinstallation {
         throw $failure
     }
 
-    Write-Host 'Reinstallazione completata. Configurazioni, progetti e chiavi conservati.' -ForegroundColor Green
+    Write-Host 'Aggiornamento completato. Configurazioni, progetti e chiavi conservati.' -ForegroundColor Green
     Write-Host "Backup applicazione: $backup"
     if (-not $NoLaunch) {
         $pythonWindowless = Join-Path $application '.venv\Scripts\pythonw.exe'
         $arguments = '"' + (Join-Path $application 'suite.py') + '" --home "' + $data + '"'
-        Start-Process -FilePath $pythonWindowless -ArgumentList $arguments -WorkingDirectory $application
+        Start-Process -FilePath $pythonWindowless -ArgumentList $arguments -WorkingDirectory $application -WindowStyle Hidden
     }
 }
 
 if ($MyInvocation.InvocationName -ne '.') {
-    try { Invoke-Reinstallation }
+    try { Invoke-Update }
     catch { Write-Host $_.Exception.Message -ForegroundColor Red; exit 1 }
 }

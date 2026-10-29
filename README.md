@@ -30,6 +30,28 @@ Dopo l'installazione apri **Pi Suite** dal desktop oppure `pi suite` in un
 nuovo terminale. L'applicazione installata usa la propria copia del codice e
 la propria area dati, quindi puo funzionare senza la cartella clonata.
 
+## Aggiornare dopo una pull
+
+Nella cartella del repository esegui:
+
+```powershell
+git pull --ff-only
+.\Install.cmd
+```
+
+`Install.cmd` riconosce la copia gia installata e la aggiorna con i sorgenti appena
+scaricati, arresta Pi Suite e riapre il pannello. Conserva configurazioni,
+progetti e chiavi, aggiorna le dipendenze quando cambiano e mantiene una copia
+dell'applicazione precedente per il ripristino in caso di errore. Le chat
+vanno riaperte dopo l'aggiornamento. Se le dipendenze cambiano serve Internet.
+
+L'unico file `.cmd` del repository e `Install.cmd`, per la prima installazione
+e gli aggiornamenti successivi. Il comando `pi` viene generato nella
+cartella `bin` dell'installazione; il pannello si apre dal collegamento desktop.
+Il comando accetta `-Destination` per una destinazione personalizzata
+e `-NoLaunch` per evitare l'apertura del pannello. `Install.cmd -ValidateOnly`
+controlla i prerequisiti senza modificare l'installazione.
+
 ## Primo utilizzo
 
 1. In **Connessioni e modelli** configura un endpoint locale o un provider cloud.
