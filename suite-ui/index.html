@@ -14,14 +14,14 @@
 <main><header class="topbar"><span id="breadcrumb">Workspace / Il tuo workspace</span><span class="local-pill">● &nbsp; Connessione locale</span></header>
 <div id="notice" role="status" aria-live="polite" hidden></div>
 <section id="page-work" class="page">
-<div class="workspace-heading"><div class="eyebrow">IL TUO SPAZIO DI LAVORO</div><h1>Il tuo workspace</h1><p class="lead">Scegli un progetto e riprendi da qui.</p></div>
+<div class="workspace-heading"><div class="eyebrow">IL TUO SPAZIO DI LAVORO</div><h1>Il tuo workspace</h1><p class="lead">Apri una chat con contesto pulito oppure scegli un progetto.</p></div>
 <div class="card workspace-card project-card">
-<label for="project">Progetto attivo</label><div class="project-picker-row"><select id="project"><option value="">Seleziona un progetto</option></select><button id="new-project" class="primary" aria-haspopup="dialog" aria-controls="project-dialog">+ Nuovo progetto</button></div>
-<p id="project-info" class="muted">Seleziona un progetto dalla lista o creane uno nuovo.</p>
+<label for="project">Progetto attivo</label><div class="project-picker-row"><select id="project"><option value="">Nessun progetto · Chat con contesto pulito</option></select><button id="new-project" class="primary" aria-haspopup="dialog" aria-controls="project-dialog">+ Nuovo progetto</button></div>
+<p id="project-info" class="muted">Il progetto è facoltativo: selezionalo o creane uno per usare la sua cartella e i suoi riferimenti.</p>
 </div>
 <div class="card workspace-card references-card"><h2>Riferimenti del progetto</h2><p class="muted">Genera i grafi documentali e del codice, poi usali per ricostruire l’AS-IS del progetto.</p><div class="workspace-tools" aria-label="Riferimenti del progetto"><button id="open-asis" class="secondary" aria-describedby="workspace-project-placeholder" title="Scegli un progetto per continuare." aria-haspopup="dialog" aria-controls="asis-dialog" disabled>▤ &nbsp; As-is</button><button id="open-graph" class="secondary" aria-describedby="workspace-project-placeholder" title="Scegli un progetto per continuare." aria-haspopup="dialog" aria-controls="graph-dialog" disabled>⌘ &nbsp; Grafi di conoscenza</button></div></div>
 <p id="workspace-project-placeholder" class="workspace-project-placeholder muted" role="status">Scegli un progetto per aprire AS-IS e Grafi di conoscenza.</p>
-<div class="workspace-chat"><button id="open-chat" class="primary" disabled>Apri chat Pi →</button><p id="chat-project-info" class="muted">Seleziona un progetto per aprire la sua chat.</p></div>
+<div class="workspace-chat"><button id="open-chat" class="primary">Apri chat Pi →</button><p id="chat-project-info" class="muted">Senza progetto si apre una nuova chat con contesto pulito e le connessioni, i modelli, i profili e le skill configurati.</p></div>
 <details class="workspace-setup"><summary>Configurazione della squadra</summary><div class="setup-grid" id="setup"></div></details>
 </section>
 <section id="page-providers" class="page" hidden>

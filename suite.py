@@ -390,10 +390,12 @@ class Suite:
             selected=next((p for p in self.settings['projects'] if p['id']==project_id),None)
             if not selected: raise ValueError('Progetto sconosciuto')
         if selected: path=selected['path']
-        folder=Path(path).expanduser().resolve() if path else self.home/'workspace'
-        if not path: folder.mkdir(exist_ok=True)
+        folder=Path(path).expanduser().resolve() if path else self.home/'chats'/uuid.uuid4().hex
+        if not path: folder.mkdir(parents=True)
         if not folder.is_dir(): raise ValueError('Scegli una cartella esistente per la chat.')
         env=os.environ.copy();env['PI_SUITE_HOME']=str(self.home)
+        env.pop('PI_SUITE_CLEAN_WORKSPACE',None)
+        if not path: env['PI_SUITE_CLEAN_WORKSPACE']=str(folder)
         if selected: env['PI_SUITE_PROJECT']=selected['id']
         else: env.pop('PI_SUITE_PROJECT',None)
         python=Path(sys.executable).with_name('python.exe') if os.name=='nt' else Path(sys.executable)

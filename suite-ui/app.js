@@ -91,9 +91,9 @@ bind('open-asis',()=>openWorkspaceDialog('asis'));bind('open-graph',()=>openWork
 bind('save-asis-references',()=>saveReferences('asis'));bind('save-graph-references',async()=>{await saveReferences('graph');await refreshWorkspaceFiles();});
 document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>page(b.dataset.page));
 function setup(){referenceAvailability();const steps=[['Connessioni',`${settings.providers.length} provider configurati`,'providers',settings.providers.length>0],['La tua squadra',settings.roles.worker?'Orchestratore + subagenti':settings.roles.orchestrator?'Solo orchestratore':'Scegli l’orchestratore','roles',!!settings.roles.orchestrator],['Contesto locale',project?.name||'Scegli il tuo progetto','work',!!project]];$('setup').replaceChildren();steps.forEach(([title,desc,target,done],i)=>{const b=btn('',()=>page(target),'setup-step');b.append(el('span',done?'✓':String(i+1),'step-number'));const d=el('div',title);d.append(el('small',desc));b.append(d);$('setup').append(b);});}
-function projects(){options($('project'),[['','Seleziona un progetto'],...settings.projects.map(p=>[p.id,settings.projects.filter(other=>other.name===p.name).length>1?p.name+' · '+p.path:p.name])],project?.id||'');for(const option of $('project').options)option.title=settings.projects.find(p=>p.id===option.value)?.path||'';}
+function projects(){options($('project'),[['','Nessun progetto · Chat con contesto pulito'],...settings.projects.map(p=>[p.id,settings.projects.filter(other=>other.name===p.name).length>1?p.name+' · '+p.path:p.name])],project?.id||'');for(const option of $('project').options)option.title=settings.projects.find(p=>p.id===option.value)?.path||'';}
 async function refresh(initial=false){state=await api('state');if(initial||!settings)settings=state.settings;else settings.projects=state.settings.projects;setup();renderJob();if(activePage==='runs')await loadDelegations();if(initial){projects();renderProviders();renderRoles();renderSkills();}const signature=state.job.id+':'+state.job.state;if(signature!==lastJob){lastJob=signature;if(state.job.state==='done'){notice('Operazione completata.');projects();if(state.job.operation==='graph'&&project){project=await api('project?id='+project.id);await loadGraph();}if(['sync-source','document-graphs','prepare-asis','auto-asis','index-sources','register-asis'].includes(state.job.operation)){await loadSources();if(project){await refreshWorkspaceFiles();if(state.job.operation==='document-graphs')await loadDocumentGraph();}if(state.job.result?.workspace)notice('Dossier pronto in '+state.job.result.workspace+'. La chat scriverà la documentazione.');}if(state.job.operation==='probe'){settings.modelChecks=state.settings.modelChecks;renderProviders();}if(state.job.operation==='probe')notice('Connessione e tool calling verificati. Ragionamento effettivo: '+state.job.result.effective);}if(state.job.state==='failed')notice(state.job.error,true);}document.querySelectorAll('[data-job-button]').forEach(b=>b.disabled=state.busy);asisAvailability();}
-bind('open-chat',async()=>{if(!project)throw Error('Seleziona un progetto.');const result=await api('chat',{project:project.id});notice('Chat Pi aperta per '+project.name+' in '+result.folder);});
+bind('open-chat',async()=>{const selected=project;const result=await api('chat',selected?{project:selected.id}:{});notice(selected?'Chat Pi aperta per '+selected.name+' in '+result.folder:'Chat Pi aperta con contesto pulito in '+result.folder);});
 async function loadDelegations(){
   const batches=await api('delegations'),host=$('delegation-list'),signature=JSON.stringify(batches);
   if(signature===lastDelegations)return;lastDelegations=signature;host.replaceChildren();
@@ -210,15 +210,15 @@ bind('import-skill',async()=>{const file=$('skill-file').files[0];if(!file)throw
 let projectRequest=0;
 async function openProject(){
   const id=$('project').value,request=++projectRequest;
-  closeWorkspaceDialogs();project=null;$('open-chat').disabled=true;$('open-asis').disabled=true;$('open-graph').disabled=true;$('chat-project-info').textContent='Seleziona un progetto per aprire la sua chat.';setup();
-  $('project-info').textContent=id?'Apertura progetto…':'Seleziona un progetto dalla lista o creane uno nuovo.';
+  closeWorkspaceDialogs();project=null;$('open-chat').disabled=!!id;$('open-asis').disabled=true;$('open-graph').disabled=true;$('chat-project-info').textContent='Senza progetto si apre una nuova chat con contesto pulito e le connessioni, i modelli, i profili e le skill configurati.';setup();
+  $('project-info').textContent=id?'Apertura progetto…':'Il progetto è facoltativo: selezionalo o creane uno per usare la sua cartella e i suoi riferimenti.';
   if(!id)return;
   try{
     const loaded=await api('project?id='+encodeURIComponent(id));if(request!==projectRequest)return;
     project=loaded;setup();$('open-chat').disabled=false;$('chat-project-info').textContent='La chat userà la cartella e i riferimenti di '+project.name+'.';
     $('project-info').textContent=project.path;$('open-asis').disabled=false;$('open-graph').disabled=false;
     $('graph-project').textContent=project.name;$('graph-state').textContent=project.graph?(project.graph.stale?'Grafo da aggiornare · ':'Grafo aggiornato · ')+project.graph.stats.nodes+' nodi':'Il grafo non è ancora stato creato.';
-  }catch(e){if(request===projectRequest){$('project').value='';$('project-info').textContent='Progetto non disponibile. Scegli un’altra cartella.';throw e;}}
+  }catch(e){if(request===projectRequest){$('project').value='';$('open-chat').disabled=false;$('project-info').textContent='Progetto non disponibile. Puoi aprire una chat con contesto pulito o scegliere un’altra cartella.';throw e;}}
 }
 $('project').onchange=()=>openProject().catch(e=>notice(e.message,true));
 bind('new-project',()=>{

@@ -2,7 +2,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
+export function isCleanWorkspace(project) {
+  const clean=process.env.PI_SUITE_CLEAN_WORKSPACE;
+  const normalize=p=>process.platform==='win32'?path.resolve(p).toLowerCase():path.resolve(p);
+  return !!clean&&normalize(project)===normalize(clean);
+}
+
 export function sourceBundle(home,project) {
+  if(isCleanWorkspace(project))return [];
   const dossier=path.join(project,'FONTI.json');let refs,documentGraph;
   if(fs.existsSync(dossier)&&fs.existsSync(path.join(project,'INCARICO-AS-IS.md')))refs=JSON.parse(fs.readFileSync(dossier,'utf8'));
   else {

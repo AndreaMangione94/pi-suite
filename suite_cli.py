@@ -26,6 +26,9 @@ def main():
         if profile and '--model' not in args and '--provider' not in args:
             extra=['--provider',profile['provider'],'--model',profile['model'],'--thinking',profile['effort']]
         extra+=['--extension',str(ROOT/'node_modules/pi-subagents/index.js'),'--extension',str(ROOT/'suite-extension.ts')]
+        clean_workspace=env.get('PI_SUITE_CLEAN_WORKSPACE')
+        if clean_workspace and Path.cwd().resolve()==Path(clean_workspace).resolve():
+            extra+=['--no-context-files']
         for name in app.settings['enabledSkills']:
             folder=ROOT/'skills'/name
             if name=='pi-subagents': folder=ROOT/'node_modules/pi-subagents/skills/pi-subagents'

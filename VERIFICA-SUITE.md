@@ -140,3 +140,9 @@ Sono passati i sette test Python del giudice, i test delle metriche e il collaud
 La CTA **Esporta prova per valutatore esterno** scarica un unico ZIP con una cartella contenente `01-prova.md`, `02-risposta.json` e `03-istruzioni-valutatore.md`. Le istruzioni includono il comando pronto da inviare al giudice, la rubrica e il modello JSON con gli identificativi e l’hash della risposta.
 
 La CTA è disabilitata finché test, risposta salvata e criteri del valutatore non sono completi e coerenti; il motivo è visibile. Il server applica lo stesso controllo al momento del download. I test verificano struttura e contenuti dello ZIP, assenza di modifiche al registro, stati disabilitati e rifiuto delle esportazioni incomplete. Sono passati i nove test Python del giudice, gli undici delle metriche e il collaudo Chromium desktop/mobile. Le prove usano dati simulati.
+
+## Chat senza progetto · 29 ottobre 2026
+
+**Apri chat Pi** è disponibile anche con un elenco progetti vuoto o dopo aver scelto **Nessun progetto · Chat con contesto pulito**. Ogni apertura usa una nuova cartella `data/chats/<id>/`, conserva connessioni, modelli, profili e skill salvati ed esclude istruzioni ereditate, fonti e grafi dei progetti. AS-IS e Grafi di conoscenza continuano a richiedere un progetto.
+
+Sono passati quattro test Python sull’avvio, sulle cartelle distinte, sulla configurazione della sessione con e senza profili e sulla conservazione del contesto per progetti e dossier. Il collaudo JavaScript verifica l’isolamento delle fonti e del grafo nelle deleghe, anche con un progetto registrato nella cartella superiore. Edge headless a 1440 e 390 pixel verifica avvio senza progetti, aperture ripetute, selezione e deselezione, risposte tardive e progetti non disponibili. I controlli sintattici passano. Il collaudo usa dati fittizi e intercetta l’avvio del terminale, senza richieste ai modelli.

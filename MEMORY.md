@@ -8,6 +8,8 @@ obiettivo, decisioni, fonti, limiti e criteri di completamento necessari.
 
 Connessioni, modelli, profili e skill della nuova chat sono fissati in `data/sessions/<id>/`. Per usare modifiche salvate dal pannello apri una nuova chat. Se il profilo Subagenti è vuoto, il genitore lavora direttamente; se è selezionato, deve ricevere almeno una consegna da un figlio per richiesta.
 
+**Apri chat Pi** funziona anche senza progetto. Ogni apertura crea una cartella vuota distinta in `data/chats/<id>/` e una nuova sessione con le configurazioni salvate. `PI_SUITE_CLEAN_WORKSPACE` identifica questa cartella: non vengono caricati automaticamente istruzioni ereditate, fonti o grafi dei progetti, nemmeno nelle deleghe. La selezione di un progetto o l’apertura di un dossier mantiene il suo contesto e rimuove questo indicatore dall’ambiente di avvio.
+
 ## Artefatti delle deleghe
 
 ```text

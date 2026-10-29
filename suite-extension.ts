@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from '@earendil-works/pi-ai';
 import registerDelegation from './suite-delegation.ts';
-import {sourceBundle,connectedTools} from './connected-sources.mjs';
+import {sourceBundle,connectedTools,isCleanWorkspace} from './connected-sources.mjs';
 import {knowledgeTools,invokeEvidence} from './evidence-tools.mjs';
 
 export default function(pi: ExtensionAPI) {
@@ -70,6 +70,7 @@ export default function(pi: ExtensionAPI) {
     description:'Cerca simboli nel grafo Graphify persistente del progetto corrente. Il grafo è una fotografia: controlla le fonti correnti prima di modificare codice. Usa /suite per crearlo o aggiornarlo.',
     parameters:Type.Object({query:Type.Optional(Type.String()),nodeId:Type.Optional(Type.String()),limit:Type.Optional(Type.Integer({minimum:1,maximum:50}))}),
     async execute(_id,args,_signal,_onUpdate,ctx) {
+      if(isCleanWorkspace(ctx.cwd))throw Error('Questa chat non ha un progetto. Seleziona un progetto nel workspace e apri una nuova chat per consultarne il grafo.');
       const settingsPath=path.join(home,'settings.json');
       if(!fs.existsSync(settingsPath)) throw Error('Apri /suite e aggiungi il progetto.');
       const settings=JSON.parse(fs.readFileSync(settingsPath,'utf8'));

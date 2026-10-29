@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import {sourceBundle,connectedTools} from './connected-sources.mjs';
+import {sourceBundle,connectedTools,isCleanWorkspace} from './connected-sources.mjs';
 import {knowledgeTools} from './evidence-tools.mjs';
 import {normalizeEvidenceScope,evidenceScopeMarkdown,recordEvidenceRead,evidenceReadingTool} from './evidence-reading.mjs';
 
@@ -82,7 +82,7 @@ export function prepareBatch(home,project,tasks,settings,plan) {
   const id=crypto.randomUUID();
   const root=path.join(home,'delegations',id);fs.mkdirSync(root,{recursive:true});
   const normalize=p=>path.resolve(p).toLowerCase();
-  const registered=(settings.projects||[]).filter(p=>normalize(source)===normalize(p.path)||normalize(source).startsWith(normalize(p.path)+path.sep)).sort((a,b)=>b.path.length-a.path.length)[0];
+  const registered=isCleanWorkspace(source)?null:(settings.projects||[]).filter(p=>normalize(source)===normalize(p.path)||normalize(source).startsWith(normalize(p.path)+path.sep)).sort((a,b)=>b.path.length-a.path.length)[0];
   const graph=registered?path.join(home,'graphs',registered.id,'graph.json'):null;
   const batch={id,project:source,plan,createdAt:new Date().toISOString(),state:'running',tasks:[]};
   for(let i=0;i<tasks.length;i++) {

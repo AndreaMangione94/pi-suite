@@ -48,7 +48,7 @@ Nella chat Pi usa `/asis [obiettivo]`: aggiorna le fonti del dossier attivo (opp
 2. Apri Pi Suite dal collegamento desktop creato dall’installer.
 3. In Connessioni e modelli configura un server locale senza autenticazione oppure un provider cloud con la sua chiave, quindi salva. Puoi anche importare gli esempi JSON/YAML inclusi, sostituendo gli ID dimostrativi.
 4. In Orchestratore e subagenti scegli il modello Orchestratore e, per attivare la delega obbligatoria, anche il modello Subagenti (anche di provider diverso). Puoi usare lo stesso modello. Salva squadra e prova Verifica: la prova usa il provider reale e può avere un costo.
-5. In Il tuo workspace seleziona o crea un progetto e premi Apri chat Pi. Si apre il terminale Pi con il modello principale, se salvato; altrimenti Pi gestisce la scelta del modello. Sono supportate anche cartelle senza Git.
+5. In Il tuo workspace premi Apri chat Pi. Il progetto è facoltativo: senza selezionarlo si apre una nuova chat con contesto pulito e le configurazioni salvate; selezionandolo si usano la sua cartella e i suoi riferimenti. Si apre il terminale Pi con il modello principale, se salvato; altrimenti Pi gestisce la scelta del modello. Sono supportate anche cartelle senza Git.
 6. Scrivi il risultato desiderato. Con Subagenti configurati, l’orchestratore delega sempre almeno un incarico tramite delegate_tasks e integra la consegna del figlio. Senza modello Subagenti lavora direttamente.
 
 Leggi [Resoconto e primo avvio](RESOCONTO-E-PRIMO-AVVIO.md) per un esempio completo e [Verifiche](VERIFICA-SUITE.md) per il collaudo.
