@@ -1,4 +1,5 @@
 'use strict';
+let folderDialogVersion=0;
 const $=id=>document.getElementById(id);
 const token=location.hash.slice(1)||sessionStorage.getItem('pi-suite-token')||'';
 if(location.hash){sessionStorage.setItem('pi-suite-token',token);history.replaceState(null,'',location.pathname+location.search);}
@@ -51,6 +52,7 @@ function options(select,items,value){select.replaceChildren();for(const [v,label
 function page(name){closeWorkspaceDialogs();activePage=name;for(const section of document.querySelectorAll('.page'))section.hidden=section.id!=='page-'+name;for(const b of document.querySelectorAll('[data-page]'))b.classList.toggle('active',b.dataset.page===name);$('breadcrumb').textContent='Workspace / '+({work:'Il tuo workspace',runs:'Attività subagenti',providers:'Connessioni e modelli',roles:'Orchestratore e subagenti',skills:'Skill installate',benchmarks:'Benchmark e confronti'}[name]);if(name==='runs')loadDelegations().catch(e=>notice(e.message,true));}
 function closeWorkspaceDialogs(){document.querySelectorAll('.workspace-dialog[open]').forEach(d=>d.close());}
 for(const dialog of document.querySelectorAll('.workspace-dialog')){
+  dialog.addEventListener('close',()=>folderDialogVersion++);
   dialog.querySelectorAll('[data-close-dialog]').forEach(b=>b.onclick=()=>dialog.close());
   dialog.addEventListener('keydown',event=>{
     if(event.key!=='Tab')return;
@@ -224,21 +226,41 @@ bind('new-project',()=>{
   $('project-location-help').textContent='Con il solo nome, la suite crea una cartella nella propria area progetti.';
   $('project-dialog').showModal();$('project-name').focus();
 });
-let choosingProjectFolder=false;
-async function chooseProjectFolder(){
-  if(choosingProjectFolder)return;
-  choosingProjectFolder=true;$('browse-project').disabled=true;$('create-project').disabled=true;
-  const requestDialog=$('project-dialog');requestDialog.querySelector('[data-modal-notice]').hidden=true;
+let choosingFolder=false;
+async function chooseDirectory(target,context,button,afterSelect){
+  if(choosingFolder)return;
+  const control=$(target),dialog=control.closest('dialog'),projectId=project?.id;
+  const dialogVersion=folderDialogVersion;
+  const original=control.value,sourceKind=$('source-kind').value,sourceId=$('source-id').value;
+  const blocked=[...document.querySelectorAll('[data-folder-picker]'),$('create-project'),$('save-source'),$('new-source'),$('source-kind'),$('register-dossier'),$('clear-project-path')];
+  const disabled=blocked.map(n=>n.disabled);choosingFolder=true;
+  blocked.forEach(n=>n.disabled=true);$(button).setAttribute('aria-busy','true');
+  dialog.querySelector('[data-modal-notice]').hidden=true;
   try{
-    const result=await api('project-folder',{});
-    if(result.path&&requestDialog.open){$('project-path').value=result.path;if(!$('project-name').value.trim())$('project-name').value=result.path.split(/[\\/]/).filter(Boolean).at(-1)||'';$('clear-project-path').hidden=false;$('project-location-help').textContent='La cartella scelta verrà collegata quando premi Crea progetto.';}
-  }finally{choosingProjectFolder=false;$('browse-project').disabled=false;$('create-project').disabled=false;}
+    const result=await api('folder',{context,initialPath:original||project?.path||''});
+    if(result.path&&dialog.open&&folderDialogVersion===dialogVersion&&project?.id===projectId&&control.value===original&&
+      (context!=='source'||($('source-kind').value===sourceKind&&$('source-id').value===sourceId))){
+      control.value=result.path;control.dispatchEvent(new Event('change',{bubbles:true}));afterSelect?.(result.path);
+    }
+  }finally{choosingFolder=false;blocked.forEach((n,i)=>n.disabled=disabled[i]);$(button).removeAttribute('aria-busy');}
+}
+function chooseProjectFolder(){
+  return chooseDirectory('project-path','project','browse-project',path=>{
+    if(!$('project-name').value.trim())$('project-name').value=path.split(/[\\/]/).filter(Boolean).at(-1)||'';
+    $('clear-project-path').hidden=false;$('project-location-help').textContent='La cartella scelta verrà collegata quando premi Crea progetto.';
+  });
 }
 bind('browse-project',chooseProjectFolder);bind('project-path',chooseProjectFolder);
 $('project-path').onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();chooseProjectFolder().catch(e=>notice(e.message,true));}};
+for(const [target,context,button]of [['source-path','source','browse-source'],['dossier-workspace','dossier','browse-dossier']]){
+  bind(button,()=>chooseDirectory(target,context,button));
+  // The editable field also opens Explorer; pasting a path remains supported.
+  bind(target,()=>chooseDirectory(target,context,button));
+  $(target).onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();chooseDirectory(target,context,button).catch(e=>notice(e.message,true));}};
+}
 bind('clear-project-path',()=>{$('project-path').value='';$('clear-project-path').hidden=true;$('project-location-help').textContent='Con il solo nome, la suite crea una cartella nella propria area progetti.';});
 $('project-form').onsubmit=event=>{
-  event.preventDefault();if(choosingProjectFolder)return;
+  event.preventDefault();if(choosingFolder)return;
   $('create-project').disabled=true;
   Promise.resolve().then(async()=>{
     const created=await api('projects',{name:$('project-name').value.trim(),path:$('project-path').value});

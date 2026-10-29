@@ -1,12 +1,16 @@
-# Pi Suite 0.6.5 — Windows
+# Pi Suite 0.6.6 — Windows
 
-Documentazione della distribuzione Windows 0.6.5, aggiornata il 27 ottobre 2026.
+Documentazione della distribuzione Windows 0.6.6, aggiornata il 28 ottobre 2026.
 
 Il punto di ingresso è la chat Pi: scrivi al modello orchestratore, che, quando è selezionato un modello Subagenti, affida sempre almeno un incarico a un figlio, controlla il risultato e risponde. Se è selezionato soltanto il modello Orchestratore, svolge direttamente il lavoro senza figli. Anche per una richiesta semplice basta un solo figlio. Ogni subagente riceve un INCARICO.md preciso. La suite integra Pi 1.0.0, pi-subagents 0.79.0, skill e grafo Graphify locale persistente.
 
 ## Benchmark e confronti
 
 Apri Nuova prova e scegli il caso: puoi scaricare subito il file per la chat, senza salvare né compilare altri campi. Descrivi liberamente A e B quando vuoi, salva una bozza o la prova e carica i risultati nelle due schede. Non serve un registro di architetture. Puoi aggiungere metriche esportate dall’harness. Il runner opzionale Inspect AI valuta inizialmente i casi di calcolo ed estrazione JSON; schede e confronti mantengono tutte le 16 dimensioni e la provenienza dei dati. [Guida benchmark](GUIDA-BENCHMARK.md).
+
+Il report JSON è obbligatorio per ogni caso e per A e B: include `answer`, `notes`, `outcome` e `dimensions` con token, durata e costo espliciti. Entrambi i caricamenti e il server rifiutano report incompleti o sole risposte testuali. `answer` conserva il formato del compito; le metriche osservate richiedono unità, metodo, evidenza e copertura. I contatori mancanti restano dichiarati non disponibili con un motivo e quelli del solo orchestratore non diventano un totale con i subagenti. [Resoconto dell’intervento](RESOCONTO-METRICHE-PROVE.md).
+
+Il modello testato restituisce risposta e sole metriche operative osservabili; i controlli deterministici spettano al laboratorio. Per completare le altre dimensioni apri **Completa con valutazione LLM**: premi **Esporta prova per valutatore esterno**, estrai la cartella ZIP con test, risposta e istruzioni del formato JSON e passa i tre file a un altro modello e carica il suo JSON nella stessa prova. La CTA resta disabilitata finché le risorse richieste non sono disponibili, mostrando il motivo. L’integrazione conserva risposta e misure precedenti e registra i nuovi valori come **Giudizio LLM esterno**. [Procedura completa](GUIDA-BENCHMARK.md#valutazione-separata-con-un-altro-llm).
 
 ## Modelli locali e BYOK
 
@@ -28,9 +32,11 @@ La sincronizzazione conserva originali, localizzatori e indici persistenti. Orch
 
 La delega delle letture usa `evidenceScope`: obiettivo documentale, domande, fonti e snapshot iniziali, limiti e consegna. Il figlio sceglie autonomamente full/section/passage e la paginazione; il resoconto `report_evidence_reading` e la copertura registrata tornano al genitore e sono consultabili nelle attività.
 
-## Fonti SharePoint, Azure e dossier AS-IS
+## Fonti OneDrive, SharePoint, Azure e dossier AS-IS
 
-In **Il tuo workspace → Grafi di conoscenza** puoi collegare cartelle SharePoint sincronizzate o Microsoft Graph e repository Azure locali o remoti. La stessa modale gestisce generazione dei grafi documentali, ricerca, indici e grafo del codice. **Crea / aggiorna grafo documentale del progetto** acquisisce i documenti, estrae i riferimenti espliciti e usa il modello Orchestratore per salvare il grafo semantico finale, anche senza collegamenti espliciti fra i file. Può avere costi API e non crea un AS-IS. La cache riusa le analisi valide dei documenti invariati. Poi apri **As-is**, scegli i grafi di riferimento e premi **Aggiorna fonti e crea AS-IS**. Puoi usare anche soltanto la cartella del progetto: crea prima il suo grafo da **Grafi di conoscenza**. Senza un grafo disponibile e selezionato i pulsanti di creazione restano disabilitati. Il genitore e i figli leggono gli snapshot con citazioni e possono interrogare il grafo AST del codice acquisito. Il dossier fissa le versioni e prepara un incarico: la documentazione viene poi scritta dai modelli configurati. [Guida fonti e AS-IS](GUIDA-FONTI-AS-IS.md).
+La documentazione tecnica in cartelle OneDrive si collega con i nuovi tipi **OneDrive · cartella sincronizzata sul PC** e **OneDrive · Microsoft Graph**. TXT, Markdown e gli altri formati supportati vengono acquisiti anche nelle sottocartelle e usati per ricerca, grafi documentali e AS-IS. Il tipo Graph richiede un access token; Drive ID vuoto usa il drive personale dell’utente autenticato.
+
+In **Il tuo workspace → Grafi di conoscenza** puoi collegare cartelle OneDrive e SharePoint sincronizzate o tramite Microsoft Graph e repository Azure locali o remoti. La stessa modale gestisce generazione dei grafi documentali, ricerca, indici e grafo del codice. **Crea / aggiorna grafo documentale del progetto** acquisisce i documenti, estrae i riferimenti espliciti e usa il modello Orchestratore per salvare il grafo semantico finale, anche senza collegamenti espliciti fra i file. Può avere costi API e non crea un AS-IS. La cache riusa le analisi valide dei documenti invariati. Poi apri **As-is**, scegli i grafi di riferimento e premi **Aggiorna fonti e crea AS-IS**. Puoi usare anche soltanto la cartella del progetto: crea prima il suo grafo da **Grafi di conoscenza**. Senza un grafo disponibile e selezionato i pulsanti di creazione restano disabilitati. Il genitore e i figli leggono gli snapshot con citazioni e possono interrogare il grafo AST del codice acquisito. Il dossier fissa le versioni e prepara un incarico: la documentazione viene poi scritta dai modelli configurati. [Guida fonti e AS-IS](GUIDA-FONTI-AS-IS.md).
 
 ## Comando AS-IS
 
@@ -105,22 +111,6 @@ Il server ascolta su 127.0.0.1 con token, verifica Host e Origin e non usa CDN. 
 Non sono inclusi un installer firmato, aggiornamenti automatici o inferenza offline pronta. Alcuni provider richiedono OAuth o configurazioni ulteriori oltre alla chiave. L’installer scarica dipendenze, con versioni npm fissate nel lockfile.
 
 ## Aggiornare o disinstallare
-
-### Reinstallare dai sorgenti modificati
-
-Per applicare le modifiche locali a un'installazione esistente, chiudi le chat e termina i lavori in corso, poi avvia `Reinstalla-PiSuite.cmd` dalla cartella dei sorgenti aggiornati. Non occorrono privilegi amministrativi. Il launcher usa `ExecutionPolicy Bypass` solo per quel processo, senza cambiare la policy del sistema.
-
-Lo script arresta i processi identificati come appartenenti all'applicazione, sostituisce i file installati, conserva un backup `app-precedente-*` e riavvia il pannello. La cartella `data`, inclusi progetti, configurazioni e chiavi cifrate, resta invariata. Le dipendenze gia installate vengono riutilizzate; se i relativi manifest sono cambiati, lo script si ferma prima di modificare l'applicazione e richiede `Install.cmd`. In caso di errore durante la sostituzione o le verifiche, ripristina i precedenti file applicativi.
-
-Per una verifica senza modifiche:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Reinstalla-PiSuite.ps1 -ValidateOnly
-```
-
-La destinazione predefinita e `%LOCALAPPDATA%\PiSuite`; `-Destination` consente di specificarne un'altra. `-NoLaunch` evita il riavvio del pannello. Non eliminare la cartella `data` per aggiornare l'applicazione.
-
-### Pacchetto Di Distribuzione
 
 Nella cartella di consegna `pi-suite`, accanto allo ZIP, trovi `Gestisci-PiSuite.ps1`. Per aggiornare esegui:
 

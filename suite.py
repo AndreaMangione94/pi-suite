@@ -27,6 +27,8 @@ import suite_workspace as workspace
 import suite_document_graph as document_graph
 from suite_evidence import ensure_index, local_path
 
+from suite_folder_picker import choose_folder
+
 ROOT = Path(__file__).resolve().parent
 APIS = ('openai-completions','openai-responses','anthropic-messages','google-generative-ai')
 OPERATIONS = ('graph','probe','sync-source','document-graphs','prepare-asis','auto-asis','index-sources','register-asis')
@@ -91,31 +93,6 @@ def project_name(value):
     if re.fullmatch(r'(CON|PRN|AUX|NUL|COM[1-9¹²³]|LPT[1-9¹²³])(?:\..*)?',name,re.I):
         raise ValueError('Questo nome è riservato da Windows.')
     return name
-
-def choose_project_folder():
-    if os.name!='nt': raise ValueError('La selezione della cartella richiede Windows.')
-    # Fixed script: no user-provided values are evaluated as PowerShell.
-    script=r'''$ErrorActionPreference='Stop'
-Add-Type -AssemblyName System.Windows.Forms
-[System.Windows.Forms.Application]::EnableVisualStyles()
-$owner=New-Object System.Windows.Forms.Form
-$owner.TopMost=$true; $owner.ShowInTaskbar=$false; $owner.Opacity=0
-$picker=New-Object System.Windows.Forms.FolderBrowserDialog
-$picker.Description='Scegli la cartella del progetto'
-$picker.ShowNewFolderButton=$true
-if ($picker.PSObject.Properties['UseDescriptionForTitle']) {$picker.UseDescriptionForTitle=$true}
-try {
-    $owner.Show(); $owner.Activate()
-    if ($picker.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) {
-        [Console]::OutputEncoding=New-Object System.Text.UTF8Encoding($false)
-        [Console]::Write($picker.SelectedPath)
-    }
-} finally {$picker.Dispose(); $owner.Dispose()}
-'''
-    result=subprocess.run(['powershell.exe','-NoProfile','-STA','-WindowStyle','Hidden','-Command',script],
-                          capture_output=True,timeout=300,creationflags=subprocess.CREATE_NO_WINDOW)
-    if result.returncode: raise ValueError('Impossibile aprire il selettore cartelle di Windows.')
-    return result.stdout.decode('utf-8-sig').strip()
 
 def skills(extra=None):
     result=[]
@@ -436,10 +413,23 @@ class Suite:
             except (OSError,ValueError,KeyError): continue
         return batches
 
-    def pick_project_folder(self):
+    def pick_folder(self, data=None):
+        data=data or {}
+        titles={'project':'Scegli la cartella del progetto',
+                'source':'Scegli la cartella della fonte locale',
+                'dossier':'Scegli la cartella del dossier AS-IS'}
+        context=data.get('context','project')
+        initial=data.get('initialPath','')
+        if not isinstance(context,str) or context not in titles:
+            raise ValueError('Tipo di selezione cartella non valido.')
+        if not isinstance(initial,str) or len(initial)>32767 or '\0' in initial:
+            raise ValueError('Percorso iniziale non valido.')
         if not self.picker_guard.acquire(blocking=False): raise ValueError('Il selettore cartelle è già aperto.')
-        try: return {'path':choose_project_folder()}
+        try: return {'path':choose_folder(initial,titles[context])}
         finally: self.picker_guard.release()
+
+    def pick_project_folder(self):
+        return self.pick_folder()
 
     def add_project(self,path='',name=''):
         with self.guard:
@@ -728,7 +718,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             elif route=='/api/skills' and post: result=app.import_skill(data['content'])
             elif route=='/api/models' and not post: result=app.models()
             elif route=='/api/projects' and post: result=app.add_project(data.get('path',''),data.get('name',''))
-            elif route=='/api/project-folder' and post: result=app.pick_project_folder()
+            elif route in ('/api/folder','/api/project-folder') and post: result=app.pick_folder(data)
             elif route=='/api/project-references' and post:
                 result=app.save_project_references(data['project'],data['section'],data['references'])
             elif route=='/api/chat' and post: result=app.open_chat(data.get('path',''),project_id=data.get('project'))

@@ -1,18 +1,18 @@
-# Pi Suite 0.6.5 — Distribuzione, verifiche e limiti
+# Pi Suite 0.6.6 — Distribuzione, verifiche e limiti
 
-Riferimento: pacchetto Windows corrente, documentazione aggiornata il 27 ottobre 2026.
+Riferimento: pacchetto Windows corrente, documentazione aggiornata il 28 ottobre 2026.
 
 ## Contenuto consegnato
 
 | Elemento nella cartella di consegna `pi-suite` | Contenuto e uso |
 | --- | --- |
-| `Pi-Suite-0.6.5-Windows.zip` | Applicazione installabile; contiene una cartella `pi-suite` con installer, sorgenti, guide, skill, esempi, licenze, test del workspace e manifest. |
-| `Pi-Suite-0.6.5-Windows.zip.sha256` | SHA-256 dello ZIP corrente. |
+| `Pi-Suite-0.6.6-Windows.zip` | Applicazione installabile; contiene una cartella `pi-suite` con installer, sorgenti, guide, skill, esempi, licenze, test del workspace e manifest. |
+| `Pi-Suite-0.6.6-Windows.zip.sha256` | SHA-256 dello ZIP corrente. |
 | `LEGGIMI.md` | Installazione, gestione della copia installata e collegamenti alle guide. |
-| `Documentazione/` | Copie delle otto guide operative incluse nello ZIP. |
+| `Documentazione/` | Copie delle guide operative e dei resoconti inclusi nello ZIP. |
 | `Sorgenti/` | Copia modificabile dei file del pacchetto corrente. |
 | `Gestisci-PiSuite.ps1` | Aggiornamento o disinstallazione della copia installata, con conservazione dei dati. È esterno allo ZIP applicativo. |
-| `Archivio/` | Pacchetto precedente 0.6.4 e relativo checksum. |
+| `Archivio/` | Pacchetti precedenti 0.6.4 e 0.6.5 con i relativi checksum. |
 
 Non sono inclusi `node_modules`, ambienti Python, dati personali, credenziali o pesi dei modelli. Le dipendenze si scaricano durante l’installazione. Gli esempi usano ID e URL dimostrativi da sostituire.
 
@@ -41,12 +41,12 @@ Per i passaggi operativi vedi [Primo avvio](RESOCONTO-E-PRIMO-AVVIO.md), [Fonti 
 
 ## Integrità e controllo documentale
 
-Il controllo documentale confronta le guide con i sorgenti, l’interfaccia e gli script contenuti nello ZIP 0.6.5. Verifica la corrispondenza delle copie in `Documentazione` e `Sorgenti`, i collegamenti locali, le versioni dichiarate, gli hash del manifest e il checksum dello ZIP. Non equivale a un collaudo funzionale con provider o tenant reali.
+Il controllo documentale confronta le guide con i sorgenti, l’interfaccia e gli script contenuti nello ZIP 0.6.6. Verifica la corrispondenza delle copie in `Documentazione` e `Sorgenti`, i collegamenti locali, le versioni dichiarate, gli hash del manifest e il checksum dello ZIP. Non equivale a un collaudo funzionale con provider o tenant reali.
 
 Per controllare lo ZIP dalla cartella di consegna:
 
 ```powershell
-Get-FileHash .\Pi-Suite-0.6.5-Windows.zip -Algorithm SHA256
+Get-FileHash .\Pi-Suite-0.6.6-Windows.zip -Algorithm SHA256
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Gestisci-PiSuite.ps1 -Azione Aggiorna -VerificaSoltanto
 ```
 
@@ -67,3 +67,69 @@ I test locali coprono DOCX/PDF, cartelle locali e acquisizione SharePoint simula
 ## Verifiche della lettura delegata
 
 Il controllo locale `test_evidence_reading.cjs` verifica il perimetro fissato nel contratto, le scelte full/section/passage, la paginazione Unicode, la copertura senza doppio conteggio, le citazioni rispetto alle righe lette, i documenti iniziali non letti, l’integrità e la compatibilità degli incarichi precedenti. Con `EVIDENCE_RUNTIME_APP` usa il vero caricatore delle estensioni Pi e simula gli eventi della delega per verificare richiamo limitato e restituzione della copertura al genitore; non chiama modelli esterni.
+
+## Verifiche OneDrive della versione 0.6.6
+
+Il 28 ottobre 2026 sono passati i 20 test Python di `test_onedrive`, `test_document_graph` e `test_workspace`, il controllo sintattico JavaScript e il test Chromium `test_workspace_ui.cjs` su desktop e mobile. Le verifiche coprono cartelle OneDrive con TXT e Markdown, sottocartelle, drive personale e drive esplicito, radice, paginazione, metadati, separazione dei token dai download, esclusioni, snapshot precedenti dopo un errore e uso delle evidenze nel grafo semantico e nel dossier AS-IS. Le chiamate Microsoft Graph e il modello sono simulati: nessun account OneDrive reale è stato collegato nel collaudo. Il login Microsoft interattivo, il rinnovo automatico dei token e la sincronizzazione continua non sono inclusi.
+
+## Correzione della selezione cartelle
+
+I campi Cartella progetto, Cartella locale delle fonti e Cartella del dossier
+AS-IS aprono il selettore nativo di Esplora file tramite il campo o **Sfoglia…**.
+Il selettore usa direttamente Windows IFileDialog, senza processi PowerShell;
+consente di esplorare cartelle del PC, unità e percorsi di rete disponibili.
+Annulla conserva il percorso precedente. Una sola finestra può essere aperta
+alla volta; un risultato arrivato dopo la chiusura della modale viene ignorato.
+La Cartella di riferimento del grafo mostra il progetto attivo e resta informativa.
+
+Sono passati i quattro test di `test_folder_picker.py`, i test Chromium di
+`test_folder_picker_ui.cjs` e la regressione `test_workspace_ui.cjs` su desktop e
+mobile. I test UI simulano la risposta del selettore e coprono tutti i contesti,
+percorsi Unicode, annullamento, errore e nuovo tentativo, richieste duplicate,
+chiusura della modale e autenticazione. L'interazione visiva con la finestra
+Windows richiede ancora verifica manuale sul PC di destinazione.
+
+## Metriche osservabili nelle prove
+
+Il file per la chat richiede token, durata e costo in `dimensions`, solo con dati
+osservabili, unità, metodo, evidenza e copertura dichiarata. `answer` mantiene il
+formato richiesto dal compito. Le metriche invisibili restano non disponibili;
+i token del solo orchestratore non possono essere presentati come totale con
+i subagenti. Entrambi i caricamenti della risposta estraggono il report JSON e
+mostrano le dimensioni nell’anteprima e nella scheda, insieme ai dati valutati.
+
+Il 28 ottobre 2026 sono passati i cinque test di `test_benchmark_metrics.py`,
+il controllo sintattico JavaScript e il test Chromium
+`test_benchmark_metrics_ui.cjs` su desktop e mobile. Coprono contratto, report
+JSON/Markdown con BOM, risposta invariata, misure parziali e mancanti,
+validazione prima dell’importazione, persistenza e integrazione dei punteggi
+nelle revisioni. Il collaudo usa contatori fittizi e controlli deterministici:
+non misura modelli reali e non riesegue il motore Inspect opzionale.
+
+Vedi [Resoconto metriche delle prove](RESOCONTO-METRICHE-PROVE.md) per modifiche,
+verifiche e limiti dell’osservabilità.
+
+## Report obbligatorio delle prove · 29 ottobre 2026
+
+Il report richiede `answer`, `notes`, `outcome` e le metriche esplicite token,
+durata e costo, anche quando non disponibili con motivo. Entrambi i caricamenti
+e il server rifiutano report incompleti e sole risposte testuali. Il contratto
+vale per tutti i 13 casi, per A e B e indipendentemente dal valutatore.
+
+Sono passati gli otto test Python delle metriche, il controllo sintattico
+JavaScript e il test Chromium desktop/mobile, inclusi rifiuto tramite API,
+importazioni invalide senza mutazioni del form, persistenza, revisione e
+conservazione dei punteggi. Il collaudo usa dati simulati e non riesegue il motore
+Inspect opzionale. EvalPlus non è integrato come runner.
+
+## Valutazione LLM separata · 29 ottobre 2026
+
+Il modello testato produce risposta e sole metriche operative osservabili. Il percorso **Completa con valutazione LLM** scarica test, risposta e istruzioni separate; importa poi il JSON del giudice con le sole dimensioni mancanti. L’associazione usa gli ID della scheda e l’hash della risposta. Anteprima e salvataggio impediscono sovrascritture di risposta, consumi e controlli esistenti; la scheda integrata conserva la sorgente e la provenienza `model_judge`.
+
+Sono passati i sette test Python del giudice, i test delle metriche e il collaudo Chromium desktop/mobile dei due percorsi. Sono verificati i tre download, il rifiuto di associazioni errate, la persistenza senza modificare l’originale, le evidenze del giudizio e l’invalidazione dopo una modifica della risposta. Il collaudo usa dati simulati, senza chiamare un modello giudice reale.
+
+## Esportazione della prova per il valutatore esterno · 29 ottobre 2026
+
+La CTA **Esporta prova per valutatore esterno** scarica un unico ZIP con una cartella contenente `01-prova.md`, `02-risposta.json` e `03-istruzioni-valutatore.md`. Le istruzioni includono il comando pronto da inviare al giudice, la rubrica e il modello JSON con gli identificativi e l’hash della risposta.
+
+La CTA è disabilitata finché test, risposta salvata e criteri del valutatore non sono completi e coerenti; il motivo è visibile. Il server applica lo stesso controllo al momento del download. I test verificano struttura e contenuti dello ZIP, assenza di modifiche al registro, stati disabilitati e rifiuto delle esportazioni incomplete. Sono passati i nove test Python del giudice, gli undici delle metriche e il collaudo Chromium desktop/mobile. Le prove usano dati simulati.
