@@ -1,12 +1,13 @@
 'use strict';
 // The ledger only calls /api/benchmarks. No harness settings, logs or provider calls.
 (() => {
-  let data, view = 'overview', selected = '', importedFiles = [];
+  let data, view = 'overview', selected = '', importedFiles = [], generatedCase = null;
   const root = $('benchmark-root');
   const statusLabels = {measured:'Misurata', not_applicable:'Non pertinente', unavailable:'Non disponibile'};
   const originLabels = {user_report:'Compilazione utente',chat_report:'Report della chat',harness_export:'Export dell’harness',runner:'Valutazione del runner',human_review:'Revisione umana',model_judge:'Giudizio LLM esterno'};
   const outcomeLabels = {passed:'Riuscito', failed:'Fallito', partial:'Parziale', not_evaluated:'Da valutare'};
-  const tabs = [['overview','Prove e confronti'],['cases','Casi di test'],['sources','Fonti']];
+  // Fonti is temporarily hidden from the navigation; its view remains available.
+  const tabs = [['overview','Configurazioni'],['cases','Prove']];
   const architectureFields=[['name','Etichetta libera',false],['model','Modello orchestratore',false],['workers','Modelli dei subagenti e relativi ruoli',true],['harness','Harness e versione',false],['hosting','Modalità di hosting',false],['tools','Strumenti e memoria',true],['parameters','Parametri rilevanti',true],['notes','Note libere',true]];
   const archName=a=>a.name||('Esecuzione '+(a.slot||''));
   const detailCount=a=>architectureFields.filter(([key])=>a[key]?.trim()).length;
@@ -19,7 +20,7 @@
   const info = text => el('p',text,'bench-info');
   function inspectHelp(id) {
     const box=el('span',undefined,'bench-inspect-help'),button=el('button','i','bench-info-button');
-    const tooltip=el('span','L’integrazione Inspect valuta automaticamente solo due dei 13 casi: Calcolo ed Estrazione JSON, nelle versioni originali. Controlla successo, correttezza e formato al caricamento del report, se il runner è installato. Gli altri undici casi richiedono controlli dedicati o valutazione esterna. Il limite riguarda l’adattatore attuale di Pi Suite.','bench-info-tooltip');
+    const tooltip=el('span','I controlli deterministici dell’adattatore sono disponibili per Calcolo ed Estrazione JSON nelle versioni originali. Al caricamento del file vengono verificati successo, correttezza e formato, senza chiamate a modelli. Gli altri casi e le dimensioni non misurabili deterministicamente passano al valutatore LLM esterno.','bench-info-tooltip');
     button.type='button';button.setAttribute('aria-label','Informazioni sulla copertura di Inspect');button.setAttribute('aria-describedby',id);button.setAttribute('aria-controls',id);button.setAttribute('aria-expanded','false');
     tooltip.id=id;tooltip.setAttribute('role','tooltip');tooltip.hidden=true;
     let pinned=false;
@@ -36,17 +37,15 @@
     const blob=content instanceof Blob?content:new Blob([typeof content==='string'?content:JSON.stringify(content,null,2)],{type});
     const url=URL.createObjectURL(blob),a=el('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1500);
   };
-  async function downloadCase(caseId){const packet=await req('/case-packet?case='+encodeURIComponent(caseId));download(packet.filename,packet.content,'text/markdown');notice('Allega il file a una nuova chat e invia: Esegui la prova allegata. Lo stesso file si usa per A e B.');}
+  async function downloadCase(caseId,snapshot=null){const packet=await (snapshot?req('/case-packet',{case:snapshot}):req('/case-packet?case='+encodeURIComponent(caseId)));download(packet.filename,packet.content,'text/markdown');notice('Allega il file alla chat della configurazione da testare e invia: Esegui la prova allegata.');}
   async function exportJudge(runId){
-    const archive=await req('/judge-archive?run='+encodeURIComponent(runId));
-    const bytes=Uint8Array.from(atob(archive.base64),c=>c.charCodeAt(0));
-    download(archive.filename,new Blob([bytes],{type:archive.mimeType}));
-    notice('ZIP esportato. Estrai la cartella e allega i tre file al valutatore; il comando da inviare è nelle istruzioni.');
+    const packet=await req('/evaluation-request?run='+encodeURIComponent(runId));download(packet.filename,packet.content,'text/markdown');
+    notice('Allega questo unico file al valutatore. Carica il suo JSON con Carica valutazione esterna.');
   }
   function judgeExportControl(run=null){
     const box=el('div'),status=run?.judgeExport;
-    const button=action('Esporta prova per valutatore esterno',()=>exportJudge(run.id),true);
-    button.disabled=!status?.available;
+    const button=action('Scarica richiesta valutazione',()=>exportJudge(run.id),true);
+    button.disabled=!status?.available||!run?.hasSourceFile;
     if(button.disabled){const reason=status?.reasons?.join(' ')||'Carica e salva la risposta dell’esecuzione per preparare la cartella.';button.title=reason;box.append(button,el('p',reason,'muted'));}
     else box.append(button);
     return box;
@@ -71,56 +70,117 @@
   function heading(title,description) {
     root.append(el('div','LABORATORIO MANUALE','eyebrow'),el('h1',title),el('p',description,'lead'));
   }
-  function back(label='Torna alle prove',target='overview',id='') {root.append(btn('← '+label,()=>go(target,id),'text-button bench-back'));}
+  function back(label='Alle configurazioni',target='overview',id='') {root.append(btn('← '+label,()=>go(target,id),'text-button bench-back'));}
+  const currentURL=()=>location.pathname+location.search;
+  function detailURL(target,id,returnTo=currentURL()){
+    const url=new URL(location.href);url.search='';url.hash=token;url.searchParams.set('page','benchmarks');url.searchParams.set('view',target);url.searchParams.set('id',id);url.searchParams.set('returnTo',returnTo);return url;
+  }
+  function detailBack(fallback){
+    root.append(btn('← Indietro',()=>{
+      const candidate=new URLSearchParams(location.search).get('returnTo')||history.state?.previousURL;
+      if(candidate){try{const destination=new URL(candidate,location.href);if(destination.origin===location.origin&&destination.pathname===location.pathname){
+        if(history.state?.previousURL===destination.pathname+destination.search&&history.length>1)history.back();else location.assign(destination.href);return;
+      }}catch{}}
+      return go(fallback);
+    },'text-button bench-back'));
+  }
+  function selectionToolbar(box,selection,readTest,readConfiguration,target){
+    const configurationPage=target==='case',toolbar=el('div',undefined,'bench-selection-row'+(configurationPage?' bench-selection-configuration':' bench-selection-single'));
+    let selectedRun=null,uploadTarget=null,busy=false;
+    const picker=input('','file');picker.accept='.json,application/json';picker.id='bench-result-file';picker.hidden=true;
+    const evaluationPicker=input('','file');evaluationPicker.accept='.json,application/json';evaluationPicker.id='bench-evaluation-file';evaluationPicker.hidden=true;
+    const uploadButton=action('Carica risultati',()=>{uploadTarget={test:readTest(),configurationId:readConfiguration()};picker.click();},true);
+    const evaluationButton=action('Carica valutazione esterna',()=>{uploadTarget={test:readTest(),configurationId:readConfiguration()};evaluationPicker.click();});
+    const downloadButton=action(configurationPage?'Scarica richiesta valutazione':'Scarica prova',()=>configurationPage?exportJudge(selectedRun.id):downloadCase(readTest().id,readTest()));
+    toolbar.append(selection.parentElement,...(configurationPage?[uploadButton,downloadButton,evaluationButton]:[downloadButton]));
+    const link=el('a',target==='case'?'Vai al dettaglio della prova':'Vai al dettaglio della configurazione','bench-detail-link');
+    link.onclick=event=>{if(event.button!==0||event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;event.preventDefault();const url=new URL(link.href);go(target,url.searchParams.get('id'),true,currentURL()).catch(e=>notice(e.message,true));};
+    box.append(toolbar,link);if(configurationPage)box.append(picker,evaluationPicker);
+    const update=(run=null)=>{selectedRun=run;const c=readTest(),configurationId=readConfiguration();uploadButton.disabled=busy||!c||!configurationId;
+      downloadButton.disabled=configurationPage?busy||!run?.judgeExport?.available||!run?.hasSourceFile:!c;
+      evaluationButton.disabled=busy||!run||!c||!configurationId;
+      downloadButton.title=configurationPage&&downloadButton.disabled?(run?.judgeExport?.reasons?.join(' ')||'Carica prima il file JSON completo prodotto dalla chat.') : '';
+      link.hidden=!c||!configurationId;if(c&&configurationId)link.href=detailURL(target,target==='case'?c.id+'~'+configurationId:configurationId+'~'+c.id).href;};
+    const upload=async(inputFile,route)=>{const file=inputFile.files[0],destination=uploadTarget;if(!file||!destination?.test)return;busy=true;update(selectedRun);
+      try{if(!file.name.toLowerCase().endsWith('.json')||file.size>1500000)throw Error('Carica un unico file JSON prodotto dalla chat.');
+        const bytes=new Uint8Array(await file.arrayBuffer());let raw='';for(let i=0;i<bytes.length;i+=8192)raw+=String.fromCharCode(...bytes.subarray(i,i+8192));
+        await req(route,{caseId:destination.test.id,caseSnapshot:destination.test,architectureId:destination.configurationId,filename:file.name,base64:btoa(raw)});
+        await go('architecture',destination.configurationId+'~'+destination.test.id,false);notice('File caricato. Risposta, controlli e valutazioni disponibili sono stati aggiornati automaticamente.');
+      }catch(e){notice(e.message,true);}finally{busy=false;inputFile.value='';if(box.isConnected)update(selectedRun);}
+    };
+    picker.onchange=()=>upload(picker,'/import-result-file');evaluationPicker.onchange=()=>upload(evaluationPicker,'/import-evaluation-file');
+    return update;
+  }
   function empty(title,description,label,fn) {
     const box=el('div',undefined,'bench-empty');box.append(el('h2',title),el('p',description));if(label)box.append(action(label,fn,true));root.append(box);
   }
-  async function go(next='overview',id='',push=true) {
-    data=await req();view=next;selected=id;page('benchmarks');$('breadcrumb').textContent='Workspace / Benchmark e confronti';
-    if(push){const url=new URL(location.href);url.search='';url.searchParams.set('page','benchmarks');url.searchParams.set('view',next);if(id)url.searchParams.set('id',id);history.pushState(null,'',url);}
+  async function go(next='overview',id='',push=true,returnTo=null) {
+    const previousURL=currentURL();
+    data=await req();if(generatedCase&&!data.tests.some(c=>c.id===generatedCase.id))data.tests.push({...generatedCase,inspectSupported:false});view=next;selected=id;page('benchmarks');$('breadcrumb').textContent='Workspace / Benchmark e confronti';
+    if(push){const url=new URL(location.href);url.search='';url.searchParams.set('page','benchmarks');url.searchParams.set('view',next);if(id)url.searchParams.set('id',id);if(returnTo)url.searchParams.set('returnTo',returnTo);history.pushState({previousURL},'',url);}
     root.replaceChildren();
     const nav=el('div',undefined,'bench-tabs');
     for(const [key,label] of tabs){const b=action(label,()=>go(key));if(key===view)b.classList.add('active');nav.append(b);}root.append(nav);
-    const renderers={overview,architectures,architecture:architectureDetail,architectureForm,cases,case:caseDetail,caseForm,sources,trialForm,editTrial:async()=>trialForm(await record('trial',selected)),trial:trialDetail,runForm,revise:async()=>runForm(await record('run',selected)),run:runDetail,judge:judgeForm,compare,savedCompare:async()=>compare(await record('comparison',selected))};
+    const resultConfiguration=async()=>{const r=await record('run',selected),t=await record('trial',r.trialId);await go('architecture',r.architectureId+'~'+t.case.id);};
+    const renderers={overview,architectures,architecture:architectureDetail,architectureForm,cases,case:caseDetail,caseForm,sources,trialForm,editTrial:async()=>trialForm(await record('trial',selected)),trial:trialDetail,runForm:async()=>{const t=await record('trial',selected.split('~')[0]);await go('architecture',t.architectures[0].id+'~'+t.case.id);},revise:resultConfiguration,run:runDetail,judge:resultConfiguration,compare,compareTest:compareTest,savedCompareMany:async()=>compareTest(await req('/comparison?id='+encodeURIComponent(selected))),savedCompare:async()=>compare(await record('comparison',selected)),assign:assignTest};
     try{await (renderers[view]||overview)();}catch(e){root.append(info(e.message));}
   }
   function overview() {
-    heading('Stessa prova. Due prospettive.','Scegli un caso e scarica subito il file per la chat. Descrivi liberamente le esecuzioni A e B e carica i risultati quando sono disponibili.');
-    root.append(info('Compilazione e caricamento manuali. Nessun dato viene acquisito dall’harness e nessuna configurazione operativa viene modificata.'));
+    heading('Configurazioni da testare.','Crea una configurazione, seleziona una prova e carica i risultati. Ogni prova può essere eseguita su più configurazioni.');
     const stats=el('div',undefined,'bench-stats');
-    for(const [number,label] of [[data.cases.length,'casi disponibili'],[data.trials.length,'prove e bozze'],[data.runs.length,'schede caricate']]){const n=el('div',undefined,'bench-stat');n.append(el('strong',String(number)),el('span',label));stats.append(n);}root.append(stats);
-    const steps=el('div',undefined,'bench-steps');for(const [i,t] of ['Scegli il caso','Scarica ed esegui','Descrivi A e B e carica','Confronta le schede'].entries()){const n=el('span');n.append(el('b',String(i+1)+'. '),document.createTextNode(t));steps.append(n);}root.append(steps);
-    root.append(action('Nuova prova',()=>go('trialForm'),true));
-    if(!data.trials.length)return empty('Il primo confronto parte dal caso.','Scarica il file anche con tutti i dettagli dell’esecuzione vuoti. Puoi compilare le descrizioni e salvare una bozza in seguito.');
-    const search=input();search.placeholder='Cerca una prova…';search.setAttribute('aria-label','Cerca una prova');search.className='bench-filter';root.append(search);
+    for(const [number,label] of [[data.configurations.length,'configurazioni'],[data.tests.length,'prove disponibili'],[data.runs.length,'risultati caricati']]){const n=el('div',undefined,'bench-stat');n.append(el('strong',String(number)),el('span',label));stats.append(n);}root.append(stats);
+    root.append(row(action('Crea configurazione',()=>go('architectureForm'),true),action('Crea prova',()=>go('caseForm'))));
+    if(!data.configurations.length)return empty('Crea la prima configurazione.','Descrivi il modello e gli strumenti che vuoi testare. Potrai applicare più prove alla stessa configurazione.');
+    const search=input();search.placeholder='Cerca una configurazione…';search.setAttribute('aria-label','Cerca una configurazione');search.className='bench-filter';root.append(search);
     const list=el('div');root.append(list);
-    function render(){list.replaceChildren();for(const t of data.trials.filter(t=>(t.name+' '+t.case.title).toLowerCase().includes(search.value.toLowerCase()))){
-      const card=section();const runs=data.runs.filter(r=>r.trialId===t.id);const arches=new Set(runs.map(r=>r.architectureId));
-      card.append(pill(t.status==='draft'?'Bozza':arches.size===2?'Confronto disponibile':runs.length?'Risultati parziali':'In attesa dei risultati'),el('h2',t.name),el('p',t.case.title),el('p',t.architectures.map(archName).join('  /  ')+' · '+runs.length+' schede','muted'),action('Apri prova',()=>go('trial',t.id)));list.append(card);
+    function render(){list.replaceChildren();for(const a of data.configurations.filter(a=>(archName(a)+' '+a.model+' '+a.harness).toLowerCase().includes(search.value.toLowerCase()))){
+      const card=section(archName(a)),runs=data.runs.filter(r=>r.architectureId===a.id);
+      card.append(el('p',[a.model,a.harness].filter(Boolean).join(' · ')||'Dettagli da completare'),el('p',new Set(runs.map(r=>r.caseId)).size+' prove eseguite · '+runs.length+' risultati','muted'),action('Apri configurazione',()=>go('architecture',a.id)));list.append(card);
     }}search.oninput=render;render();
   }
   function architectures() {
-    heading('Architetture da confrontare.','Un registro descrittivo compilato da te. Modelli, harness e parametri servono a documentare la prova.');
-    root.append(action('Registra architettura',()=>go('architectureForm'),true));
-    if(!data.architectures.length)return empty('Nessuna architettura registrata.','Inserisci nome, harness, modello e condizioni di utilizzo.');
-    const grid=el('div',undefined,'bench-grid');root.append(grid);
-    for(const a of data.architectures){const card=section(a.name);card.append(pill(a.harness),el('p',a.model),el('p',a.workers||'Subagenti non dichiarati','muted'),action('Dettaglio architettura',()=>go('architecture',a.id)));grid.append(card);}
+    overview();
   }
   function architectureForm() {
-    back('Alle architetture','architectures');const old=data.architectures.find(a=>a.id===selected)||{};
-    heading(old.id?'Modifica il record.':'Descrivi l’architettura.','Inserisci soltanto dati descrittivi. Non inserire chiavi API o credenziali.');
+    back();const old=data.architectures.find(a=>a.id===selected)||{};
+    heading(old.id?'Modifica configurazione.':'Crea una configurazione.','Descrivi ciò che userai nelle chat. Questi dati documentano le esecuzioni e non modificano l’harness.');
     const form=el('form',undefined,'card bench-form');root.append(form);
-    for(const [key,label,multi,required] of [['name','Nome architettura',false,true],['harness','Harness e versione',false,true],['model','Modello orchestratore · revisione / checkpoint',false,true],['hosting','Hosting · locale, privato o API',false,false],['workers','Subagenti · modelli, revisioni e ruoli',true,false],['parameters','Parametri · temperatura, seed, ragionamento, quantizzazione',true,false],['tools','Strumenti, memoria, contesto e fonti disponibili',true,false],['notes','Note e informazioni non verificabili',true,false]])control(form,key,label,old[key]||'',multi,required);
+    for(const [key,label,multi,required] of [['name','Nome configurazione',false,true],['harness','Harness e versione',false,false],['model','Modello orchestratore · revisione / checkpoint',false,false],['hosting','Hosting · locale, privato o API',false,false],['workers','Subagenti · modelli, revisioni e ruoli',true,false],['parameters','Parametri · temperatura, seed, ragionamento, quantizzazione',true,false],['tools','Strumenti, memoria, contesto e fonti disponibili',true,false],['notes','Note e informazioni non verificabili',true,false]])control(form,key,label,old[key]||'',multi,required);
     form.append(info('Le prove già create conservano la descrizione originale. Le modifiche valgono solo per le nuove prove.'));
-    submit(form,'Salva record',async values=>{const a=await req('/architecture',{...values,...(old.id?{id:old.id}:{})});await go('architecture',a.id);notice('Architettura registrata.');});
+    submit(form,'Salva configurazione',async values=>{const a=await req('/architecture',{...values,...(old.id?{id:old.id}:{})});await go('architecture',a.id);notice('Configurazione salvata.');});
   }
   function architectureSummary(a) {
     const box=section(archName(a));for(const [k,label] of [['harness','Harness'],['model','Modello'],['hosting','Hosting'],['workers','Subagenti'],['parameters','Parametri'],['tools','Strumenti e memoria'],['notes','Note']]){const p=el('p');p.append(el('b',label+': '),document.createTextNode(a[k]||'Non dichiarato'));box.append(p);}return box;
   }
   function architectureDetail() {
-    back('Alle architetture','architectures');const a=data.architectures.find(a=>a.id===selected);if(!a)throw Error('Architettura non trovata.');
-    heading(a.name,'Scheda descrittiva dell’architettura.');root.append(architectureSummary(a),action('Modifica record',()=>go('architectureForm',a.id)),el('h2','Esecuzioni registrate'));
-    runList(data.runs.filter(r=>r.architectureId===a.id));
+    const [id,testId]=selected.split('~'),a=data.configurations.find(a=>a.id===id);if(!a)throw Error('Configurazione non trovata.');
+    detailBack('overview');heading(archName(a),'Seleziona una prova per visualizzare le dimensioni misurate su questa configurazione.');
+    const details=el('details');details.append(el('summary','Dettagli della configurazione'),architectureSummary(a));root.append(details);
+    if(a.editable)root.append(action('Modifica configurazione',()=>go('architectureForm',a.id)));
+    const form=section(),defaultTest=testId||data.runs.find(r=>r.architectureId===id)?.caseId||data.tests[0]?.id;
+    const test=select(form,'selectedTest','Prova',data.tests.map(c=>[c.id,c.title+' · '+c.version.slice(0,8)]),defaultTest),updateToolbar=selectionToolbar(form,test,()=>data.tests.find(c=>c.id===test.value),()=>a.id,'case');root.append(form);
+    const host=el('div');root.append(host);
+    const render=()=>{const c=data.tests.find(c=>c.id===test.value);if(c){replaceSelection(a.id+'~'+c.id);updateToolbar();renderResultPanel(host,c,a.id,updateToolbar);}};
+    test.onchange=render;render();
+  }
+  function replaceSelection(id){const url=new URL(location.href);url.searchParams.set('id',id);history.replaceState(history.state,'',url);}
+  async function startRun(c,configurationId){const t=await req('/execution-context',{caseId:c.id,caseSnapshot:c,architectureId:configurationId});await go('runForm',t.id);}
+  function renderResultPanel(host,c,configurationId,onSelected=()=>{}){
+    host.replaceChildren();const token={};host._request=token;
+    onSelected(null);
+    const runs=data.runs.filter(r=>r.architectureId===configurationId&&r.caseId===c.id&&r.caseVersion===c.version),box=section('Risultati della prova');host.append(box);
+    if(!runs.length){box.append(info('Nessun risultato caricato per questa prova e configurazione.'),metricTable(data.dimensions.map(d=>({label:d.label,left:blankDimensions()[d.id]})),['Dimensione','Valore']));return;}
+    const selection=select(box,'resultRun','Esecuzione / revisione',runs.map(r=>[r.id,r.label+' · '+date(r.savedAt)]),runs[0].id),output=el('div');box.append(output);
+    let serial=0;
+    const render=async()=>{const current=++serial;onSelected(runs.find(r=>r.id===selection.value));output.replaceChildren(el('p','Caricamento risultati…','muted'));try{const r=await record('run',selection.value);if(host._request!==token||current!==serial||!host.isConnected)return;output.replaceChildren(pill(outcomeLabels[r.outcome]),el('p','Configurazione dichiarata nell’esecuzione: '+archName(r.architecture),'muted'),metricTable(data.dimensions.map(d=>({label:d.label,left:r.dimensions[d.id]})),['Dimensione','Valore e provenienza']),action('Apri risultato completo',()=>go('run',r.id)));}catch(e){if(host._request===token&&current===serial)output.replaceChildren(info(e.message));}};
+    selection.onchange=render;render();
+  }
+  function assignTest(){
+    const c=generatedCase?.id===selected?generatedCase:data.tests.find(c=>c.id===selected);if(!c)throw Error('Prova non trovata.');
+    back('Alle prove','cases');heading(c.title,'Scegli la configurazione su cui eseguire la prova.');
+    if(!data.configurations.length){root.append(info('Crea una configurazione, poi seleziona questa prova nel suo dettaglio.'),action('Crea configurazione',()=>go('architectureForm'),true));return;}
+    const form=el('form',undefined,'card bench-form');root.append(form);const config=select(form,'configuration','Configurazione',data.configurations.map(a=>[a.id,archName(a)]));
+    submit(form,'Apri configurazione',()=>go('architecture',config.value+'~'+c.id));
   }
   function sources() {
     heading('Fonti per progettare le prove.','Riferimenti primari verificati il 25 ottobre 2026. I casi locali sono originali; le fonti ne orientano il metodo.');
@@ -129,35 +189,63 @@
     for(const source of data.sources){const card=section(source.title),link=el('a','Apri fonte primaria ↗');link.href=source.url;link.target='_blank';link.rel='noopener noreferrer';card.append(el('p',source.use),el('p',source.limits,'muted'),link);grid.append(card);}
   }
   function cases() {
-    heading('Casi di test.','Prompt e contesto sono pronti da copiare. I criteri di valutazione restano separati e si consultano dopo l’esecuzione.');
-    root.append(action('Aggiungi caso personalizzato',()=>go('caseForm')));
+    heading('Prove.','Ogni prova è indipendente dalle configurazioni. Aprila per selezionare una configurazione, vedere i risultati o avviare un confronto.');
+    root.append(action('Crea prova',()=>go('caseForm'),true));
     const grid=el('div',undefined,'bench-grid');root.append(grid);
-    for(const c of data.cases){const card=section(c.title);card.append(pill(c.inspectSupported?'Scoring Inspect disponibile':c.family),el('p',c.key+' · versione '+c.version.slice(0,10),'bench-code'),el('p',c.setup.slice(0,160)+(c.setup.length>160?'…':''),'muted'),action('Apri caso',()=>go('case',c.id)));grid.append(card);}
+    for(const c of data.tests){const card=section(c.title);card.append(pill(c.inspectSupported?'Scoring Inspect disponibile':c.family),el('p',c.key+' · versione '+c.version.slice(0,10),'bench-code'),el('p',c.prompt.slice(0,160)+(c.prompt.length>160?'…':''),'muted'),action('Apri prova',()=>go('case',c.id)));grid.append(card);}
   }
   function chatPacket(c) {return c.prompt+(c.context?'\n\nCONTESTO E RISORSE\n'+c.context:'');}
   function caseContent(c) {
     const box=section('Materiale per la chat');box.append(el('pre',chatPacket(c),'bench-copy'));
     box.append(action('Copia solo prompt e contesto',async()=>{await navigator.clipboard.writeText(chatPacket(c));notice('Copiati prompt e contesto, senza criteri di valutazione.');}),action('Scarica prompt .txt',()=>download(c.key+'-prompt.txt',chatPacket(c),'text/plain')));root.append(box);
-    const setup=section('Preparazione manuale');setup.append(el('p',c.setup),el('p',c.sourceNotes,'muted'));root.append(setup);
-    const criteria=el('details',undefined,'bench-restricted');criteria.append(el('summary','Riservato al valutatore · mostra criteri e risposte attese'),el('p','Da consultare dopo la prova. Non consegnare questi criteri alla chat valutata.'),el('pre',c.criteria));root.append(criteria);
-    const sourceBox=section('Fonti metodologiche');for(const id of c.sourceIds){const source=data.sources.find(s=>s.id===id);if(source){const a=el('a',source.title);a.href=source.url;a.target='_blank';a.rel='noopener noreferrer';sourceBox.append(a,el('p',source.limits,'muted'));}}if(!c.sourceIds.length)sourceBox.append(el('p','Controllo originale Pi Suite: protocollo descritto nella proposta.'));root.append(sourceBox);
+    if(c.setup||c.sourceNotes){const setup=section('Preparazione manuale');if(c.setup)setup.append(el('p',c.setup));if(c.sourceNotes)setup.append(el('p',c.sourceNotes,'muted'));root.append(setup);}
+    if(c.criteria){const criteria=el('details',undefined,'bench-restricted');criteria.append(el('summary',c.inspectSupported?'Risposte attese · controllo Inspect':'Criteri del caso originale'),el('p','Conservati con il caso originale. Il valutatore LLM giudica compito e risposta senza questi criteri.'),el('pre',c.criteria));root.append(criteria);}
+    if(c.sourceIds.length){const sourceBox=section('Fonti metodologiche');for(const id of c.sourceIds){const source=data.sources.find(s=>s.id===id);if(source){const a=el('a',source.title);a.href=source.url;a.target='_blank';a.rel='noopener noreferrer';sourceBox.append(a,el('p',source.limits,'muted'));}}root.append(sourceBox);}
   }
   function caseDetail() {
-    back('Ai casi','cases');const c=data.cases.find(c=>c.id===selected);if(!c)throw Error('Caso non trovato.');
-    heading(c.title,c.key+' · versione '+c.version.slice(0,12));root.append(action('Scarica file per la chat',()=>downloadCase(c.id),true),action('Prepara prova con questo caso',()=>go('trialForm',c.id)));caseContent(c);
+    const [id,configurationId]=selected.split('~'),c=data.tests.find(c=>c.id===id);if(!c)throw Error('Prova non trovata.');
+    detailBack('cases');heading(c.title,'Seleziona una configurazione per vedere i risultati di questa prova.');
+    root.append(action('Confronta configurazioni',()=>go('compareTest',c.id)));
+    const completed=data.configurations.filter(a=>data.runs.some(r=>r.architectureId===a.id&&r.caseId===c.id&&r.caseVersion===c.version));
+    if(completed.length){const box=section(),defaultConfig=completed.some(a=>a.id===configurationId)?configurationId:completed[0].id;
+      const config=select(box,'selectedConfiguration','Configurazione',completed.map(a=>[a.id,archName(a)]),defaultConfig),updateToolbar=selectionToolbar(box,config,()=>c,()=>config.value,'architecture');root.append(box);const host=el('div');root.append(host);
+      const render=()=>{replaceSelection(c.id+'~'+config.value);updateToolbar();renderResultPanel(host,c,config.value);};config.onchange=render;render();
+    }else{const box=section(),config=select(box,'selectedConfiguration','Configurazione',[['','Nessuna configurazione con risultati per questa prova']]),updateToolbar=selectionToolbar(box,config,()=>c,()=>'', 'architecture');config.disabled=true;updateToolbar();root.append(box,info('Scarica la prova, eseguila in chat e carica il file di risposta nella pagina della configurazione.'));}
+    const saved=data.comparisons.filter(x=>x.caseId===c.id&&x.format==='multi-configuration-v1');if(saved.length){root.append(el('h2','Confronti salvati'));for(const comparison of saved)root.append(action(comparison.name,()=>go('savedCompareMany',comparison.id)));}
+    caseContent(c);
   }
   function caseForm() {
-    back('Ai casi','cases');heading('Un nuovo caso, criteri separati.','Ogni caso è versionato. Per cambiare una fixture crea un nuovo caso: le prove precedenti rimangono consultabili.');
+    back('Alle prove','cases');heading('Componi il file della prova.','Inserisci nome e compito e genera il file da usare con le configurazioni che vuoi testare. Il salvataggio nel catalogo è facoltativo.');
     const form=el('form',undefined,'card bench-form');root.append(form);
-    for(const [k,label,multi] of [['key','Codice caso',false],['title','Titolo',false],['family','Famiglia',false],['prompt','Prompt destinato alla chat',true],['context','Contesto e risorse destinati alla chat',true],['setup','Preparazione manuale · non copiata nella chat',true],['criteria','Criteri e risposte attese · riservati al valutatore',true],['sourceNotes','Provenienza · URL, revisione, split, ID e licenze',true]])control(form,k,label,'',multi,['key','title','family','prompt','criteria'].includes(k));
-    submit(form,'Salva caso',async values=>{const c=await req('/case',values);await go('case',c.id);});
+    const name=control(form,'title','Nome della prova','',false,true);name.maxLength=150;
+    const prompt=control(form,'prompt','Compito e istruzioni per la chat','',true,true);prompt.rows=7;prompt.maxLength=30000;
+    prompt.placeholder='Descrivi cosa deve fare la chat, i vincoli, il formato della risposta e i dati necessari al compito.';
+    const families=[...new Set(data.cases.map(c=>c.family).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'it'));
+    const family=select(form,'family','Categoria (facoltativa)',[['','Nessuna categoria'],...families.map(f=>[f,f])],'');
+    const add=el('option','+ Nuova categoria…');family.append(add);
+    const newFamily=control(form,'newFamily','Nuova categoria');newFamily.maxLength=100;newFamily.parentElement.hidden=true;newFamily.disabled=true;
+    family.onchange=()=>{const creating=family.selectedOptions[0]===add;newFamily.parentElement.hidden=!creating;newFamily.disabled=!creating;newFamily.required=creating;if(creating)newFamily.focus();};
+    const save=input('','checkbox');save.id='bench-saveToCatalog';const saveLabel=field('Salva anche nel catalogo',save);saveLabel.prepend(save);form.append(saveLabel);
+    const result=section();result.hidden=true;root.append(result);
+    let generated=null,signature='';
+    submit(form,'Genera file della prova',async values=>{
+      const payload={title:values.title,prompt:values.prompt,family:family.selectedOptions[0]===add?newFamily.value:values.family,saveToCatalog:save.checked};
+      const current=JSON.stringify(payload);
+      if(current!==signature){generated=await req('/compose-case',payload);signature=current;}
+      generatedCase=generated.case;
+      download(generated.filename,generated.content,'text/markdown');
+      result.hidden=false;result.replaceChildren(el('h2','File della prova generato'),el('p',generated.savedToCatalog?'La prova è stata salvata anche nel catalogo.':'Il file è stato generato senza salvare la prova nel catalogo.'),el('p','Allega il file alla chat della configurazione da testare e invia «Esegui la prova allegata». Puoi usare la stessa prova su tutte le configurazioni desiderate.'),action('Usa questa prova su una configurazione',()=>go('assign',generated.case.id),true));
+      notice('File generato. Allega il file a una nuova chat e invia: Esegui la prova allegata.');
+    });
   }
   function trialForm(previous=null) {
     back();heading(previous?'Riprendi la bozza.':'Nuova prova.','Scegli un caso: il file per la chat è subito disponibile. Tutti i dettagli descrittivi di A e B sono facoltativi.');
     const form=el('form',undefined,'card bench-form');root.append(form);
-    const caseSelect=select(form,'caseId','Caso e versione',[['','Scegli un caso…'],...data.cases.map(c=>[c.id,c.title+(c.inspectSupported?' · scoring Inspect':'')+' · '+c.version.slice(0,8)])],previous?.case.id||selected||'');
+    const extra=previous?.case||(generatedCase?.id===selected?generatedCase:null),availableCases=[...data.cases];
+    if(extra&&!availableCases.some(c=>c.id===extra.id))availableCases.push(extra);
+    const caseSelect=select(form,'caseId','Caso e versione',[['','Scegli un caso…'],...availableCases.map(c=>[c.id,c.title+(c.inspectSupported?' · scoring Inspect':'')+' · '+c.version.slice(0,8)])],previous?.case.id||selected||'');
     caseSelect.required=true;
-    const downloadButton=action('Scarica file per la chat',()=>downloadCase(caseSelect.value),true);form.append(downloadButton);
+    const downloadButton=action('Scarica file per la chat',()=>downloadCase(caseSelect.value,availableCases.find(c=>c.id===caseSelect.value)),true);form.append(downloadButton);
     const preview=el('p','Il download dipende soltanto dal caso selezionato.','muted');form.append(preview);
     const updateCase=()=>{downloadButton.disabled=!caseSelect.value;};caseSelect.onchange=updateCase;updateCase();
     if(previous&&data.runs.some(r=>r.trialId===previous.id)){caseSelect.disabled=true;form.append(info('Sono già presenti risultati: caso e versione sono fissati. Puoi completare i dettagli della bozza.'));}
@@ -166,6 +254,7 @@
     form.append(info('I campi descrivono ciò che hai usato. Puoi lasciarli vuoti o scrivere “non noto”; non configurano l’harness e non entrano nel file per la chat.'));
     const editors={};
     const payload=status=>({caseId:caseSelect.value,name:form.elements.namedItem('name').value,conditions:form.elements.namedItem('conditions').value,status,
+      ...(!data.cases.some(c=>c.id===caseSelect.value)?{caseSnapshot:availableCases.find(c=>c.id===caseSelect.value)}:{}),
       executions:Object.fromEntries(Object.entries(editors).map(([slot,read])=>[slot,read()])),...(previous?{id:previous.id,savedAt:previous.savedAt}:{})});
     for(const slot of ['A','B']){const box=el('details',undefined,'bench-execution-editor');box.append(el('summary','Esecuzione '+slot+' · dettagli facoltativi'));form.append(box);
       const old=previous?.architectures.find(a=>a.slot===slot)||{};editors[slot]=descriptionEditor(box,slot+'-',old);
@@ -180,7 +269,7 @@
   }
   async function trialDetail() {
     back();const t=await record('trial',selected);heading(t.name,t.case.title+' · versione '+t.case.version.slice(0,12));
-    root.append(pill(t.status==='draft'?'Bozza':t.status==='saved'?'Prova salvata':'Prova precedente'),action('Scarica file per la chat',()=>downloadCase(t.case.id),true));
+    root.append(pill(t.status==='draft'?'Bozza':t.status==='saved'?'Prova salvata':'Prova precedente'),action('Scarica file per la chat',()=>downloadCase(t.case.id,t.case),true));
     if(t.status==='draft')root.append(action('Completa bozza',()=>go('editTrial',t.id)));
     root.append(info(t.conditions||'Condizioni aggiuntive non dichiarate. Usa lo stesso caso in una nuova chat per ogni esecuzione.'));
     const grid=el('div',undefined,'bench-grid');root.append(grid);
@@ -258,10 +347,10 @@
   }
   async function runForm(previous=null) {
     const [trialId,requestedSlot]=selected.split('~');
-    const t=await record('trial',previous?.trialId||trialId);back('Alla prova','trial',t.id);heading(previous?'Integra la scheda.':'Carica un’esecuzione.',t.name+' · '+t.case.title);
-    root.append(info('Report strutturato obbligatorio per A e B: risposta, note, esito, token, durata e costo. I dati non osservabili richiedono uno stato non disponibile e un motivo. Nessuna lettura automatica dell’harness.'));
+    const t=await record('trial',previous?.trialId||trialId);back('Alla configurazione','architecture',(previous?.architectureId||t.architectures[0].id)+'~'+t.case.id);heading(previous?'Integra il risultato.':'Carica i risultati.',t.case.title+' · '+archName(t.architectures[0]));
+    root.append(info('Report strutturato obbligatorio: risposta, note, esito, token, durata e costo. I dati non osservabili richiedono uno stato non disponibile e un motivo. Nessuna lettura automatica dell’harness.'));
     const form=el('form',undefined,'card bench-form');root.append(form);importedFiles=[];
-    const arch=select(form,'architectureId','Esecuzione',t.architectures.map((a,i)=>[a.id,'Esecuzione '+(a.slot||String.fromCharCode(65+i))]),previous?.architectureId||t.architectures.find(a=>a.slot===requestedSlot)?.id);
+    const arch=select(form,'architectureId','Configurazione',t.architectures.map(a=>[a.id,archName(a)]),previous?.architectureId||t.architectures.find(a=>a.slot===requestedSlot)?.id);if(t.format==='configuration-test-v1')arch.disabled=true;
     const descriptions=el('details',undefined,'bench-execution-editor');descriptions.append(el('summary','Descrivi l’esecuzione · tutti i campi sono facoltativi'));form.append(descriptions);
     let descriptionGetter;
     const setDescription=a=>{descriptions.replaceChildren(el('summary','Descrivi l’esecuzione · tutti i campi sono facoltativi'));descriptionGetter=descriptionEditor(descriptions,'execution-',a);};
@@ -383,7 +472,7 @@
       validateReport(payload);
       if(new TextEncoder().encode(JSON.stringify(payload)).length>950000)throw Error('Scheda troppo grande. Riduci la risposta o gli allegati.');
       const run=await req('/run',payload);
-      await go('run',run.id);notice('Scheda salvata sul disco locale.');
+      await go('architecture',run.architectureId+'~'+t.case.id);notice('Risultato salvato per la prova e la configurazione selezionate.');
     });
   }
   function metricCell(m) {
@@ -397,19 +486,19 @@
     for(const r of rows){const line=el('tr'),name=el('th',r.label);name.scope='row';line.append(name,metricCell(r.left));if(r.right){line.append(metricCell(r.right),el('td',r.delta==null?'Non confrontabile':(r.delta>0?'+':'')+Number(r.delta.toPrecision(6))+' '+r.left.unit));}body.append(line);}return wrap;
   }
   async function runDetail() {
-    const r=await record('run',selected),t=await record('trial',r.trialId);back('Alla prova','trial',t.id);heading(r.label,archName(r.architecture)+' · '+t.name);
+    const r=await record('run',selected),t=await record('trial',r.trialId);back('Alla configurazione','architecture',r.architectureId+'~'+t.case.id);heading(r.label,archName(r.architecture)+' · '+t.case.title);
     root.append(pill(outcomeLabels[r.outcome]),info(r.provenance),el('p','Valutatore: '+r.evaluator+' · esecuzione dichiarata: '+(r.executedAt||'Non fornita')+' · caricata '+date(r.savedAt),'muted'));
     const count=Object.values(r.dimensions).filter(m=>m.status==='measured').length;root.append(el('h2',count+' / 16 dimensioni misurate'));
     const progress=el('progress',undefined,'bench-chart');progress.max=16;progress.value=count;progress.setAttribute('aria-label','Copertura delle dimensioni misurate');root.append(progress,el('p','Copertura dei dati, non punteggio di qualità.','muted'));
-    root.append(action('Esporta scheda completa JSON',()=>download('esecuzione-'+r.id+'.json',{...r,trial:t})),action('Aggiungi metriche o revisione',()=>go('revise',r.id)),action('Apri confronto della prova',()=>go('compare',t.id)));
-    root.append(judgeExportControl(data.runs.find(run=>run.id===r.id)),action('Completa con valutazione LLM',()=>go('judge',r.id)));
+    root.append(action('Esporta scheda completa JSON',()=>download('esecuzione-'+r.id+'.json',{...r,trial:t})),action('Dettaglio prova',()=>go('case',t.case.id+'~'+r.architectureId)),action('Confronta configurazioni',()=>go('compareTest',t.case.id)));
+    root.append(judgeExportControl(data.runs.find(run=>run.id===r.id)));
     for(const j of r.judgeEvaluations||[]){const box=section('Valutazione LLM · '+j.model);box.append(el('p',j.notes||'Giudizio esterno sulle dimensioni mancanti.'),el('p',j.modelNotes||'','muted'),el('p','Risposta verificata tramite SHA-256 '+j.answerSha256,'bench-code'),action('Scarica JSON del valutatore',()=>download('valutazione-'+j.reportSha256.slice(0,12)+'.json',j.report)));root.append(box);}
     if(r.sourceRunId&&!r.evaluation)root.append(action('Apri scheda precedente',()=>go('run',r.sourceRunId)));
-    const scoring=section(),scoringHeading=el('div',undefined,'bench-inspect-line');scoringHeading.append(el('h2','Valutazione Inspect AI'),inspectHelp('bench-inspect-help-detail'));scoring.append(scoringHeading);
+    const scoring=section(),scoringHeading=el('div',undefined,'bench-inspect-line');scoringHeading.append(el('h2','Valutazione deterministica'),inspectHelp('bench-inspect-help-detail'));scoring.append(scoringHeading);
     const supported=data.cases.some(c=>c.version===t.case.version&&c.inspectSupported);
     if(supported){
       scoring.append(el('p','Controlli deterministici su successo, correttezza e formato. Nessuna nuova risposta generata e nessuna chiamata a modelli. Le metriche dell’harness caricate restano separate.'));
-      scoring.append(el('p','La valutazione parte automaticamente quando carichi il report nel form. Per rivalutare, apri Aggiungi metriche o revisione e ricarica il file.'));if(!data.inspectAvailable)scoring.append(el('p','Runner opzionale non installato. Esegui Install-Inspect.ps1 nella cartella della suite, poi riapri questa pagina.','muted'));
+      scoring.append(el('p','I controlli disponibili vengono applicati automaticamente quando carichi il file JSON con Carica risultati nella configurazione.'));
     }else scoring.append(el('p','Questo caso richiede uno scorer dedicato o revisione umana. L’adattatore iniziale supporta i casi originali di calcolo ed estrazione JSON.'));
     if(r.evaluation){scoring.append(el('p',r.evaluation.note,'muted'),el('p','Scorer: '+r.evaluation.scorer+' · chiamate a modelli: '+r.evaluation.modelCalls));if(r.sourceRunId)scoring.append(action('Apri caricamento originale',()=>go('run',r.sourceRunId)));}
     root.append(scoring);
@@ -422,7 +511,7 @@
   }
   async function judgeForm() {
     const source=await record('run',selected),trial=await record('trial',source.trialId);
-    back('Alla prova','trial',trial.id);heading('Completa con un altro LLM.',trial.name+' · '+source.label+' · '+archName(source.architecture));
+    back('Alla prova','case',trial.case.id+'~'+source.architectureId);heading('Completa con un altro LLM.',trial.case.title+' · '+source.label+' · '+archName(source.architecture));
     const summary=data.runs.find(run=>run.id===source.id);
     if(!summary?.judgeExport?.available){root.append(judgeExportControl(summary));return;}
     const packet=await req('/judge-packet?run='+encodeURIComponent(source.id));
@@ -454,6 +543,30 @@
         pending=report;save.disabled=false;notice('Valutazione valida e collegata alla risposta sorgente. Controlla l’anteprima e salva.');
       }catch(error){if(current===serial&&form.isConnected)notice(error.message,true);}finally{if(current===serial)file.value='';}
     };
+  }
+  function comparisonTable(result){
+    const wrap=el('div',undefined,'bench-table-wrap'),table=el('table',undefined,'bench-table bench-comparison-matrix');table.style.minWidth=(200+240*result.runs.length)+'px';
+    wrap.setAttribute('role','region');wrap.setAttribute('aria-label','Dimensioni delle configurazioni confrontate');wrap.tabIndex=0;
+    const head=el('thead'),titles=el('tr'),dimension=el('th','Dimensione');dimension.scope='col';titles.append(dimension);
+    for(const r of result.runs){const th=el('th',archName(r.architecture));th.scope='col';th.append(el('small',r.label+' · '+date(r.savedAt)));titles.append(th);}head.append(titles);table.append(head);
+    const body=el('tbody');for(const row of result.rows){const tr=el('tr'),name=el('th',row.label);name.scope='row';tr.dataset.dimension=row.id;if(!row.comparable)name.append(el('small','Verifica misure, metodi e dati mancanti.'));tr.append(name,...row.values.map(metricCell));body.append(tr);}table.append(body);wrap.append(table);return wrap;
+  }
+  async function compareTest(saved=null){
+    const c=saved?.case||data.tests.find(c=>c.id===selected);if(!c)throw Error('Prova non trovata.');
+    back('Alla prova','case',c.id);heading(saved?'Confronto salvato.':'Confronta configurazioni.',c.title+' · stessa prova e versione per tutte le configurazioni.');
+    const output=el('div');
+    const show=result=>{output.replaceChildren(el('h2','Dimensioni a confronto'),el('p','Ogni colonna conserva il risultato selezionato. I valori sono confrontabili quando misura, unità e metodo coincidono; i dati mancanti restano espliciti.','muted'),comparisonTable(result),action('Esporta confronto JSON',()=>download('confronto-'+c.key+'.json',result)));
+      if(!saved){const save=el('form',undefined,'card bench-form');control(save,'comparisonName','Nome confronto (facoltativo)');submit(save,'Salva confronto',async values=>{const record=await req('/comparison',{caseId:c.id,runIds:result.runs.map(r=>r.id),name:values.comparisonName});await go('savedCompareMany',record.id);});output.append(save);}
+    };
+    if(saved){root.append(output);show(saved);return;}
+    const form=el('form',undefined,'card bench-form');root.append(form);form.append(el('h2','Configurazioni da confrontare'),el('p','Seleziona almeno due configurazioni e, per ognuna, l’esecuzione o revisione da usare.'));
+    const choices=[];
+    for(const a of data.configurations){const runs=data.runs.filter(r=>r.architectureId===a.id&&r.caseId===c.id&&r.caseVersion===c.version),box=el('div',undefined,'bench-comparison-choice');
+      const check=input('','checkbox');check.checked=!!runs.length;check.disabled=!runs.length;check.id='bench-compare-'+a.id;const label=el('label',archName(a));label.prepend(check);box.append(label);
+      const run=select(box,'compare-run-'+a.id,'Esecuzione / revisione',runs.map(r=>[r.id,r.label+' · '+date(r.savedAt)]),runs[0]?.id);run.disabled=!runs.length;
+      if(!runs.length)box.append(el('p','Nessun risultato disponibile per questa prova.','muted'));form.append(box);choices.push({check,run});
+    }
+    submit(form,'Confronta selezionate',async()=>{const ids=choices.filter(x=>x.check.checked).map(x=>x.run.value);if(ids.length<2)throw Error('Seleziona almeno due configurazioni con risultati per questa prova.');show(await req('/compare-many',{caseId:c.id,runIds:ids}));});root.append(output);
   }
   async function compare(saved=null) {
     const t=await record('trial',saved?.trialId||selected);back('Alla prova','trial',t.id);heading(saved?'Confronto salvato.':'Due esecuzioni, stessa prova.',(saved?.name||t.name)+' · '+t.case.title);

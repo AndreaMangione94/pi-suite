@@ -4,6 +4,12 @@ Documentazione della distribuzione Windows 0.6.6, aggiornata il 28 ottobre 2026.
 
 Il punto di ingresso è la chat Pi: scrivi al modello orchestratore, che, quando è selezionato un modello Subagenti, affida sempre almeno un incarico a un figlio, controlla il risultato e risponde. Se è selezionato soltanto il modello Orchestratore, svolge direttamente il lavoro senza figli. Anche per una richiesta semplice basta un solo figlio. Ogni subagente riceve un INCARICO.md preciso. La suite integra Pi 1.0.0, pi-subagents 0.79.0, skill e grafo Graphify locale persistente.
 
+## Temi dell’interfaccia
+
+In fondo alla sidenav, apri la sezione discreta **Aspetto** per scegliere **Chiaro · Salvia**, con icona del sole, o **Dark · Grafite**, con luna e stelle. La scelta resta solo nella pagina aperta: ogni apertura o ricaricamento riparte dal tema chiaro.
+
+`suite-ui/themes.js` contiene l’enum `ThemeType` e il registro dei parametri CSS e dell’icona principale. L’unica variabile da cambiare è `SuiteTheme.current`, per esempio `SuiteTheme.current = ThemeType.DARK`: aggiorna subito palette, superfici, grafi, benchmark, modali, font, raggi e icona. Per aggiungere un tema estendi l’enum e il registro con lo stesso contratto di token; il selettore viene generato automaticamente. I componenti consumano solo variabili CSS.
+
 ## Benchmark e confronti
 
 Apri Nuova prova e scegli il caso: puoi scaricare subito il file per la chat, senza salvare né compilare altri campi. Descrivi liberamente A e B quando vuoi, salva una bozza o la prova e carica i risultati nelle due schede. Non serve un registro di architetture. Puoi aggiungere metriche esportate dall’harness. Il runner opzionale Inspect AI valuta inizialmente i casi di calcolo ed estrazione JSON; schede e confronti mantengono tutte le 16 dimensioni e la provenienza dei dati. [Guida benchmark](GUIDA-BENCHMARK.md).

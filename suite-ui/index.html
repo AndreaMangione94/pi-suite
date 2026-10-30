@@ -1,7 +1,7 @@
 <!doctype html>
-<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pi Suite · Il tuo team, in locale</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/benchmark.css"><script src="/app.js" defer></script><script src="/evidence-panel.js" defer></script><script src="/benchmark-panel.js" defer></script></head>
+<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pi Suite · Il tuo team, in locale</title><script src="/themes.js"></script><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/benchmark.css"><script src="/app.js" defer></script><script src="/evidence-panel.js" defer></script><script src="/benchmark-panel.js" defer></script></head>
 <body>
-<aside class="sidebar"><a class="brand" href="#"><span class="pi">π</span><span>pi <b>suite</b><small>LOCAL AGENT WORKSPACE</small></span></a>
+<aside class="sidebar"><a class="brand" href="#" aria-label="Pi Suite · Workspace"><span class="pi" aria-hidden="true"></span><span>pi <b>suite</b><small>LOCAL AGENT WORKSPACE</small></span></a>
 <div class="nav-caption">WORKSPACE</div><nav aria-label="Navigazione principale">
 <button data-page="work" class="active"><span>◈</span> Il tuo workspace</button>
 <button data-page="runs"><span>◷</span> Attività subagenti</button>
@@ -10,6 +10,7 @@
 <button data-page="providers"><span>⇄</span> Connessioni e modelli</button>
 <button data-page="roles"><span>◎</span> Orchestratore e subagenti</button>
 <button data-page="skills"><span>✧</span> Skill installate</button></nav>
+<details class="theme-settings"><summary>Aspetto</summary><label for="theme-select">Tema dell’interfaccia</label><select id="theme-select"></select></details>
 <div class="sidebar-footer"><span class="status-dot"></span> Sul tuo computer<small>Pi SDK + Graphify · v0.6.5</small></div></aside>
 <main><header class="topbar"><span id="breadcrumb">Workspace / Il tuo workspace</span><span class="local-pill">● &nbsp; Connessione locale</span></header>
 <div id="notice" role="status" aria-live="polite" hidden></div>

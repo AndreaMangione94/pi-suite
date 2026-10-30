@@ -693,6 +693,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             static={'/':('index.html','text/html'),'/app.js':('app.js','text/javascript'),'/evidence-panel.js':('evidence-panel.js','text/javascript'),'/style.css':('style.css','text/css')}
             static['/benchmark-panel.js']=('benchmark-panel.js','text/javascript')
             static['/benchmark.css']=('benchmark.css','text/css')
+            static['/themes.js']=('themes.js','text/javascript')
             if not post and route in static:
                 file,kind=static[route]; return self.send(200,(ROOT/'suite-ui'/file).read_bytes(),kind)
             token=self.headers.get('X-Suite-Token','')
@@ -701,7 +702,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if post:
                 if self.headers.get('Content-Type','').split(';')[0]!='application/json': raise ValueError('Richiesto JSON')
                 length=int(self.headers.get('Content-Length','0'))
-                if not 0<length<=1000000: raise ValueError('Richiesta troppo grande o vuota')
+                limit=3000000 if route in ('/api/benchmarks/import-result-file','/api/benchmarks/import-evaluation-file') else 1000000
+                if not 0<length<=limit: raise ValueError('Richiesta troppo grande o vuota')
                 data=json.loads(self.rfile.read(length))
             app=self.server.suite
             if route=='/api/state' and not post: result={'settings':app.public_settings(),'job':dict(app.job),'busy':app.busy,'version':'0.6.5'}
