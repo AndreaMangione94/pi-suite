@@ -60,7 +60,9 @@ Nel menu Documentazione tecnica scegli **Genera documentazione tecnica**, inseri
 
 `/documentazione-tecnica [obiettivo]` avvia la stessa preparazione nella chat corrente; `prepare_documentation` è disponibile all’orchestratore per richieste esplicite di generazione. Tutti gli ingressi producono un dossier con fonti fissate e contesto del progetto. Gli originali rimangono le evidenze principali e le consegne dei figli vengono controllate prima dell’integrazione.
 
-Il documento principale deve descrivere architettura, processi, dati, interfacce, operatività e lacune con citazioni verificabili. `register_documentation` completa la consegna creando il grafo semantico di quel Markdown. La preparazione del brief non equivale a una documentazione tecnica completata.
+Per questo flusso AS-IS l'orchestratore salva prima PIANO-DOCUMENTAZIONE.md e assegna un task distinto per ogni micro modulo o funzionalità terminale. I figli rimangono nel proprio ambito, lasciando riferimenti alle altre unità. Il genitore integra le consegne e aggiorna piano e incarichi per nuove unità, lacune e contraddizioni. Questa modalità è specifica del dossier tecnico-funzionale e richiede il profilo Subagenti; non cambia la delega delle altre richieste.
+
+Il documento principale deve descrivere l'utilizzo di ciascuna funzionalità: attori, permessi, prerequisiti, azioni, risposte del sistema, regole, varianti ed errori, con dettagli architetturali, dati, interfacce, operatività e lacune supportati da citazioni. Piano e proposte dei singoli moduli sono artefatti di lavoro e non sostituiscono il documento finale integrato. `register_documentation` crea il grafo semantico di quel Markdown; non verifica automaticamente la completezza funzionale. I task necessari ancora pendenti vanno segnalati come lavoro parziale.
 
 ## Registrare il dossier prodotto
 

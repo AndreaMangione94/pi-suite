@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import {sourceBundle,connectedTools} from './connected-sources.mjs';
 import {knowledgeTools} from './evidence-tools.mjs';
 import {chatContext,contextTools} from './chat-context.mjs';
+import {isDocumentationDossier,documentationChildInstructions} from './documentation-workflow.mjs';
 import {normalizeEvidenceScope,evidenceScopeMarkdown,recordEvidenceRead,evidenceReadingTool} from './evidence-reading.mjs';
 
 export function relativeFile(value) {
@@ -56,7 +57,7 @@ export function assignmentMarkdown(task,{rules=[],skills=[],evidenceScope=null}=
 }
 export function assignmentSystemPrompt(systemPrompt,directory) {
   const contract=JSON.parse(fs.readFileSync(path.join(directory,'contract.json'),'utf8'));
-  const workflow=contract.documentation?'\nPer questo dossier di documentazione tecnica, se presenti grafi selezionati esplora document_graph, poi usa knowledge_search e knowledge_trace per approfondire le evidenze e leggi i documenti originali con read_evidence; poi usa il grafo del codice per confrontare l’implementazione. Se mancano documenti, dichiaralo e usa le evidenze di codice disponibili. I collegamenti orientano la lettura, non provano da soli il significato.':'';
+  const workflow=contract.documentation?'\n'+documentationChildInstructions+'\nSe presenti grafi selezionati esplora document_graph, poi usa knowledge_search e knowledge_trace per approfondire le evidenze e leggi i documenti originali con read_evidence; poi usa il grafo del codice per confrontare l’implementazione. Se mancano documenti, dichiaralo e usa le evidenze di codice disponibili. I collegamenti orientano la lettura, non provano da soli il significato.':'';
   return systemPrompt+workflow+'\n\nINCARICO VINCOLANTE ASSEGNATO DALL’ORCHESTRATORE:\n'+fs.readFileSync(path.join(directory,'INCARICO.md'),'utf8');
 }
 export function validateTasks(tasks) {
@@ -89,7 +90,7 @@ export function prepareBatch(home,project,tasks,settings,plan) {
   for(let i=0;i<tasks.length;i++) {
     const task=tasks[i],directory=path.join(root,String(i+1));fs.mkdirSync(path.join(directory,'proposals'),{recursive:true});
     fs.writeFileSync(path.join(directory,'INCARICO.md'),assignments[i]);
-    const contract={version:1,project:context?.project?.path||source,context,documentation:fs.existsSync(path.join(source,'INCARICO-DOCUMENTAZIONE-TECNICA.md'))&&fs.existsSync(path.join(source,'FONTI.json')),evidenceHome:fs.realpathSync(home),writeFiles:task.writeFiles,graph:graph&&fs.existsSync(graph)?graph:null,skills:settings.skills||[],connectedSources,evidenceScope:evidenceScopes[i]};
+    const contract={version:1,project:context?.project?.path||source,context,documentation:isDocumentationDossier(source),evidenceHome:fs.realpathSync(home),writeFiles:task.writeFiles,graph:graph&&fs.existsSync(graph)?graph:null,skills:settings.skills||[],connectedSources,evidenceScope:evidenceScopes[i]};
     fs.writeFileSync(path.join(directory,'contract.json'),JSON.stringify(contract,null,2));
     batch.tasks.push({title:task.title,directory,state:'queued',writeFiles:task.writeFiles});
   }

@@ -80,7 +80,7 @@ def inventory(app, pid):
         if not belongs:
             continue
         for path in sorted(folder.glob('*.md')):
-            if path.name in (ASSIGNMENT,LEGACY['assignment']) or path.is_symlink():
+            if path.name in (ASSIGNMENT,LEGACY['assignment'],'PIANO-DOCUMENTAZIONE.md') or path.is_symlink():
                 continue
             if path.name==LEGACY['primaryDocument'] and (folder/PRIMARY_DOCUMENT).is_file():
                 continue

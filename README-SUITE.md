@@ -42,7 +42,7 @@ La delega delle letture usa `evidenceScope`: obiettivo documentale, domande, fon
 
 Le fonti si aggiungono dal menu **documentazione tecnica → Aggiungi**. Le cartelle OneDrive o SharePoint sincronizzate si leggono come cartelle locali; Microsoft Graph richiede Drive ID, Folder Item ID e token. I repository remoti possono usare Git HTTPS o Azure DevOps.
 
-**Genera documentazione tecnica** apre la chat del dossier: l’orchestratore delega quanto possibile ai subagenti configurati, rivede le proposte e produce un documento DOCUMENTAZIONE-TECNICA.md dettagliato e autosufficiente. `register_documentation` valida le citazioni e genera il grafo semantico di quel Markdown, che compare nel menu Grafi ed è selezionato automaticamente. [Guida fonti e documentazione tecnica](GUIDA-FONTI-DOCUMENTAZIONE-TECNICA.md).
+**Genera documentazione tecnica** apre la chat del dossier AS-IS tecnico-funzionale: l’orchestratore salva un piano iniziale e assegna un task distinto per ogni micro modulo o funzionalità terminale. I figli restano nel proprio ambito e lasciano riferimenti alle altre unità; il genitore integra le consegne e crea nuovi task per le lacune. Questo flusso richiede il profilo Subagenti e produce un documento DOCUMENTAZIONE-TECNICA.md dettagliato e autosufficiente. `register_documentation` valida le citazioni e genera il grafo semantico di quel Markdown, che compare nel menu Grafi ed è selezionato automaticamente. [Guida fonti e documentazione tecnica](GUIDA-FONTI-DOCUMENTAZIONE-TECNICA.md).
 
 ## Comando documentazione tecnica
 

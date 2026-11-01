@@ -742,7 +742,7 @@ class Suite:
                 save_json(Path(result['workspace'])/'PROGETTO.json',{'project':data['project'],'name':data.get('name','').strip(),
                     'graphs':data['graphs'],'documentGraph':result.get('documentGraph')})
                 save_json(Path(result['workspace'])/'CONTESTO.json',workspace.chat_context(self,data['project']))
-                result['prompt']+=' Produci un documento DOCUMENTAZIONE-TECNICA.md dettagliato e autosufficiente: architettura, processi, dati, interfacce, operatività, limiti ed evidenze. Delega quanto possibile ai subagenti configurati e integra le loro proposte dopo la revisione. Alla fine chiama register_documentation: genera anche il grafo semantico LLM del Markdown finale e lo seleziona nel contesto.'
+                result['prompt']+=' Produci un documento DOCUMENTAZIONE-TECNICA.md tecnico-funzionale dettagliato e autosufficiente. Applica il workflow AS-IS incluso nell’incarico: prima PIANO-DOCUMENTAZIONE.md, poi un task distinto per ogni micro modulo o funzionalità terminale. I figli descrivono solo la propria unità e lasciano riferimenti alle altre. Integra le proposte verificate, aggiorna il piano e crea nuovi task per le lacune; segnala eventuali unità ancora parziali o bloccate. Alla fine chiama register_documentation: genera anche il grafo semantico LLM del Markdown finale e lo seleziona nel contesto.'
                 self.job['result']={'project':data['project'],**{k:v for k,v in result.items() if k not in ('sources','prompt')}}
                 if data.get('openChat',True):self.open_chat(result['workspace'],result['prompt'])
             elif operation=='graph':

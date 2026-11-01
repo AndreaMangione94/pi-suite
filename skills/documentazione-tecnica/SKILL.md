@@ -1,6 +1,6 @@
 ---
 name: documentazione-tecnica
-description: Crea e aggiorna la documentazione tecnica di un sistema confrontando il progetto e le fonti collegate, con citazioni, revisioni e lacune esplicite.
+description: Crea e aggiorna dossier AS-IS di documentazione tecnico-funzionale dell'applicazione, con piano per funzionalità, incarichi separati e integrazione iterativa delle evidenze.
 ---
 
 Per creare o aggiornare una documentazione tecnica su richiesta esplicita, usa prepare_documentation oppure il dossier gia preparato da /documentazione-tecnica o dal pannello: prima della generazione la suite deve verificare e aggiornare grafi e indici e fissare il corpus. Non chiamare questa preparazione per normali domande o consultazioni.
@@ -9,12 +9,14 @@ Consulta INCARICO-DOCUMENTAZIONE-TECNICA.md se presente. Documenti e codice orig
 
 Un documento descrive ciò che dichiara la sua versione; non prova da solo il comportamento in produzione. Il codice prova un’implementazione nel commit analizzato, non il deployment effettivo. Distingui comportamento verificato, dichiarazioni documentali, ipotesi, lacune e proposte TO-BE. Se codice e documenti differiscono, registra entrambe le evidenze e la domanda aperta.
 
-Delega quando utile senza imporre una sequenza di ruoli. Ogni incarico deve specificare componenti/processi da analizzare, fonti iniziali, limiti, criteri di completezza, citazioni richieste e file della consegna. I figli possono consultare tutte le fonti incluse nel dossier. Il genitore confronta e integra le consegne.
+Per questo flusso AS-IS leggi e applica [Pianificazione e delega per funzionalità](references/workflow.md): prima salva PIANO-DOCUMENTAZIONE.md, poi assegna con delegate_tasks un incarico distinto per ogni micro modulo o funzionalità terminale. Ogni figlio rimane nel proprio ambito e lascia soltanto riferimenti alle altre funzionalità. L'orchestratore integra le consegne, aggiorna il piano e crea nuovi task per lacune o unità emerse. Queste regole sono specifiche della generazione tecnico-funzionale; non si applicano alle altre richieste della chat. Il runtime include il workflow nell'incarico del dossier.
 
 Per la lettura documentale usa il perimetro `evidenceScope` della delega, lasciando al figlio la scelta full/section/passage e la paginazione. Il figlio chiama `report_evidence_reading` con risultati sintetici, citazioni e lacune; il runtime calcola la copertura dalle letture effettive. Il genitore controlla fonti/snapshot, letture complete o parziali, documenti iniziali non letti e richieste di ampliamento prima di integrare le conclusioni. Non equiparare testo estratto integralmente letto a originale interamente rappresentato.
 
 Consegne predefinite, adattabili all’obiettivo:
-- DOCUMENTAZIONE-TECNICA.md: documento finale dettagliato e autosufficiente con scopo, confini, attori, funzionalità, architettura, processi, dati, interfacce, operatività, stato osservato, lacune e livello delle evidenze. Gli allegati approfondiscono il documento principale.
+- PIANO-DOCUMENTAZIONE.md: inventario delle unità, confini, riferimenti, task e copertura aggiornata; è un artefatto di lavoro, non il documento finale.
+- moduli/<ID>.md: proposte distinte dei figli, da verificare e integrare nel documento principale.
+- DOCUMENTAZIONE-TECNICA.md: documento tecnico-funzionale finale dettagliato e autosufficiente con scopo, confini, attori e, per ogni funzionalità, accesso, prerequisiti, permessi, azioni e risposte, dati, regole, esiti, varianti ed errori; include architettura, interfacce, operatività, lacune e livello delle evidenze. Gli allegati approfondiscono il documento principale. Il nome del file resta quello previsto dal runtime.
 - ARCHITETTURA.md: componenti, responsabilità, dati e dipendenze provate; diagrammi solo se supportati.
 - FLUSSI-E-INTERFACCE.md: flussi, ingressi/uscite, contratti, autenticazione e gestione errori documentabili.
 - OPERATIVITA.md: build, rilascio, configurazioni, monitoraggio e procedure disponibili; nessun segreto in chiaro.

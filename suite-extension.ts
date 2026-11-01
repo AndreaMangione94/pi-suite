@@ -10,6 +10,7 @@ import registerDelegation from './suite-delegation.ts';
 import {sourceBundle,connectedTools,isCleanWorkspace} from './connected-sources.mjs';
 import {knowledgeTools,invokeEvidence} from './evidence-tools.mjs';
 import {chatContext,contextTools} from './chat-context.mjs';
+import {documentationInstructions} from './documentation-workflow.mjs';
 
 export default function(pi: ExtensionAPI) {
   const root=path.dirname(fileURLToPath(import.meta.url));
@@ -43,7 +44,7 @@ export default function(pi: ExtensionAPI) {
     finalizationReminders.delete(activeWorkspace(ctx));
     try{await refreshGraphs(ctx,true);}catch(error:any){ctx.ui.notify(error.message,'error');}
     const context=chatContext(activeWorkspace(ctx));
-    const instructions=[...(context?.graphs?.length?['graph-explorer']:[]),...(context?.documentation?.length?['lettura-documentazione-tecnica']:[])].map(name=>fs.readFileSync(path.join(root,'skills',name,'SKILL.md'),'utf8')).join('\n');
+    const instructions=[...(context?.graphs?.length?['graph-explorer']:[]),...(context?.documentation?.length?['lettura-documentazione-tecnica']:[])].map(name=>fs.readFileSync(path.join(root,'skills',name,'SKILL.md'),'utf8')).join('\n')+'\n'+documentationInstructions(activeWorkspace(ctx));
     return {systemPrompt:event.systemPrompt+'\nArtefatti selezionati e consultabili: '+JSON.stringify({project:context?.project?.path,graphs:context?.graphs?.map((g:any)=>({id:g.id,name:g.name,kind:g.kind})),documentation:context?.documentation?.map((d:any)=>({id:d.id,name:d.name}))})+'. Usa read_documentation per i documenti selezionati; i grafi sono opzionali e disponibili solo se selezionati.\n'+instructions};
   });
   pi.on('agent_end',async(_event,ctx)=>{
@@ -108,7 +109,7 @@ export default function(pi: ExtensionAPI) {
         });
         pi.appendEntry('suite-documentation-dossier',{workspace:result.workspace,id:result.id});
         ctx.ui.notify('Fonti aggiornate. Dossier: '+result.workspace,'info');
-        pi.sendUserMessage('Crea il dossier di documentazione tecnica nella cartella '+JSON.stringify(result.workspace)+'. Leggi qui INCARICO-DOCUMENTAZIONE-TECNICA.md e FONTI.json. Usa la skill documentazione-tecnica. Le fonti collegate di questa chat e dei subagenti sono ora fissate a questo dossier. Se il profilo Subagenti è configurato, pianifica e delega sempre il lavoro operativo ad almeno un figlio; altrimenti svolgilo direttamente; verifica e integra i file proposti nella cartella del dossier. Non presentare il brief come documentazione tecnica completata. '+(args.trim()?'Obiettivo: '+args.trim():''));
+        pi.sendUserMessage('Crea il dossier di documentazione tecnica nella cartella '+JSON.stringify(result.workspace)+'. Leggi qui INCARICO-DOCUMENTAZIONE-TECNICA.md e FONTI.json. Usa la skill documentazione-tecnica e il workflow AS-IS incluso nell’incarico: prima salva PIANO-DOCUMENTAZIONE.md, poi assegna un task distinto per ogni unità e integra le consegne. Le fonti collegate di questa chat e dei subagenti sono ora fissate a questo dossier. Per questo dossier tecnico-funzionale occorre il profilo Subagenti: ogni figlio resta nella funzionalità assegnata e lascia riferimenti alle altre. Se manca il profilo, prepara il piano e segnala la configurazione necessaria. Verifica e integra i file proposti e crea nuovi task per le lacune. Non presentare il brief come documentazione tecnica completata. '+(args.trim()?'Obiettivo: '+args.trim():''));
       }catch(error:any){ctx.ui.notify(error.message,'error');}
     }
   });
