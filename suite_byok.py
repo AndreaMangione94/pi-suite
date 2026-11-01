@@ -283,7 +283,7 @@ class Store:
 
     def load_or_migrate(self,settings):
         if self.path.exists():return to_legacy(validate(json.loads(self.path.read_text(encoding='utf-8'))))
-        # Preserve ciphertext as-is: migration never decrypts keys onto disk.
+        # Preserve ciphertext unchanged: migration never decrypts keys onto disk.
         if (self.home/'settings.json').exists() and settings.get('providers'):
             backup=self.home/'settings.pre-byok.json'
             if not backup.exists():atomic(backup,settings)

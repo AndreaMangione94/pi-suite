@@ -37,9 +37,9 @@ decisioni, risultati verificati e punti aperti nell’incarico successivo.
 
 ## Fonti e documentazione
 
-I riferimenti **As-is** del progetto conservano separatamente fonti, grafi, obiettivo e cartella del dossier in `data/settings.json`. La chat usa le fonti salvate, mentre i pulsanti AS-IS del pannello usano i grafi selezionati. Nella chat il corpus si fissa alla prima consultazione; `/sources-refresh` seleziona gli snapshot correnti senza sincronizzare.
+I riferimenti **Documentazione tecnica** del progetto conservano separatamente fonti, grafi, obiettivo e cartella del dossier in `data/settings.json`. La chat usa le fonti salvate, mentre i pulsanti documentazione tecnica del pannello usano i grafi selezionati. Nella chat il corpus si fissa alla prima consultazione; `/sources-refresh` seleziona gli snapshot correnti senza sincronizzare.
 
-I dossier AS-IS in `data/documentation/<id>/` fissano le versioni delle fonti in FONTI.json. I dossier creati dal pannello includono anche PROGETTO.json per l’associazione al progetto e ai grafi. I Markdown salvati sono visibili nella modale del progetto anche prima della registrazione; per renderli ricercabili dagli agenti usa `register_asis` o `/asis-register` dopo la verifica. I grafi e la
+I dossier di documentazione tecnica in `data/documentation/<id>/` fissano le versioni delle fonti in FONTI.json. I dossier creati dal pannello includono anche PROGETTO.json per l’associazione al progetto e ai grafi. I Markdown salvati sono visibili nella modale del progetto anche prima della registrazione; per renderli ricercabili dagli agenti usa `register_documentation` o `/documentazione-tecnica-register` dopo la verifica. I grafi e la
 ricerca testuale aiutano a trovare le evidenze; le affermazioni vanno verificate
 sugli originali e accompagnate da citazioni. Un dossier registrato resta
 consultabile senza rigenerarlo: controlla la freschezza delle sue fonti prima

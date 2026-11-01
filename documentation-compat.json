@@ -1,0 +1,28 @@
+{
+  "workspaceKey": "asis",
+  "kind": "asis",
+  "primaryDocument": "AS-IS.md",
+  "assignment": "INCARICO-AS-IS.md",
+  "registry": "asis-registry.json",
+  "dossierEntry": "suite-asis-dossier",
+  "skills": {
+    "as-is-documentation": "documentazione-tecnica",
+    "as-is-reader": "lettura-documentazione-tecnica"
+  },
+  "commands": {
+    "/asis-register": "/documentazione-tecnica-register",
+    "/asis": "/documentazione-tecnica"
+  },
+  "tools": {
+    "read_asis": "read_documentation",
+    "prepare_asis": "prepare_documentation",
+    "register_asis": "register_documentation"
+  },
+  "identifiers": {
+    "asis-graph:": "documentation-graph:",
+    "asis:": "documentation:",
+    "prepare-asis": "prepare-documentation",
+    "auto-asis": "auto-documentation",
+    "register-asis": "register-documentation"
+  }
+}

@@ -17,7 +17,19 @@ def main():
     management=bool(args and args[0] in ('install','remove','uninstall','update','list','config','auth','mcp'))
     if not management:app.validate_profiles()
     env=app.secret_environment()
-    env.update(PI_SUITE_HOME=str(home),PI_SUITE_PYTHON=sys.executable,PI_CODING_AGENT_DIR=str(app.prepare_shell(snapshot=True)))
+    import json
+    context_path=env.get('PI_SUITE_CONTEXT')
+    if not context_path and (Path.cwd()/'CONTESTO.json').is_file():context_path=str(Path.cwd()/'CONTESTO.json');env['PI_SUITE_CONTEXT']=context_path
+    context=json.loads(Path(context_path).read_text(encoding='utf-8')) if context_path else {'graphs':[],'documentation':[]}
+    if not context_path and not env.get('PI_SUITE_CLEAN_WORKSPACE'):
+        import suite_workspace
+        pid=app.project_for_workspace(Path.cwd())
+        if pid:
+            context=suite_workspace.chat_context(app,pid)
+            import uuid
+            from suite import save_json
+            context_path=str(home/'sessions'/('context-'+uuid.uuid4().hex+'.json'));save_json(context_path,context);env['PI_SUITE_CONTEXT']=context_path
+    env.update(PI_SUITE_HOME=str(home),PI_SUITE_PYTHON=sys.executable,PI_CODING_AGENT_DIR=str(app.prepare_shell(snapshot=True,context=context)))
     env.setdefault('PI_TELEMETRY','0')
     extra=[]
     if not args or args[0] not in ('install','remove','uninstall','update','list','config','auth','mcp'):
@@ -25,11 +37,14 @@ def main():
         # With no suite profile, let Pi handle model selection and missing-model UI.
         if profile and '--model' not in args and '--provider' not in args:
             extra=['--provider',profile['provider'],'--model',profile['model'],'--thinking',profile['effort']]
-        extra+=['--extension',str(ROOT/'node_modules/pi-subagents/index.js'),'--extension',str(ROOT/'suite-extension.ts')]
+        extra+=['--extension',str(ROOT/'node_modules/pi-subagents/index.js'),'--extension',str(ROOT/'suite-extension.ts'),'--no-skills']
         clean_workspace=env.get('PI_SUITE_CLEAN_WORKSPACE')
         if clean_workspace and Path.cwd().resolve()==Path(clean_workspace).resolve():
             extra+=['--no-context-files']
-        for name in app.settings['enabledSkills']:
+        names=[n for n in app.settings['enabledSkills'] if n not in ('graph-explorer','lettura-documentazione-tecnica')]
+        if context.get('graphs'):names.append('graph-explorer')
+        if context.get('documentation'):names.append('lettura-documentazione-tecnica')
+        for name in names:
             folder=ROOT/'skills'/name
             if name=='pi-subagents': folder=ROOT/'node_modules/pi-subagents/skills/pi-subagents'
             if not folder.exists(): folder=home/'skills'/name

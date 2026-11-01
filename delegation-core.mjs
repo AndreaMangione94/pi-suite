@@ -1,8 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import {sourceBundle,connectedTools,isCleanWorkspace} from './connected-sources.mjs';
+import {sourceBundle,connectedTools} from './connected-sources.mjs';
 import {knowledgeTools} from './evidence-tools.mjs';
+import {chatContext,contextTools} from './chat-context.mjs';
 import {normalizeEvidenceScope,evidenceScopeMarkdown,recordEvidenceRead,evidenceReadingTool} from './evidence-reading.mjs';
 
 export function relativeFile(value) {
@@ -55,7 +56,7 @@ export function assignmentMarkdown(task,{rules=[],skills=[],evidenceScope=null}=
 }
 export function assignmentSystemPrompt(systemPrompt,directory) {
   const contract=JSON.parse(fs.readFileSync(path.join(directory,'contract.json'),'utf8'));
-  const workflow=contract.asis?'\nPer questo dossier AS-IS esplora prima il grafo documentale semantico salvato con document_graph, poi usa knowledge_search e knowledge_trace per approfondire le evidenze e leggi i documenti originali con read_evidence; poi usa il grafo del codice per confrontare l’implementazione. Se mancano documenti, dichiaralo e usa le evidenze di codice disponibili. I collegamenti orientano la lettura, non provano da soli il significato.':'';
+  const workflow=contract.documentation?'\nPer questo dossier di documentazione tecnica, se presenti grafi selezionati esplora document_graph, poi usa knowledge_search e knowledge_trace per approfondire le evidenze e leggi i documenti originali con read_evidence; poi usa il grafo del codice per confrontare l’implementazione. Se mancano documenti, dichiaralo e usa le evidenze di codice disponibili. I collegamenti orientano la lettura, non provano da soli il significato.':'';
   return systemPrompt+workflow+'\n\nINCARICO VINCOLANTE ASSEGNATO DALL’ORCHESTRATORE:\n'+fs.readFileSync(path.join(directory,'INCARICO.md'),'utf8');
 }
 export function validateTasks(tasks) {
@@ -74,6 +75,8 @@ export function validateTasks(tasks) {
 export function prepareBatch(home,project,tasks,settings,plan) {
   validateTasks(tasks);
   const source=fs.realpathSync(project);
+  const context=chatContext(source);
+  settings={...settings,skills:(settings.skills||[]).filter(s=>s.name!=='graph-explorer'||context?.graphs?.length).filter(s=>s.name!=='lettura-documentazione-tecnica'||context?.documentation?.length)};
   if(!fs.statSync(source).isDirectory()) throw Error('Apri una cartella di progetto');
   const connectedSources=settings.connectedSources??sourceBundle(home,source);
   const evidenceScopes=tasks.map(task=>normalizeEvidenceScope(task,connectedSources));
@@ -81,14 +84,12 @@ export function prepareBatch(home,project,tasks,settings,plan) {
   const assignments=tasks.map((task,index)=>assignmentMarkdown(task,{rules:projectRules(source,task.writeFiles),skills:settings.skills||[],evidenceScope:evidenceScopes[index]}));
   const id=crypto.randomUUID();
   const root=path.join(home,'delegations',id);fs.mkdirSync(root,{recursive:true});
-  const normalize=p=>path.resolve(p).toLowerCase();
-  const registered=isCleanWorkspace(source)?null:(settings.projects||[]).filter(p=>normalize(source)===normalize(p.path)||normalize(source).startsWith(normalize(p.path)+path.sep)).sort((a,b)=>b.path.length-a.path.length)[0];
-  const graph=registered?path.join(home,'graphs',registered.id,'graph.json'):null;
+  const graph=context?.graphs?.find(g=>g.kind==='project')?.path||null;
   const batch={id,project:source,plan,createdAt:new Date().toISOString(),state:'running',tasks:[]};
   for(let i=0;i<tasks.length;i++) {
     const task=tasks[i],directory=path.join(root,String(i+1));fs.mkdirSync(path.join(directory,'proposals'),{recursive:true});
     fs.writeFileSync(path.join(directory,'INCARICO.md'),assignments[i]);
-    const contract={version:1,project:source,asis:fs.existsSync(path.join(source,'INCARICO-AS-IS.md'))&&fs.existsSync(path.join(source,'FONTI.json')),evidenceHome:fs.realpathSync(home),writeFiles:task.writeFiles,graph:graph&&fs.existsSync(graph)?graph:null,skills:settings.skills||[],connectedSources,evidenceScope:evidenceScopes[i]};
+    const contract={version:1,project:context?.project?.path||source,context,documentation:fs.existsSync(path.join(source,'INCARICO-DOCUMENTAZIONE-TECNICA.md'))&&fs.existsSync(path.join(source,'FONTI.json')),evidenceHome:fs.realpathSync(home),writeFiles:task.writeFiles,graph:graph&&fs.existsSync(graph)?graph:null,skills:settings.skills||[],connectedSources,evidenceScope:evidenceScopes[i]};
     fs.writeFileSync(path.join(directory,'contract.json'),JSON.stringify(contract,null,2));
     batch.tasks.push({title:task.title,directory,state:'queued',writeFiles:task.writeFiles});
   }
@@ -109,7 +110,7 @@ export function scopedTools(directory) {
       return result;
     }};
   });
-  return [...evidenceTools,evidenceReadingTool(directory,contract),
+  return [...evidenceTools,...contextTools(contract.context),evidenceReadingTool(directory,contract),
     {name:'read_source',label:'Leggi il progetto',description:'Legge un file UTF-8 del progetto originale, fino a 200 KB. Lettura libera, indipendente dai file modificabili. Percorso relativo con /.',parameters:{type:'object',properties:{path:{type:'string'}},required:['path'],additionalProperties:false},execute:async(_id,args)=>response(readText(safePath(project,args.path)))},
     {name:'list_sources',label:'Esplora il progetto',description:'Elenca una directory del progetto (massimo 500 elementi). directory vuota indica la radice. Puoi esplorare oltre le fonti iniziali dell’incarico.',parameters:{type:'object',properties:{directory:{type:'string'}},additionalProperties:false},execute:async(_id,args)=>{
       const folder=args.directory?safePath(project,args.directory):project;
@@ -121,9 +122,12 @@ export function scopedTools(directory) {
       const target=safePath(out,args.path,false);fs.mkdirSync(path.dirname(target),{recursive:true});fs.writeFileSync(target,args.content,'utf8');
       return response({proposed:args.path,applied:false});}},
     {name:'graph_query',label:'Consulta Graphify',description:'Cerca nel grafo locale dell’intero progetto. Può essere precedente alle modifiche correnti: verifica i sorgenti. Non limita la lettura ai file modificabili.',parameters:{type:'object',properties:{query:{type:'string'}},additionalProperties:false},execute:async(_id,args)=>{
-      if(!contract.graph||!fs.existsSync(contract.graph)) return response({available:false,message:'Nessun grafo indicizzato; usa list_sources e read_source.'});
-      const g=JSON.parse(fs.readFileSync(contract.graph,'utf8')),matches=g.nodes.filter(n=>JSON.stringify(n).toLowerCase().includes((args.query||'').toLowerCase())),nodes=matches.slice(0,40),ids=new Set(nodes.map(n=>n.id));
-      return response({base:g.base,createdAt:g.createdAt,nodes,edges:g.edges.filter(e=>ids.has(e.source)||ids.has(e.target)).slice(0,100),truncated:matches.length>40,limits:g.limits});}},
+      const selected=contract.context?.graphs?.filter(g=>g.kind==='project')||[];
+      if(!selected.length)return response({available:false,message:'Nessun grafo selezionato; usa list_sources e read_source.'});
+      const graphs=selected.map(item=>{
+        const g=JSON.parse(fs.readFileSync(item.path,'utf8')),matches=g.nodes.filter(n=>JSON.stringify(n).toLowerCase().includes((args.query||'').toLowerCase())),nodes=matches.slice(0,40),ids=new Set(nodes.map(n=>n.id));
+        return {id:item.id,base:g.base,createdAt:g.createdAt,nodes,edges:g.edges.filter(e=>ids.has(e.source)||ids.has(e.target)).slice(0,100),truncated:matches.length>40,limits:g.limits};
+      });return response(graphs.length===1?graphs[0]:{graphs});}},
     {name:'read_skill',label:'Leggi skill',description:'Carica una skill abilitata dalla suite. Le skill non ampliano strumenti o perimetro dell’incarico.',parameters:{type:'object',properties:{name:{type:'string'}},required:['name'],additionalProperties:false},execute:async(_id,args)=>{
       const s=contract.skills.find(s=>s.name===args.name);if(!s)throw Error('Skill non disponibile');return response(s.content);}}
   ];

@@ -166,10 +166,15 @@ function Invoke-Update {
         New-Item -ItemType Directory -Path $staging | Out-Null
         foreach ($file in $files) { Copy-Item -LiteralPath (Join-Path $sourceRoot $file) -Destination (Join-Path $staging $file) }
         foreach ($folder in @('suite-ui', 'skills')) { Copy-Item -LiteralPath (Join-Path $sourceRoot $folder) -Destination $staging -Recurse }
+        $documentationCompatibility = Get-Content -LiteralPath (Join-Path $sourceRoot 'documentation-compat.json') -Raw | ConvertFrom-Json
         foreach ($extra in @('skills', 'suite-ui')) {
             $oldFolder = Join-Path $application $extra
             if (Test-Path -LiteralPath $oldFolder) {
                 foreach ($oldFile in @(Get-ChildItem -LiteralPath $oldFolder -File -Recurse)) {
+                    if ($extra -eq 'skills') {
+                        $skillFolder = $oldFile.FullName.Substring($oldFolder.Length + 1).Split([IO.Path]::DirectorySeparatorChar)[0]
+                        if ($documentationCompatibility.skills.PSObject.Properties.Name -contains $skillFolder) { continue }
+                    }
                     $relative = $oldFile.FullName.Substring($application.Length + 1)
                     $newFile = Join-Path $staging $relative
                     if (-not (Test-Path -LiteralPath $newFile)) {

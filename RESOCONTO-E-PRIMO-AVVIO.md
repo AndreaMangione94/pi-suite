@@ -1,8 +1,8 @@
 # Pi Suite 0.6.5 — Resoconto e primo avvio
 
-Aggiornamento del 27 ottobre 2026. Ricerca testuale, grafi documentali/SQL e AS-IS persistenti: vedi la [Guida conoscenza e grafi](GUIDA-CONOSCENZA-E-GRAFI.md). Con il modello Subagenti selezionato, il flusso principale segue la richiesta: chat → orchestratore → almeno un subagente con incarico Markdown → integrazione e verifica → risposta.
+Aggiornamento del 27 ottobre 2026. Ricerca testuale, grafi documentali/SQL e documentazione tecnica persistenti: vedi la [Guida conoscenza e grafi](GUIDA-CONOSCENZA-E-GRAFI.md). Con il modello Subagenti selezionato, il flusso principale segue la richiesta: chat → orchestratore → almeno un subagente con incarico Markdown → integrazione e verifica → risposta.
 
-Per collegare SharePoint e Azure e generare il dossier documentale, segui la [Guida fonti e AS-IS](GUIDA-FONTI-AS-IS.md).
+Per collegare SharePoint e Azure e generare il dossier documentale, segui la [Guida fonti e documentazione tecnica](GUIDA-FONTI-DOCUMENTAZIONE-TECNICA.md).
 
 ## Cosa abbiamo
 
@@ -15,10 +15,10 @@ Per collegare SharePoint e Azure e generare il dossier documentale, segui la [Gu
 | Lettura | Il figlio esplora liberamente il progetto e legge i file testuali; le fonti iniziali non limitano l’esplorazione. |
 | Modifiche | Il figlio propone solo file assegnati. Il genitore controlla e integra con gli strumenti Pi. |
 | Grafo | Graphify strutturale locale, persistente e interrogabile da genitore e figli. |
-| Skill | graph-explorer, task-planner, candidate-review, as-is-documentation e guida upstream pi-subagents per il genitore. |
+| Skill | graph-explorer, task-planner, candidate-review, documentazione-tecnica e guida upstream pi-subagents per il genitore. |
 | Tracciabilità | Incarichi, risultati e proposte su disco e consultabili dal pannello. |
-| Workspace | Progetti anche senza Git; riferimenti As-is e Grafi di conoscenza salvati per progetto. |
-| AS-IS | Creazione dal pannello con almeno un grafo selezionato; file salvati consultabili e dossier registrabili con citazioni. |
+| Workspace | Progetti anche senza Git; riferimenti Documentazione tecnica e Grafi di conoscenza salvati per progetto. |
+| documentazione tecnica | Creazione dal pannello con almeno un grafo selezionato; file salvati consultabili e dossier registrabili con citazioni. |
 | Benchmark | Prove manuali A/B, 16 dimensioni e scoring Inspect opzionale per i due casi supportati. |
 
 Ricercatore, esecutore, revisore e documentazione non sono più selezioni obbligatorie della chat. Con un modello Subagenti selezionato, l’orchestratore definisce il compito, lo assegna sempre a uno o più figli e verifica le consegne. Se è configurato solo l’orchestratore, lavora direttamente senza figli. Questa scelta si cambia nel pannello, salvando e aprendo una nuova chat. Il lavoro operativo usa il modello e il ragionamento configurati per i subagenti, indipendenti da quelli del genitore.
@@ -34,13 +34,13 @@ Ricercatore, esecutore, revisore e documentazione non sono più selezioni obblig
 
 La chat si apre in una finestra terminale Pi. Il browser serve per configurazione, grafo e consultazione delle attività; non contiene ancora un editor di chat incorporato. Se cambi provider, modelli o skill, riapri la chat per caricare la nuova configurazione e le credenziali.
 
-## Riferimenti del progetto e primo AS-IS
+## Riferimenti del progetto e primo documentazione tecnica
 
-Dopo aver selezionato un progetto, apri **Grafi di conoscenza** e premi **Crea / aggiorna grafo del codice**. Non occorre Git e l’indicizzazione non chiama modelli. Nella stessa modale, Grafo documentale del progetto permette di collegare cartelle locali, di rete o SharePoint e generare il grafo semantico da Word/PDF: dopo l’estrazione dei riferimenti espliciti usa il modello Orchestratore per inferire concetti e relazioni, con possibili costi API, senza creare un AS-IS. La produzione AS-IS esplora prima il grafo documentale e gli originali, poi confronta il codice. Torna nel workspace, apri **As-is**, seleziona il grafo in **Grafi di riferimento**, descrivi l’obiettivo e premi **Aggiorna fonti e crea AS-IS**. La suite acquisisce la cartella in lettura, prepara un dossier separato e apre la chat che scriverà i documenti. **Usa snapshot esistenti** acquisisce comunque la cartella corrente quando è selezionato il grafo locale.
+Dopo aver selezionato un progetto, apri **Grafi di conoscenza** e premi **Crea / aggiorna grafo del codice**. Non occorre Git e l’indicizzazione non chiama modelli. Nella stessa modale, Grafo documentale del progetto permette di collegare cartelle locali, di rete o SharePoint e generare il grafo semantico da Word/PDF: dopo l’estrazione dei riferimenti espliciti usa il modello Orchestratore per inferire concetti e relazioni, con possibili costi API, senza creare una documentazione tecnica. La produzione documentazione tecnica esplora prima il grafo documentale e gli originali, poi confronta il codice. Torna nel workspace, apri **Documentazione tecnica**, seleziona il grafo in **Grafi di riferimento**, descrivi l’obiettivo e premi **Aggiorna fonti e crea documentazione tecnica**. La suite acquisisce la cartella in lettura, prepara un dossier separato e apre la chat che scriverà i documenti. **Usa snapshot esistenti** acquisisce comunque la cartella corrente quando è selezionato il grafo locale.
 
-Per aggiungere SharePoint o Azure espandi **Collega e gestisci le fonti del progetto**. Salva il collegamento, seleziona la fonte, premi **Sincronizza** e **Salva riferimenti**; poi seleziona il suo grafo. La selezione delle fonti serve alla consultazione nella chat e a `/asis`; quella dei grafi determina gli input dei pulsanti di creazione nel pannello.
+Per aggiungere SharePoint o Azure espandi **Collega e gestisci le fonti del progetto**. Salva il collegamento, seleziona la fonte, premi **Sincronizza** e **Salva riferimenti**; poi seleziona il suo grafo. La selezione delle fonti serve alla consultazione nella chat e a `/documentazione-tecnica`; quella dei grafi determina gli input dei pulsanti di creazione nel pannello.
 
-Senza un progetto i pulsanti As-is e Grafi di conoscenza sono disabilitati; senza un grafo selezionato restano disabilitati soltanto i pulsanti di creazione AS-IS. La prima riga delle due modali mostra i file salvati per il progetto: un clic ne apre l’anteprima. Questa consultazione non richiede rigenerazione o registrazione del dossier. **Verifica citazioni e registra AS-IS** serve invece a renderlo ricercabile e riutilizzabile dagli agenti.
+Senza un progetto i pulsanti Documentazione tecnica e Grafi di conoscenza sono disabilitati; senza un grafo selezionato restano disabilitati soltanto i pulsanti di creazione documentazione tecnica. La prima riga delle due modali mostra i file salvati per il progetto: un clic ne apre l’anteprima. Questa consultazione non richiede rigenerazione o registrazione del dossier. **Verifica citazioni e registra documentazione tecnica** serve invece a renderlo ricercabile e riutilizzabile dagli agenti.
 
 ## Esempio: documentazione alla prima accensione
 
@@ -105,8 +105,8 @@ data/credentials.dpapi.json                 chiavi modello cifrate con DPAPI
 data/graphs/                               cache e grafi del workspace
 data/sessions/<id>/                        configurazione fissata per chat Pi
 data/pi-shell/                             configurazione di supporto Pi
-data/sources/                              collegamenti, snapshot e AS-IS registrati
-data/documentation/<id>/                    dossier AS-IS e fonti fissate
+data/sources/                              collegamenti, snapshot e documenti di documentazione tecnica registrati
+data/documentation/<id>/                    dossier di documentazione tecnica e fonti fissate
 data/benchmarks.sqlite                     registro benchmark
 data/benchmark-evaluations/                log delle valutazioni Inspect
 data/delegations/<batch>/batch.json         piano e stato delle deleghe

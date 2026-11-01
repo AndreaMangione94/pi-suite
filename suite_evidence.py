@@ -1,4 +1,5 @@
 """Local, versioned evidence indexes. No inference, network or source execution."""
+from suite_documentation_migration import is_documentation
 import contextlib
 import hashlib
 import html
@@ -237,7 +238,7 @@ def build_index(folder, manifest):
                  'source': source, 'snapshot': snapshot, 'document': doc['id'], 'path': doc['path'],
                  'startLine': max(1, int(start)), 'endLine': max(1, int(end)), 'textSha256': doc['textSha256'],
                  'citation': '[' + source + ':' + doc['id'] + ']', 'method': 'structural',
-                 'verification': 'extraction_validated', 'nature': 'derived_asis' if manifest.get('kind') == 'asis' else ('implementation' if Path(doc['path']).suffix.lower() in CODE_EXTENSIONS else 'document_statement'), **extra}
+                 'verification': 'extraction_validated', 'nature': 'derived_documentation' if is_documentation(manifest) else ('implementation' if Path(doc['path']).suffix.lower() in CODE_EXTENSIONS else 'document_statement'), **extra}
         if value['id'] not in node_ids:
             if len(nodes)>=MAX_NODES:raise ValueError('Grafo oltre il limite di nodi: restringi le fonti')
             nodes.append(value);node_ids[value['id']]=value

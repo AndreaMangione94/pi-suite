@@ -1,4 +1,5 @@
-"""Read-only connected sources and immutable, cited text snapshots for AS-IS."""
+"""Read-only connected sources and immutable, cited text snapshots for documentazione tecnica."""
+from suite_documentation_migration import is_documentation
 import base64
 import hashlib
 import io
@@ -83,7 +84,7 @@ class Sources:
         if not re.fullmatch('[a-f0-9]{32}',sid): raise ValueError('ID fonte non valido')
         old=next((s for s in sources if s['id']==sid),{})
         kind=data['kind']
-        if kind not in ('sharepoint-local','sharepoint-graph','azure-local','azure-remote'): raise ValueError('Tipo fonte non supportato')
+        if kind not in ('sharepoint-local','sharepoint-graph','azure-local','azure-remote','git-remote'): raise ValueError('Tipo fonte non supportato')
         s={'id':sid,'name':str(data.get('name','')).strip()[:150],'kind':kind}
         if not s['name']: raise ValueError('Inserisci un nome per la fonte')
         if kind.endswith('local'):
@@ -98,12 +99,12 @@ class Sources:
                 value=str(data.get(key,'')).strip()
                 if not value or len(value)>300 or '/' in value: raise ValueError('Drive ID e Folder Item ID sono richiesti')
                 s[key]=value
-        if kind.startswith('azure'):
+        if kind.startswith('azure') or kind=='git-remote':
             branch=str(data.get('branch','main'))
             if not re.fullmatch('[A-Za-z0-9_][A-Za-z0-9_./-]{0,199}',branch) or '..' in branch: raise ValueError('Branch non valido')
             s['branch']=branch
-            if kind=='azure-remote':
-                s['url']=https_url(data['url'],('dev.azure.com','visualstudio.com'))
+            if kind in ('azure-remote','git-remote'):
+                s['url']=https_url(data['url'],('dev.azure.com','visualstudio.com') if kind=='azure-remote' else None)
                 if urllib.parse.urlsplit(s['url']).query:raise ValueError('URL Azure senza query')
         if data.get('token'): s['secret']=self.protect(data['token'].strip())
         elif not data.get('clearSecret') and old.get('secret') and old.get('kind')==kind:s['secret']=old['secret']
@@ -116,7 +117,7 @@ class Sources:
     def _local(self,s):
         root=long_path(s['path'])
         for directory,dirs,files in os.walk(root,followlinks=False):
-            dirs[:]=sorted(d for d in dirs if d not in SKIP and not (Path(directory)/d).is_symlink() and not (Path(directory)/d).resolve().is_relative_to(self.root.resolve()))
+            dirs[:]=sorted(d for d in dirs if not d.startswith('.') and d not in SKIP and not (Path(directory)/d).is_symlink() and not (Path(directory)/d).resolve().is_relative_to(self.root.parent.resolve()))
             for name in sorted(files):
                 if name.lower() in PRIVATE_CONFIG:continue
                 file=Path(directory)/name
@@ -131,7 +132,7 @@ class Sources:
             value=base64.b64encode((':'+self.protect(s['secret'],True)).encode()).decode()
             env.update(GIT_CONFIG_COUNT='2',GIT_CONFIG_KEY_0='http.extraHeader',GIT_CONFIG_VALUE_0='Authorization: Basic '+value,
                        GIT_CONFIG_KEY_1='http.followRedirects',GIT_CONFIG_VALUE_1='false')
-        if s['kind']=='azure-remote':
+        if s['kind'] in ('azure-remote','git-remote'):
             repo=self.root/s['id']/'mirror.git'
             if not repo.exists():self._git(['clone','--bare','--',s['url'],str(repo)],env)
             self._git(['-C',str(repo),'fetch','--no-tags','origin',s['branch']],env)
@@ -178,7 +179,7 @@ class Sources:
         if not s:raise ValueError('Fonte non trovata')
         snapshot=uuid.uuid4().hex;folder=self.root/sid/snapshot;folder.mkdir(parents=True)
         documents=[];excluded=[];total=0;extracted_total=0;self._revision='';code={}
-        iterator=self._azure(s) if s['kind'].startswith('azure') else self._graph(s) if s['kind']=='sharepoint-graph' else self._local(s)
+        iterator=self._azure(s) if s['kind'].startswith('azure') or s['kind']=='git-remote' else self._graph(s) if s['kind']=='sharepoint-graph' else self._local(s)
         for index,(name,raw,origin) in enumerate(iterator):
             if Path(name).name.lower() in PRIVATE_CONFIG:
                 excluded.append({'path':name,'reason':'archivio credenziali escluso'});continue
@@ -223,8 +224,10 @@ class Sources:
         return manifest
     def bundle(self,ids,snapshots=None):
         connections={s['id']:s for s in self.connections()};result=[]
+        registry=self.root/'documentation-registry.json'
+        derived={s['source'] for s in json.loads(registry.read_text(encoding='utf-8'))} if registry.exists() else set()
         for sid in ids:
-            if sid not in connections:raise ValueError('Seleziona fonti esistenti')
+            if sid not in connections and sid not in derived:raise ValueError('Seleziona fonti esistenti')
             pointer=self.root/sid/'current.json'
             if not pointer.exists():raise ValueError('Sincronizza prima tutte le fonti selezionate')
             snapshot=(snapshots or {}).get(sid) or json.loads(pointer.read_text())['snapshot'];folder=self.root/sid/snapshot
@@ -233,7 +236,7 @@ class Sources:
         if not result:raise ValueError('Seleziona almeno una fonte sincronizzata')
         if not any(s['manifest']['documents'] for s in result):raise ValueError('Le fonti selezionate non contengono testo utilizzabile: controlla le esclusioni')
         return result
-    def automatic_asis(self,ids,objective='',progress=None):
+    def automatic_documentation(self,ids,objective='',progress=None):
         ids=list(dict.fromkeys(ids))
         known={s['id'] for s in self.connections()}
         if not ids or any(sid not in known for sid in ids):raise ValueError('Seleziona almeno una fonte configurata valida')
@@ -242,8 +245,8 @@ class Sources:
             if progress:progress('Sincronizzazione fonte '+sid)
             snapshots[sid]=self.sync(sid)['id']
         if progress:progress('Preparazione incarico e dossier')
-        return self.prepare_asis(ids,objective,snapshots)
-    def prepare_asis(self,ids,objective,snapshots=None,document_graph=None):
+        return self.prepare_documentation(ids,objective,snapshots)
+    def prepare_documentation(self,ids,objective,snapshots=None,document_graph=None):
         bundle=self.bundle(ids,snapshots)
         bundle.sort(key=lambda item:not any(Path(doc['path']).suffix.lower() not in CODE_EXTENSIONS for doc in item['manifest']['documents']))
         # Every entry point must finish graph/index validation BEFORE creating a ready dossier.
@@ -253,12 +256,12 @@ class Sources:
         rid=uuid.uuid4().hex;workspace=self.root.parent/'documentation'/rid;workspace.mkdir(parents=True)
         write(workspace/'FONTI.json',bundle)
         if document_graph:write(workspace/'GRAFO-DOCUMENTALE.json',document_graph)
-        brief='# Incarico AS-IS e documentazione\n\n## Obiettivo\n'+str(objective or 'Ricostruisci lo stato attuale del sistema dalle fonti collegate.')+'\n\n## Fonti congelate\n'
+        brief='# Incarico documentazione tecnica e documentazione\n\n## Obiettivo\n'+str(objective or 'Ricostruisci lo stato attuale del sistema dalle fonti collegate.')+'\n\n## Fonti congelate\n'
         for s in bundle:
             m=s['manifest'];brief+=f'- {s["name"]}: snapshot {s["snapshot"]}, data {m["createdAt"]}, commit {m["revision"] or "non disponibile"}, {len(m["documents"])} documenti, {len(m["excluded"])} esclusi.\n'
-        brief+='\n## Consegne\nCrea AS-IS.md, ARCHITETTURA.md, FLUSSI-E-INTERFACCE.md, OPERATIVITA.md, LACUNE-E-DOMANDE.md e MATRICE-FONTI.md. I grafi e gli indici sono stati verificati per questi snapshot. Per creare l’AS-IS parti dal grafo documentale semantico salvato: consulta document_graph, poi usa knowledge_search e knowledge_trace per ricostruire sezioni, requisiti, processi e riferimenti, quindi leggi le evidenze originali con read_evidence. Solo dopo consulta il grafo del codice con connected_graph o graph_query per confrontare l’implementazione e rilevare differenze o lacune. Trasmetti questa priorità anche negli incarichi dei subagenti. Se il corpus contiene solo codice, dichiarane l’assenza di documentazione e procedi con le evidenze disponibili. La vicinanza nel grafo non prova il significato delle relazioni e non sostituisce le citazioni degli originali. Leggi soprattutto documenti e codice ORIGINALI con read_evidence (mode full, section o passage), anche integralmente quando utile; rispetta nextOffset e segnala parti non lette o escluse. Puoi anche usare connected_sources e read_connected_source. Cita ogni affermazione sostanziale con [sourceId:documentId] e, per il codice, percorsi e simboli/righe. Distingui stato attuale, ipotesi e TO-BE; segnala contraddizioni fra documenti e codice senza risolverle per supposizione. Documenta esclusioni e testi troncati. Se è selezionato un modello Subagenti, delega sempre il lavoro operativo con incarichi Markdown precisi; altrimenti svolgilo direttamente; confronta le consegne prima di comporre il dossier. Non presentare questo brief come AS-IS gia completato. Alla fine usa register_asis per validare le citazioni e salvare una versione consultabile, senza attribuirle approvazione umana o verifica semantica automatica.\n'
-        (workspace/'INCARICO-AS-IS.md').write_text(brief,encoding='utf-8')
-        return {'id':rid,'workspace':str(workspace),'sources':bundle,'documentGraph':document_graph,'prompt':'Leggi INCARICO-AS-IS.md e FONTI.json. Consulta prima il grafo documentale semantico salvato con document_graph e leggi i documenti originali, poi confronta il grafo del codice. Usa la skill as-is-documentation e le fonti collegate per produrre il dossier richiesto, delegando quando utile con incarichi Markdown precisi.','state':'ready_for_orchestrator'}
+        brief+='\n## Consegne\nProduci DOCUMENTAZIONE-TECNICA.md dettagliato e autosufficiente con architettura, processi, dati, interfacce, operatività, limiti e citazioni. Crea anche ARCHITETTURA.md, FLUSSI-E-INTERFACCE.md, OPERATIVITA.md, LACUNE-E-DOMANDE.md e MATRICE-FONTI.md. Gli indici delle fonti sono fissati per questi snapshot; i grafi eventualmente selezionati sono nel contesto della chat. Per creare la documentazione tecnica, se sono selezionati grafi documentali semantici consulta document_graph, poi usa knowledge_search e knowledge_trace per ricostruire sezioni, requisiti, processi e riferimenti, quindi leggi le evidenze originali con read_evidence. Solo dopo consulta il grafo del codice con connected_graph o graph_query per confrontare l’implementazione e rilevare differenze o lacune. Trasmetti questa priorità anche negli incarichi dei subagenti. Se il corpus contiene solo codice, dichiarane l’assenza di documentazione e procedi con le evidenze disponibili. La vicinanza nel grafo non prova il significato delle relazioni e non sostituisce le citazioni degli originali. Leggi soprattutto documenti e codice ORIGINALI con read_evidence (mode full, section o passage), anche integralmente quando utile; rispetta nextOffset e segnala parti non lette o escluse. Puoi anche usare connected_sources e read_connected_source. Cita ogni affermazione sostanziale con [sourceId:documentId] e, per il codice, percorsi e simboli/righe. Distingui stato attuale, ipotesi e TO-BE; segnala contraddizioni fra documenti e codice senza risolverle per supposizione. Documenta esclusioni e testi troncati. Se è selezionato un modello Subagenti, delega sempre il lavoro operativo con incarichi Markdown precisi; altrimenti svolgilo direttamente; confronta le consegne prima di comporre il dossier. Non presentare questo brief come documentazione tecnica già completata. Alla fine usa register_documentation per validare le citazioni e salvare una versione consultabile, senza attribuirle approvazione umana o verifica semantica automatica.\n'
+        (workspace/'INCARICO-DOCUMENTAZIONE-TECNICA.md').write_text(brief,encoding='utf-8')
+        return {'id':rid,'workspace':str(workspace),'sources':bundle,'documentGraph':document_graph,'prompt':'Leggi INCARICO-DOCUMENTAZIONE-TECNICA.md e FONTI.json. Consulta gli eventuali grafi selezionati con document_graph, leggi gli originali e confronta il codice del progetto. Usa la skill documentazione-tecnica e le fonti collegate per produrre il dossier richiesto, delegando quando utile con incarichi Markdown precisi.','state':'ready_for_orchestrator'}
 
     def index_sources(self,ids):
         return [{'source':r['source'],'snapshot':r['snapshot'],**ensure_index(r['directory'],r['manifest'])} for r in self.bundle(ids)]
@@ -269,7 +272,7 @@ class Sources:
             index=Path(item['directory'])/'evidence.json'
             if index.exists():item['indexVersion']=json.loads(index.read_text(encoding='utf-8'))['fingerprint']
             item['freshness']='pinned'
-        for registered in self.asis_registry():
+        for registered in self.documentation_registry():
             if not registered['dependencies'] or not all(any(r['source']==d['source'] for r in refs) for d in registered['dependencies']):continue
             folder=self.root/registered['source']/registered['snapshot'];manifest=json.loads((folder/'manifest.json').read_text(encoding='utf-8'))
             index=folder/'evidence.json'
@@ -278,7 +281,7 @@ class Sources:
                          'freshness':'current_for_selection' if all(any(r['source']==d['source'] and (r['snapshot']==d['snapshot'] or d.get('contentFingerprint') and r['manifest'].get('contentFingerprint')==d['contentFingerprint']) for r in refs) for d in registered['dependencies']) else 'needs_revalidation'})
         return refs
 
-    def register_asis(self,workspace):
+    def register_documentation(self,workspace):
         workspace=Path(workspace).resolve();allowed=(self.root.parent/'documentation').resolve()
         if not workspace.is_relative_to(allowed) or workspace==allowed:raise ValueError('Registra soltanto un dossier preparato dalla suite')
         refs=json.loads((workspace/'FONTI.json').read_text(encoding='utf-8'))
@@ -289,9 +292,9 @@ class Sources:
             for value in sorted(graph_refs):
                 ref=json.loads(value);graph=load_graph(self.root.parent,ref,refs)
                 document_graphs.append({'project':ref['project'],'version':ref['version'],'semanticFingerprint':graph['semanticFingerprint']})
-        names=('AS-IS.md','ARCHITETTURA.md','FLUSSI-E-INTERFACCE.md','OPERATIVITA.md','LACUNE-E-DOMANDE.md','MATRICE-FONTI.md')
+        names=('DOCUMENTAZIONE-TECNICA.md','ARCHITETTURA.md','FLUSSI-E-INTERFACCE.md','OPERATIVITA.md','LACUNE-E-DOMANDE.md','MATRICE-FONTI.md')
         files=[workspace/name for name in names if (workspace/name).is_file()]
-        if not files or not (workspace/'AS-IS.md').is_file():raise ValueError('AS-IS.md non ancora prodotto')
+        if not files or not (workspace/'DOCUMENTAZIONE-TECNICA.md').is_file():raise ValueError('DOCUMENTAZIONE-TECNICA.md non ancora prodotto')
         texts=[];checks=[]
         for file in files:
             if file.is_symlink() or file.stat().st_size>MAX_FILE:raise ValueError('Documento derivato non valido')
@@ -307,20 +310,20 @@ class Sources:
                 write(folder/(docid+'.map.json'),{k:v for k,v in extraction.items() if k!='text'})
                 documents.append({'id':docid,'path':name,'sha256':sha(raw),'textSha256':sha(raw),'truncated':False,
                                   'original':'originals/'+docid+'.bin','mapSha256':sha((folder/(docid+'.map.json')).read_bytes())})
-            manifest={'id':snapshot,'source':sid,'name':'AS-IS '+workspace.name,'kind':'asis','createdAt':stamp(),'revision':fingerprint,
+            manifest={'id':snapshot,'source':sid,'name':'documentazione tecnica '+workspace.name,'kind':'documentation','createdAt':stamp(),'revision':fingerprint,
                       'documents':documents,'excluded':[],'limits':{'semanticValidation':False},
-                      'dependencies':[{'source':r['source'],'snapshot':r['snapshot'],'contentFingerprint':r['manifest'].get('contentFingerprint')} for r in refs if r['manifest'].get('kind')!='asis'],
+                      'dependencies':[{'source':r['source'],'snapshot':r['snapshot'],'contentFingerprint':r['manifest'].get('contentFingerprint')} for r in refs if not is_documentation(r['manifest'])],
                       'citationValidation':checks,'reviewStatus':'unreviewed','documentGraphs':document_graphs}
             write(folder/'manifest.json',manifest)
         info=ensure_index(folder)
         write(self.root/sid/'current.json',{'snapshot':snapshot})
-        registry_path=self.root/'asis-registry.json';registry=json.loads(registry_path.read_text(encoding='utf-8')) if registry_path.exists() else []
+        registry_path=self.root/'documentation-registry.json';registry=json.loads(registry_path.read_text(encoding='utf-8')) if registry_path.exists() else []
         registry=[r for r in registry if r['source']!=sid]+[{'source':sid,'snapshot':snapshot,'workspace':str(workspace),'dependencies':load_dependencies(folder),'documentGraphs':document_graphs,'registeredAt':stamp()}]
         write(registry_path,registry)
         return {'source':sid,'snapshot':snapshot,'indexVersion':info['fingerprint'],'documents':len(files),'reviewStatus':'unreviewed','validation':'Citazioni e integrita, non approvazione semantica'}
 
-    def asis_registry(self):
-        file=self.root/'asis-registry.json';registry=json.loads(file.read_text(encoding='utf-8')) if file.exists() else []
+    def documentation_registry(self):
+        file=self.root/'documentation-registry.json';registry=json.loads(file.read_text(encoding='utf-8')) if file.exists() else []
         for item in registry:
             item['freshness']='current'
             if item.get('documentGraphs'):

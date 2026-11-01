@@ -1,3 +1,4 @@
+import {isTechnicalDocumentation} from './documentation-compat.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -38,7 +39,7 @@ export function normalizeEvidenceScope(task,bundle=[]){
     const {ref,doc}=resolveDocument(bundle,value);
     return {source:ref.source,snapshot:ref.snapshot,indexVersion:ref.indexVersion,document:doc.id,path:doc.path,textSha256:doc.textSha256};
   });
-  const sourceIds=[...new Set(raw.sourceIds===undefined?(initialDocuments.length?initialDocuments.map(d=>d.source):bundle.filter(r=>r.manifest?.kind!=='asis').map(r=>r.source)):array(raw.sourceIds,'sourceIds',100))];
+  const sourceIds=[...new Set(raw.sourceIds===undefined?(initialDocuments.length?initialDocuments.map(d=>d.source):bundle.filter(r=>!isTechnicalDocumentation(r.manifest)).map(r=>r.source)):array(raw.sourceIds,'sourceIds',100))];
   for(const source of sourceIds)if(typeof source!=='string'||!/^[a-f0-9]{32}$/.test(source)||!bundle.some(ref=>ref.source===source))throw Error('Fonte iniziale fuori dal corpus fissato');
   if(initialDocuments.some(doc=>!sourceIds.includes(doc.source)))throw Error('I documenti iniziali devono appartenere alle fonti iniziali indicate');
   const graphNodes=[...new Set(array(raw.graphNodes||[],'graphNodes',40).map(n=>field(n,'graphNodes',200)))];

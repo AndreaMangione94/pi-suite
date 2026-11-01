@@ -1,47 +1,43 @@
 # Fonti del progetto, SharePoint e Azure — Pi Suite 0.6.5
 
-Guida aggiornata alla distribuzione Windows del 28 ottobre 2026.
+Guida aggiornata alla distribuzione Windows del 1 novembre 2026.
 
-Vedi anche [Conoscenza e grafi](GUIDA-CONOSCENZA-E-GRAFI.md) per ricerca opzionale, lettura completa, registrazione AS-IS e relazioni semantiche revisionabili.
+Vedi anche [Conoscenza e grafi](GUIDA-CONOSCENZA-E-GRAFI.md) per ricerca opzionale, lettura completa, registrazione documentazione tecnica e relazioni semantiche revisionabili.
 
-Prima di ogni preparazione AS-IS la suite verifica e aggiorna i grafi e gli indici degli snapshot scelti, riusando le estrazioni valide. Un errore impedisce l’avvio dei modelli; una consultazione normale non aggiorna nulla.
+## Progetto, grafi e documentazione tecnica
 
-## Avvio con un comando o un pulsante
+L’icona **Progetto** apre un menu per scegliere un progetto salvato, crearne uno nuovo o tornare al contesto pulito. Le icone **Grafi** e **Documentazione tecnica** si trovano nella stessa sezione. Il menu Grafi mostra gli artefatti con icona e label: fai clic per includerli o escluderli dal contesto e usa la × per rimuoverli dalla raccolta. Se non sono presenti grafi, l’unica azione è **Genera grafo**: analizza la cartella del progetto, anche senza Git, per codice Python, JavaScript o TypeScript supportato da Graphify.
 
-Dopo aver configurato una volta le connessioni e i modelli, puoi automatizzare i preparativi e avviare il lavoro in chat:
+Nel menu Documentazione tecnica seleziona i documenti già prodotti da rendere consultabili. **Aggiungi** collega una cartella locale o di rete, SharePoint tramite Microsoft Graph, Azure DevOps o un repository Git HTTPS. Le fonti aggiunte vengono acquisite alla prima generazione; non occorre costruire prima un grafo.
+
+**Genera documentazione tecnica** è abilitato solo dopo aver selezionato almeno una fonte tramite **documentazione tecnica → Aggiungi**; il progetto e i grafi da soli non lo abilitano. Apre il form per nome, obiettivo e aggiornamento delle fonti. Il progetto è sempre incluso e viene acquisito dal filesystem corrente. Gli eventuali grafi selezionati e i documenti di documentazione tecnica selezionati accompagnano il contesto della richiesta. Le scelte si salvano automaticamente.
+
+L’orchestratore usa i modelli configurati per produrre un **DOCUMENTAZIONE-TECNICA.md dettagliato e autosufficiente**. Con il profilo Subagenti configurato delega analisi e stesura, controlla i risultati e integra le proposte; senza quel profilo svolge direttamente il lavoro. La preparazione di INCARICO-DOCUMENTAZIONE-TECNICA.md e FONTI.json è solo l’avvio della generazione.
+
+Dopo la revisione, `register_documentation` verifica le citazioni e genera con il modello il **grafo semantico del Markdown finale**. Il grafo viene aggiunto alla raccolta Grafi e preselezionato; il documento diventa consultabile nel menu Documentazione tecnica. Un errore nella generazione semantica viene segnalato e non pubblica un grafo incompleto. La registrazione non attesta approvazione umana.
+
+## Consultazione e aggiornamento
+
+**Apri chat Pi** conserva le selezioni in un contesto della sessione, disponibile anche ai subagenti. `graph-explorer` viene caricata soltanto quando almeno un grafo è selezionato; `lettura-documentazione-tecnica` soltanto quando ci sono documenti di documentazione tecnica selezionati. `read_documentation` permette ricerca deterministica, righe numerate e paginazione; i grafi semantici si consultano con `document_graph`, quelli del codice con `graph_query` e `connected_graph`.
+
+Alla fine di una richiesta, dopo l’integrazione delle modifiche da parte dell’orchestratore o del modello singolo, la suite confronta i contenuti con l’inizio della richiesta e rigenera i grafi già presenti quando necessario. Aggiorna anche i riferimenti della chat mantenendo gli stessi identificativi e le selezioni esplicite. Una semplice consultazione senza modifiche non rigenera i grafi.
+
+## Comando nella chat
 
 ```text
-/asis
-/asis Ricostruisci il ciclo ordine confrontando SharePoint, backend, frontend e database
+/documentazione-tecnica
+/documentazione-tecnica Ricostruisci il ciclo ordine confrontando documenti, backend, frontend e database
 ```
 
-Il comando aggiorna le fonti, crea un nuovo dossier e invia l’incarico all’orchestratore nella chat Pi corrente, senza aprire una seconda finestra. Se la chat ha già un dossier attivo, ne conserva la selezione delle fonti. In un progetto registrato, anche da una sua sottocartella, usa invece le fonti salvate in **Grafi di conoscenza** e, se non scrivi un nuovo obiettivo, riusa quello salvato. Se non ci sono fonti salvate, chiede di selezionarle nel pannello. Per produrre un grafo documentale semantico occorre un progetto registrato a cui associare le fonti. Il contesto del dossier viene salvato nella sessione Pi e usato anche dai successivi subagenti. `/asis --help` mostra queste regole senza avviare nulla. Per scegliere un sottoinsieme diverso usa il pannello.
+Il comando avvia un nuovo dossier nella chat corrente. Riusa le fonti del dossier attivo oppure il progetto e le fonti scelte nel pannello. Non richiede un grafo preesistente. Anche `prepare_documentation` usa il progetto selezionato. La generazione richiede un modello disponibile e può comportare costi API; le fonti lette vengono inviate ai provider configurati.
 
-Dal browser apri **As-is**. La modale contiene **I miei AS-IS**, **Crea un AS-IS** e **Esplora l’AS-IS**. La creazione è senza card: inserisci il nome, scegli almeno un grafo di riferimento e descrivi obiettivo e perimetro. La spunta **Aggiorna le fonti prima della generazione** sceglie se sincronizzare le fonti o usare gli snapshot disponibili. **Genera AS-IS** è l’unica CTA di creazione; verifica i grafi, prepara il dossier e apre la chat per scriverlo. Lo stato dell’operazione rimane nella modale.
+I dossier conservano progetto e nome in `PROGETTO.json`, corpus in `FONTI.json` e artefatti selezionati in `CONTESTO.json`. `FINALIZZATO.json` identifica il Markdown che ha completato anche la generazione del grafo. I documenti rimangono in `data/documentation/<id>/`; la consultazione è limitata a file di 5 MB.
 
-Nome, grafi, obiettivo e opzione di aggiornamento vengono salvati automaticamente. Non ci sono CTA inferiori **Chiudi** o **Salva riferimenti**; la X in alto chiude la modale. Gli indici espliciti delle fonti non sostituiscono il grafo documentale semantico. Senza grafi disponibili **Genera AS-IS** è disabilitato: apri **Grafi di conoscenza** per crearne uno con **Genera grafo**.
+## Compatibilità dei dati salvati
 
-I Markdown prodotti dalla chat vengono salvati nella cartella del dossier e compaiono automaticamente in **I miei AS-IS**, con nome e data, anche se la modale resta aperta. Il clic apre il documento in **Esplora l’AS-IS**. La consultazione è limitata a file di 5 MB e non include `INCARICO-AS-IS.md`. La presenza nella raccolta non richiede la registrazione e non attesta che il dossier sia completo o verificato.
+La rinomina aggiorna automaticamente preferenze, selezioni, nomi dei file del dossier e skill abilitate. Il documento principale è `DOCUMENTAZIONE-TECNICA.md`; i comandi sono `/documentazione-tecnica` e `/documentazione-tecnica-register`, con le skill `documentazione-tecnica` e `lettura-documentazione-tecnica`.
 
-La sincronizzazione è eseguita prima dell’avvio del modello. Se una fonte fallisce, non viene avviato un dossier parziale; le fonti già aggiornate mantengono il loro nuovo snapshot. L’esecuzione richiede credenziali valide e può consumare API modello quando parte la scrittura. Non comprende login Microsoft automatico, pubblicazione su SharePoint o esecuzioni programmate. L’analisi e la verifica restano lavoro del modello: il comando automatizza l’avvio, non garantisce la correttezza dell’AS-IS.
-
-## Usare soltanto la cartella del progetto
-
-Non servono connessioni SharePoint o Azure. In **Grafi di conoscenza**, scegli **Grafo del codice** o **Grafo documentale**, il nome e la cartella locale, poi premi **Genera grafo**. Il collegamento alla fonte e il grafo vengono salvati automaticamente. Apri **As-is**, scegli i grafi da usare e premi **Genera AS-IS**. I nuovi grafi del codice conservano lo snapshot acquisito; per aggiornarlo seleziona la spunta di aggiornamento delle fonti. I vecchi grafi locali del progetto acquisiscono la cartella corrente anche quando la spunta è disattivata.
-
-## Flusso completo con fonti collegate
-
-1. Configura un modello disponibile per la chat; il profilo Subagenti è facoltativo e, se selezionato, rende obbligatoria la delega.
-2. Apri **Grafi di conoscenza**, scegli il tipo di grafo, il nome e l’origine locale o remota; compila i campi dell’integrazione se necessari.
-3. Premi **Genera grafo**. Il grafo e il collegamento alla fonte vengono salvati automaticamente al buon esito.
-4. Apri **As-is**, inserisci il nome, seleziona i grafi e descrivi il perimetro. Le impostazioni si salvano automaticamente.
-5. Scegli se aggiornare le fonti e premi **Genera AS-IS**. La suite prepara INCARICO-AS-IS.md e FONTI.json e apre Pi con la richiesta di scrivere il dossier.
-6. L’orchestratore esplora prima il grafo documentale e gli originali, poi confronta il codice. Se è configurato un modello Subagenti, delega il lavoro operativo con incarichi Markdown.
-7. I documenti prodotti sono salvati automaticamente e visibili in **I miei AS-IS**; selezionali per consultarli in **Esplora l’AS-IS**.
-
-La preparazione del dossier non produce da sola un AS-IS finito: prepara input e incarico. La generazione richiede un modello disponibile nella chat con tool calling e può comportare costi API. I testi letti vengono inviati ai provider selezionati. Alla fine l’incarico chiede all’orchestratore di usare `register_asis` per verificare tecnicamente le citazioni e rendere il dossier ricercabile dagli agenti; questo passaggio è distinto dal salvataggio dei documenti su disco.
-
-I dossier preparati dal pannello conservano in `PROGETTO.json` nome, progetto e grafi selezionati; `FONTI.json` fissa gli snapshot e gli indici usati. La chat e `/asis` usano le fonti collegate automaticamente dai grafi; il pannello AS-IS usa i grafi selezionati nel proprio form.
+Gli snapshot delle evidenze e i grafi versionati conservano contenuti e hash originali, così le citazioni storiche restano verificabili. `documentation-compat.json` contiene soltanto le corrispondenze usate per leggere e migrare i dati delle versioni precedenti.
 
 ## SharePoint: cartella sincronizzata
 
@@ -94,7 +90,7 @@ Il genitore può delegare la lettura con `evidenceScope`: assegna domande, fonti
 
 ## Consegne del dossier
 
-L’incarico iniziale chiede AS-IS.md, ARCHITETTURA.md, FLUSSI-E-INTERFACCE.md, OPERATIVITA.md, LACUNE-E-DOMANDE.md e MATRICE-FONTI.md. Puoi adattarle in chat. La skill as-is-documentation è inclusa e abilitata.
+L’incarico iniziale chiede DOCUMENTAZIONE-TECNICA.md, ARCHITETTURA.md, FLUSSI-E-INTERFACCE.md, OPERATIVITA.md, LACUNE-E-DOMANDE.md e MATRICE-FONTI.md. Puoi adattarle in chat. La skill documentazione-tecnica è inclusa e abilitata.
 
 Le affermazioni sostanziali devono riportare citazioni `[sourceId:documentId]`, percorso e righe/simboli pertinenti. La matrice collega sezioni, evidenze, hash, data e commit. Contraddizioni fra specifiche e codice restano esplicite. Informazioni non provate, ambiente di produzione e proposte future non devono essere presentati come stato attuale verificato.
 

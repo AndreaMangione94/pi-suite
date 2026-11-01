@@ -1,4 +1,5 @@
 """JSON stdin bridge for local evidence tools; no model-supplied paths or SQL."""
+from suite_documentation_migration import is_documentation
 import json
 import sys
 from pathlib import Path
@@ -26,19 +27,23 @@ def main():
     elif action=='document_graph':
         from suite_document_graph import query_graph
         refs={json.dumps(r['documentGraph'],sort_keys=True) for r in bundle if r.get('documentGraph')}
-        if len(refs)>1:raise ValueError('Il corpus contiene versioni documentali incompatibili')
-        result=query_graph(home,json.loads(next(iter(refs))),args,bundle) if refs else {'available':False,'nodes':[],'edges':[],'message':'Crea prima il grafo documentale semantico del progetto in Grafi di conoscenza.'}
+        results=[query_graph(home,json.loads(ref),args,bundle) for ref in sorted(refs)]
+        result=results[0] if len(results)==1 else {'graphs':results,'available':bool(results)}
     elif action=='propose_relation':result=propose_relation(home,bundle,args)
-    elif action in ('prepare_asis','register_asis'):
+    elif action in ('prepare_documentation','register_documentation'):
         from suite import Suite
         app=Suite(home)
-        if action=='register_asis':result=app.sources.register_asis(request['workspace'])
+        if action=='register_documentation':result=app.finalize_documentation(request['workspace'])
         else:
-            ids=args.get('sources') or [r['source'] for r in bundle if r.get('manifest',{}).get('kind')!='asis']
-            if not ids:ids=[s['id'] for s in app.sources.connections()]
-            graph_ref=None if args.get('sources') else next((r['documentGraph'] for r in bundle if r.get('documentGraph')),None)
+            import suite_workspace
             project=app.project_for_workspace(request['workspace']) if request.get('workspace') else None
-            prepared=app.prepare_documented_asis(ids,args.get('objective',''),args.get('refresh',True),project or (graph_ref or {}).get('project'),graph_ref)
+            ids=args.get('sources') or [r['source'] for r in bundle if not is_documentation(r.get('manifest',{}))]
+            if project:
+                prefs=suite_workspace.project_record(app,project).get('workspace',{}).get('documentation',{})
+                ids=suite_workspace.prepare_sources(app,{'project':project,'graphs':prefs.get('graphs',[]),'sources':ids or prefs.get('sources',[])},'prepare-documentation')
+            if not ids:raise ValueError('Seleziona un progetto o delle fonti per generare documentazione tecnica.')
+            graph_ref=None if args.get('sources') else next((r['documentGraph'] for r in bundle if r.get('documentGraph')),None)
+            prepared=app.prepare_technical_documentation(ids,args.get('objective',''),args.get('refresh',True),project or (graph_ref or {}).get('project'),graph_ref)
             result={k:v for k,v in prepared.items() if k!='sources'}
     else:raise ValueError('Operazione non supportata')
     print(json.dumps(result,ensure_ascii=False))

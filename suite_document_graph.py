@@ -1,4 +1,5 @@
 """Project document graphs: explicit extraction, bounded LLM synthesis and pinned versions."""
+from suite_documentation_migration import is_documentation, is_primary_document
 import json
 import contextlib
 import re
@@ -98,11 +99,12 @@ def query_graph(home, ref, args, bundle=None):
             'reading':'Grafo documentale finale: relazioni esplicite e inferenze LLM con evidenze. Apri gli originali con read_evidence.'}
 
 
-def document_refs(bundle):
+def document_refs(bundle, include_documentation=False):
     refs=[]
     for ref in validate_bundle(bundle):
-        if ref['manifest'].get('kind')=='asis':continue
+        if is_documentation(ref['manifest']) and not include_documentation:continue
         documents=[d for d in ref['manifest']['documents'] if Path(d['path']).suffix.lower() not in CODE_EXTENSIONS]
+        if is_documentation(ref['manifest']):documents=[d for d in documents if is_primary_document(d['path'])]
         if documents:refs.append((ref,documents))
     return refs
 
@@ -120,11 +122,12 @@ def chunks(text, maximum):
 
 
 class DocumentGraphBuilder:
-    def __init__(self, home, project, bundle, model, complete, directory, progress=None, batch_chars=24000):
+    def __init__(self, home, project, bundle, model, complete, directory, progress=None, batch_chars=24000, include_documentation=False):
         self.home=Path(home);self.project=project;self.complete=complete;self.model=model
         self.directory=local_path(directory);self.directory.mkdir(parents=True,exist_ok=True)
         self.progress=progress or (lambda message:None);self.batch_chars=max(1000,int(batch_chars))
-        self.refs=document_refs(bundle)
+        self.refs=document_refs(bundle,include_documentation)
+        self.publish_current=not include_documentation
         if not self.refs:raise ValueError('Le fonti selezionate non contengono documenti da analizzare')
         self.documents={};self.document_notes={};self.nodes={};self.edges={};self.aliases={};self.dependencies=[];self.coverage=[];self.calls=[];total_bytes=0
         for ref, documents in self.refs:
@@ -343,5 +346,5 @@ class DocumentGraphBuilder:
         graph['fingerprint']=sha(canonical(graph))
         ref={'project':self.project,'version':graph['fingerprint'],'semanticFingerprint':graph['semanticFingerprint'],'createdAt':graph['createdAt'],'stats':graph['stats'],'model':self.model}
         save(graph_path(self.home,ref),graph)
-        save(graph_root(self.home,self.project)/'current.json',ref)
+        if self.publish_current:save(graph_root(self.home,self.project)/'current.json',ref)
         return graph

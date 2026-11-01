@@ -25,13 +25,14 @@ from suite_graph import build_graph, project_files, scan, fingerprint, query_gra
 import suite_byok as byok
 import suite_workspace as workspace
 import suite_document_graph as document_graph
+from suite_documentation_migration import migrate_home, LEGACY
 from suite_evidence import ensure_index, local_path
 
 from suite_folder_picker import choose_folder
 
 ROOT = Path(__file__).resolve().parent
 APIS = ('openai-completions','openai-responses','anthropic-messages','google-generative-ai')
-OPERATIONS = ('generate-graph','graph','probe','sync-source','document-graphs','prepare-asis','auto-asis','index-sources','register-asis')
+OPERATIONS = ('generate-graph','graph','probe','sync-source','document-graphs','prepare-documentation','auto-documentation','index-sources','register-documentation')
 
 def read_json(path):
     return json.loads(Path(path).read_text(encoding='utf-8-sig'))
@@ -99,6 +100,7 @@ def skills(extra=None):
     paths=list((ROOT/'skills').glob('*/SKILL.md'))
     if extra: paths+=list(Path(extra).glob('*/SKILL.md'))
     for p in sorted(paths):
+        if p.parent.name in LEGACY['skills']:continue
         content=p.read_text(encoding='utf-8')
         description=re.search(r'^description: (.+)$',content,re.M)
         result.append({'name':p.parent.name,'description':description.group(1) if description else p.parent.name,'content':content})
@@ -120,6 +122,7 @@ class Suite:
         self.settings=read_json(self.settings_path) if self.settings_path.exists() else {
             'providers':[],'roles':{},'enabledSkills':[s['name'] for s in skills()],
             'maxCalls':24,'maxParallelWorkers':2,'projects':[]}
+        migrate_home(self.home,self.settings,save_json)
         # Add the new bundled parent skill once, preserving later user opt-outs.
         if self.settings.get('suiteSchema',0)<2:
             if 'pi-subagents' not in self.settings['enabledSkills']:
@@ -127,7 +130,7 @@ class Suite:
             self.settings['suiteSchema']=2
         previous=self.home/'last-job.json'
         if self.settings.get('suiteSchema',0)<3:
-            if 'as-is-documentation' not in self.settings['enabledSkills']:self.settings['enabledSkills'].append('as-is-documentation')
+            if 'documentazione-tecnica' not in self.settings['enabledSkills']:self.settings['enabledSkills'].append('documentazione-tecnica')
             self.settings['suiteSchema']=3
         self.byok=byok.Store(self.home,protect)
         self.settings.update(self.byok.load_or_migrate(self.settings))
@@ -140,6 +143,11 @@ class Suite:
                 self.job.update(state='interrupted',error='Il pannello è stato riavviato. Controlla il risultato prima di ripetere l’operazione.')
 
     def public_settings(self):
+        # Chat tools publish workspace selections from a separate Python process.
+        if self.settings_path.exists():
+            disk={p['id']:p for p in read_json(self.settings_path).get('projects',[])}
+            for project in self.settings['projects']:
+                if project['id'] in disk:project['workspace']=disk[project['id']].get('workspace',{})
         result=json.loads(json.dumps(self.settings))
         for p in result['providers']:
             p.pop('encryptedKey',None)
@@ -366,12 +374,16 @@ class Suite:
         for profile in self.settings['roles'].values():
             if (profile['provider'],profile['model']) not in catalog: raise ValueError('Modello non presente nel catalogo: '+profile['model'])
 
-    def prepare_shell(self,snapshot=False):
+    def prepare_shell(self,snapshot=False,context=None):
         directory=self.model_dir(self.home/'sessions'/uuid.uuid4().hex if snapshot else self.home/'pi-shell')
         profile=self.settings['roles'].get('worker')
         config={'worker':profile,'byokRevision':self.byok.revision(),'projects':self.settings['projects'],'maxCalls':self.settings['maxCalls'],
                 'maxParallelWorkers':self.settings['maxParallelWorkers'],
                 'skills':[s for s in skills(self.home/'skills') if s['name'] in self.settings['enabledSkills'] and not s.get('parentOnly')]}
+        if context is not None:
+            config['skills']=[s for s in config['skills'] if s['name'] not in ('graph-explorer','lettura-documentazione-tecnica')]
+            required={'graph-explorer':bool(context.get('graphs')),'lettura-documentazione-tecnica':bool(context.get('documentation'))}
+            config['skills'].extend(s for s in skills(self.home/'skills') if required.get(s['name']))
         save_json(directory/'suite-launch.json',config)
         settings_path=directory/'settings.json'
         settings=read_json(settings_path) if settings_path.exists() else {}
@@ -394,6 +406,10 @@ class Suite:
         if not path: folder.mkdir(parents=True)
         if not folder.is_dir(): raise ValueError('Scegli una cartella esistente per la chat.')
         env=os.environ.copy();env['PI_SUITE_HOME']=str(self.home)
+        env.pop('PI_SUITE_CONTEXT',None)
+        if selected:
+            context_path=self.home/'sessions'/('context-'+uuid.uuid4().hex+'.json')
+            save_json(context_path,workspace.chat_context(self,selected['id']));env['PI_SUITE_CONTEXT']=str(context_path)
         env.pop('PI_SUITE_CLEAN_WORKSPACE',None)
         if not path: env['PI_SUITE_CLEAN_WORKSPACE']=str(folder)
         if selected: env['PI_SUITE_PROJECT']=selected['id']
@@ -419,7 +435,7 @@ class Suite:
         data=data or {}
         titles={'project':'Scegli la cartella del progetto',
                 'source':'Scegli la cartella della fonte locale',
-                'dossier':'Scegli la cartella del dossier AS-IS'}
+                'dossier':'Scegli la cartella del dossier di documentazione tecnica'}
         context=data.get('context','project')
         initial=data.get('initialPath','')
         if not isinstance(context,str) or context not in titles:
@@ -479,8 +495,8 @@ class Suite:
             project=next((p for p in self.settings['projects'] if p['id']==pid),None)
             if not project: raise ValueError('Progetto sconosciuto')
             if not isinstance(data,dict): raise ValueError('Riferimenti non validi')
-            if section=='asis':
-                ids=data.get('sources',workspace.source_references(project))
+            if section=='documentation':
+                ids=data.get('sources',project.get('workspace',{}).get('documentation',{}).get('sources',[]))
                 available={s['id'] for s in self.sources.connections()}
                 if not isinstance(ids,list) or any(not isinstance(s,str) or s not in available for s in ids):
                     raise ValueError('Seleziona fonti esistenti')
@@ -489,6 +505,9 @@ class Suite:
                 if not isinstance(graph_ids,list) or any(not isinstance(g,str) for g in graph_ids):
                     raise ValueError('Grafi selezionati non validi')
                 references['graphs']=list(dict.fromkeys(graph_ids))
+                documents=data.get('documents',[])
+                if not isinstance(documents,list) or any(not isinstance(d,str) for d in documents):raise ValueError('Documenti selezionati non validi')
+                references['documents']=list(dict.fromkeys(documents))
                 fields={'objective':20000,'dossierWorkspace':4000,'name':150}
                 refresh_sources=data.get('refreshSources',False)
                 if not isinstance(refresh_sources,bool):raise ValueError('Opzione aggiornamento fonti non valida')
@@ -519,6 +538,9 @@ class Suite:
 
     def generate_graph(self,data):
         pid=data['project'];project=workspace.project_record(self,pid)
+        if not data.get('source'):
+            data={**data,'name':project['name'][:125]+' · Grafo del codice','graphKind':'project',
+                  'source':{'kind':'sharepoint-local','path':project['path']}}
         name=str(data.get('name','')).strip()
         kind=data.get('graphKind')
         if not name or len(name)>150:raise ValueError('Inserisci un nome per il grafo, fino a 150 caratteri.')
@@ -572,12 +594,12 @@ class Suite:
         if not report.get('documentGraph'):raise ValueError('Il modello non ha consegnato il grafo documentale.')
         return {'graph':report['documentGraph'],'usage':report.get('usage',[]),'seconds':report.get('seconds')}
 
-    def build_document_graph(self,pid,ids,refresh=True,bundle=None,progress=None):
+    def build_document_graph(self,pid,ids,refresh=True,bundle=None,progress=None,include_documentation=False):
         workspace.project_record(self,pid)
         profile=self.document_graph_profile()
         progress=progress or (lambda message:self.job.update(log=(self.job.get('log','')+'\n'+message)[-30000:]))
         ids=list(dict.fromkeys(ids));known={s['id'] for s in self.sources.connections()}
-        if not ids or any(s not in known for s in ids):raise ValueError('Seleziona fonti documentali esistenti.')
+        if not ids or (bundle is None and any(s not in known for s in ids)):raise ValueError('Seleziona fonti documentali esistenti.')
         if bundle is None:
             if refresh:
                 for sid in ids:
@@ -588,9 +610,43 @@ class Suite:
         model['configurationFingerprint']=byok.digest({'profile':profile,'connection':next((p for p in self.settings['providers'] if p['id']==profile['provider']),{})})
         builder=document_graph.DocumentGraphBuilder(self.home,pid,bundle,model,
             lambda request:self._document_graph_completion(request,profile,directory),directory,progress,
-            batch_chars=min(24000,max(2000,profile['contextWindow']-profile['maxOutputTokens']-10000)))
+            batch_chars=min(24000,max(2000,profile['contextWindow']-profile['maxOutputTokens']-10000)),include_documentation=include_documentation)
         graph=builder.build();progress('Grafo documentale semantico salvato per il progetto.')
         return graph
+
+    def finalize_documentation(self,folder,auto_select=True):
+        folder=Path(folder).resolve()
+        registered=self.sources.register_documentation(folder)
+        metadata=read_json(folder/'PROGETTO.json');pid=metadata['project']
+        sid=registered['source'];snapshot=registered['snapshot'];directory=self.sources.root/sid/snapshot
+        bundle=[{'source':sid,'snapshot':snapshot,'directory':str(directory),'manifest':read_json(directory/'manifest.json')}]
+        graph=self.build_document_graph(pid,[sid],refresh=False,bundle=bundle,include_documentation=True)
+        ref={'project':pid,'version':graph['fingerprint']};identifier='documentation-graph:'+folder.name
+        item={'id':identifier,'name':metadata.get('name') or 'documentazione tecnica','kind':'document','path':str(document_graph.graph_path(self.home,ref)),
+              'reference':ref,'source':sid,'snapshot':snapshot,'workspace':str(folder),'createdAt':graph['createdAt'],'stats':graph['stats']}
+        save_json(self.home/'graphs'/pid/'saved.json',[g for g in workspace.saved_graphs(self,pid) if g['id']!=identifier]+[item])
+        project=workspace.project_record(self,pid);prefs=project.setdefault('workspace',{}).setdefault('documentation',{})
+        if auto_select:
+            prefs['graphs']=list(dict.fromkeys([*prefs.get('graphs',[]),identifier]))
+            prefs['documents']=list(dict.fromkeys([*prefs.get('documents',[]),'documentation:'+folder.name+':DOCUMENTAZIONE-TECNICA.md']))
+        project['workspace']['removedGraphs']=[g for g in project['workspace'].get('removedGraphs',[]) if g!=identifier]
+        project['workspace']['removedGraphPaths']=[p for p in project['workspace'].get('removedGraphPaths',[]) if p!=item['path']]
+        save_json(self.settings_path,self.settings)
+        from suite_graph import digest
+        save_json(folder/'FINALIZZATO.json',{'sha256':digest((folder/'DOCUMENTAZIONE-TECNICA.md').read_bytes()),'graph':identifier})
+        return {**registered,'graph':identifier,'documentGraph':ref}
+
+    def remove_graph(self,pid,identifier):
+        with self.guard:
+            if self.busy:raise ValueError('È già in corso un’operazione.')
+            item=workspace.graph_entry(self,pid,identifier)
+            project=workspace.project_record(self,pid);prefs=project.setdefault('workspace',{})
+            prefs['removedGraphs']=list(dict.fromkeys([*prefs.get('removedGraphs',[]),identifier]))
+            prefs['removedGraphPaths']=list(dict.fromkeys([*prefs.get('removedGraphPaths',[]),item['path']]))
+            refs=prefs.setdefault('documentation',{});refs['graphs']=[g for g in refs.get('graphs',[]) if g!=identifier]
+            save_json(self.home/'graphs'/pid/'saved.json',[g for g in workspace.saved_graphs(self,pid) if g['id']!=identifier])
+            save_json(self.settings_path,self.settings)
+            return workspace.inventory(self,pid)
 
     def project_for_workspace(self,path):
         folder=Path(path).resolve();marker=folder/'PROGETTO.json'
@@ -598,15 +654,18 @@ class Suite:
         matching=sorted((p for p in self.settings['projects'] if folder.is_relative_to(Path(p['path']).resolve())),key=lambda p:len(p['path']),reverse=True)
         return matching[0]['id'] if matching else None
 
-    def prepare_documented_asis(self,ids,objective='',refresh=True,project=None,graph_ref=None,use_document_graph=True,progress=None):
+    def prepare_technical_documentation(self,ids,objective='',refresh=True,project=None,graph_ref=None,use_document_graph=False,progress=None):
         progress=progress or (lambda message:self.job.update(log=(self.job.get('log','')+'\n'+message)[-30000:]))
         ids=list(dict.fromkeys(ids));snapshots={}
+        if not use_document_graph:graph_ref=None
         if graph_ref and not refresh:
             graph=document_graph.load_graph(self.home,graph_ref)
             if project and graph['project']!=project:raise ValueError('Grafo documentale di un altro progetto.')
             snapshots={d['source']:d['snapshot'] for d in graph['dependencies']}
         if refresh:
+            known={s['id'] for s in self.sources.connections()}
             for sid in ids:
+                if sid not in known:continue
                 progress('Acquisizione e relazioni esplicite: '+sid);snapshots[sid]=self.sources.sync(sid)['id']
         bundle=self.sources.bundle(ids,snapshots)
         for item in bundle:item['indexVersion']=ensure_index(item['directory'],item['manifest'])['fingerprint']
@@ -624,8 +683,10 @@ class Suite:
                     graph_ref={'project':project,'version':graph['fingerprint']}
             document_graph.load_graph(self.home,graph_ref,bundle)
         else:graph_ref=None
-        result=self.sources.prepare_asis(ids,objective,snapshots,graph_ref)
-        if project:save_json(Path(result['workspace'])/'PROGETTO.json',{'project':project,'documentGraph':graph_ref})
+        result=self.sources.prepare_documentation(ids,objective,snapshots,graph_ref)
+        if project:
+            save_json(Path(result['workspace'])/'PROGETTO.json',{'project':project,'documentGraph':graph_ref})
+            save_json(Path(result['workspace'])/'CONTESTO.json',workspace.chat_context(self,project))
         return result
 
     def start(self,operation,data):
@@ -633,10 +694,16 @@ class Suite:
             if self.busy: raise ValueError('È già in corso un’operazione.')
             if operation not in OPERATIONS:
                 raise ValueError('Operazione non supportata')
-            if operation in ('prepare-asis','auto-asis'):
+            if operation in ('prepare-documentation','auto-documentation'):
+                project=workspace.project_record(self,data.get('project'))
+                added=project.get('workspace',{}).get('documentation',{}).get('sources',[])
+                selected=data.get('sources',added);known={s['id'] for s in self.sources.connections()}
+                if not isinstance(selected,list) or not selected or any(not isinstance(s,str) or s not in added or s not in known for s in selected):
+                    raise ValueError('Aggiungi almeno una fonte dal menu Documentazione tecnica → Aggiungi.')
+                data={**data,'sources':list(dict.fromkeys(selected))}
                 workspace.selected_graphs(self,data)
                 if 'name' in data and (not isinstance(data['name'],str) or not data['name'].strip() or len(data['name'])>150):
-                    raise ValueError('Inserisci un nome per l’AS-IS, fino a 150 caratteri.')
+                    raise ValueError('Inserisci un nome per la documentazione tecnica, fino a 150 caratteri.')
             if operation=='generate-graph':
                 workspace.project_record(self,data.get('project'))
                 if data.get('graphKind')=='document':self.document_graph_profile()
@@ -666,14 +733,16 @@ class Suite:
                 graph=self.build_document_graph(data['project'],data['sources'])
                 self.job['result']={'documentGraph':{'project':data['project'],'version':graph['fingerprint']},'stats':graph['stats']}
             elif operation=='index-sources':self.job['result']=self.sources.index_sources(data['sources'])
-            elif operation=='register-asis':self.job['result']=self.sources.register_asis(data['workspace'])
-            elif operation in ('prepare-asis','auto-asis'):
+            elif operation=='register-documentation':self.job['result']=self.finalize_documentation(data['workspace'])
+            elif operation in ('prepare-documentation','auto-documentation'):
                 def progress(message):self.job['log']=(self.job.get('log','')+'\n'+message)[-30000:]
                 data['sources']=workspace.prepare_sources(self,data,operation)
-                result=self.prepare_documented_asis(data['sources'],data.get('objective',''),operation=='auto-asis',data['project'],
-                    data.get('documentGraph'),bool(data.get('documentGraph')),progress)
+                result=self.prepare_technical_documentation(data['sources'],data.get('objective',''),operation=='auto-documentation',data['project'],
+                    data.get('documentGraph'),False,progress)
                 save_json(Path(result['workspace'])/'PROGETTO.json',{'project':data['project'],'name':data.get('name','').strip(),
                     'graphs':data['graphs'],'documentGraph':result.get('documentGraph')})
+                save_json(Path(result['workspace'])/'CONTESTO.json',workspace.chat_context(self,data['project']))
+                result['prompt']+=' Produci un documento DOCUMENTAZIONE-TECNICA.md dettagliato e autosufficiente: architettura, processi, dati, interfacce, operatività, limiti ed evidenze. Delega quanto possibile ai subagenti configurati e integra le loro proposte dopo la revisione. Alla fine chiama register_documentation: genera anche il grafo semantico LLM del Markdown finale e lo seleziona nel contesto.'
                 self.job['result']={'project':data['project'],**{k:v for k,v in result.items() if k not in ('sources','prompt')}}
                 if data.get('openChat',True):self.open_chat(result['workspace'],result['prompt'])
             elif operation=='graph':
@@ -772,13 +841,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             elif route=='/api/project-references' and post:
                 result=app.save_project_references(data['project'],data['section'],data['references'])
             elif route=='/api/chat' and post: result=app.open_chat(data.get('path',''),project_id=data.get('project'))
+            elif route=='/api/remove-graph' and post:result=app.remove_graph(data['project'],data['graph'])
             elif route=='/api/delegations' and not post: result=app.delegations()
             elif route=='/api/sources' and not post: result=app.sources.public()
             elif route=='/api/sources' and post:
                 with app.guard:
                     if app.busy:raise ValueError('Attendi il completamento dell’operazione in corso.')
                     result=app.sources.save(data)
-            elif route=='/api/asis-registry' and not post:result=app.sources.asis_registry()
+            elif route=='/api/documentazione-tecnica-registry' and not post:result=app.sources.documentation_registry()
             elif route=='/api/evidence' and post:
                 from suite_evidence import query
                 if data['action'] not in ('knowledge_search','knowledge_trace','read_evidence'):raise ValueError('Consultazione non supportata')

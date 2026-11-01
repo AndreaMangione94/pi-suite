@@ -2,6 +2,7 @@
 import json
 from pathlib import Path
 from suite_evidence import CODE_EXTENSIONS
+from suite_documentation_migration import LEGACY, ASSIGNMENT, PRIMARY_DOCUMENT
 import suite_document_graph as document_graph
 
 
@@ -17,9 +18,9 @@ def project_record(app, pid):
 
 
 def source_references(project):
-    """Graph management owns sources; read legacy AS-IS links until first graph save."""
+    """Graph management owns sources; read legacy documentazione tecnica links until first graph save."""
     workspace = project.get('workspace', {})
-    return workspace.get('graph', {}).get('sources', workspace.get('asis', {}).get('sources', []))
+    return workspace.get('graph', {}).get('sources', workspace.get('documentation', {}).get('sources', []))
 
 
 def saved_graphs(app, pid):
@@ -37,7 +38,7 @@ def graph_entry(app, pid, identifier):
 
 def inventory(app, pid):
     project = project_record(app, pid)
-    refs = project.get('workspace', {}).get('asis', {})
+    refs = project.get('workspace', {}).get('documentation', {})
     linked = set(source_references(project))
     root = Path(project['path']).resolve()
     graphs, documents = saved_graphs(app, pid), []
@@ -79,32 +80,36 @@ def inventory(app, pid):
         if not belongs:
             continue
         for path in sorted(folder.glob('*.md')):
-            if path.name == 'INCARICO-AS-IS.md' or path.is_symlink():
+            if path.name in (ASSIGNMENT,LEGACY['assignment']) or path.is_symlink():
+                continue
+            if path.name==LEGACY['primaryDocument'] and (folder/PRIMARY_DOCUMENT).is_file():
                 continue
             title = metadata.get('name')
-            name = (title if path.name == 'AS-IS.md' else title+' · '+path.stem) if title else path.name
-            documents.append(entry('asis:'+folder.name+':'+path.name, path, name,
+            name = (title if path.name == 'DOCUMENTAZIONE-TECNICA.md' else title+' · '+path.stem) if title else path.name
+            documents.append(entry('documentation:'+folder.name+':'+path.name, path, name,
                                    path.stat().st_birthtime, workspace=str(folder), modifiedAt=path.stat().st_mtime_ns))
-    return {'graphs': sorted(graphs, key=lambda graph: (graph['kind']!='document',graph['kind']=='source-index')), 'asis': documents}
+    hidden=set(project.get('workspace',{}).get('removedGraphs',[]))
+    paths=set(project.get('workspace',{}).get('removedGraphPaths',[]))
+    return {'graphs': sorted([g for g in graphs if g['id'] not in hidden and g['path'] not in paths], key=lambda graph: (graph['kind']!='document',graph['kind']=='source-index')), 'documentation': documents}
 
 
 def selected_graphs(app, data):
     available = {g['id']: g for g in inventory(app, data.get('project'))['graphs'] if g.get('selectable',True)}
     ids = data.get('graphs')
-    if not isinstance(ids, list) or not ids or any(not isinstance(i, str) or i not in available for i in ids):
-        raise ValueError('Seleziona almeno un grafo di conoscenza disponibile per questo progetto.')
+    if not isinstance(ids, list) or any(not isinstance(i, str) or i not in available for i in ids):
+        raise ValueError('Seleziona grafi di conoscenza disponibili per questo progetto.')
     return sorted((available[i] for i in dict.fromkeys(ids)), key=lambda graph: graph['kind']!='document')
 
 
 def prepare_sources(app, data, operation):
     graphs = selected_graphs(app, data)
     project = project_record(app, data['project'])
-    ids = []
+    supplied=data.get('sources',[]);known={s['id'] for s in app.sources.connections()}
+    if not isinstance(supplied,list) or any(not isinstance(s,str) or s not in known for s in supplied):raise ValueError('Seleziona fonti esistenti')
+    ids = list(supplied)
     for graph in graphs:
         if graph['kind'] == 'document':
-            if data.get('documentGraph') and data['documentGraph'] != graph['reference']:
-                raise ValueError('Seleziona un solo grafo documentale per ogni AS-IS.')
-            data['documentGraph']=graph['reference']
+            if not data.get('documentGraph'):data['documentGraph']=graph['reference']
             stored=document_graph.load_graph(app.home,graph['reference'])
             ids.extend(d['source'] for d in stored['dependencies'])
             continue
@@ -112,20 +117,43 @@ def prepare_sources(app, data, operation):
             ids.append(graph['source'])
             continue
         # Reuse the project's local connection when available; the source is read only.
-        source = next((s for s in app.sources.connections() if s.get('path') and
+        source = next((s for s in app.sources.connections() if s.get('kind')=='sharepoint-local' and s.get('path') and
                        Path(s['path']).resolve() == Path(project['path']).resolve()), None)
         if source is None:
             rows = app.sources.save({'name': project['name'], 'kind': 'sharepoint-local', 'path': project['path']})
             source = rows[-1]
         ids.append(source['id'])
-        if operation == 'prepare-asis':
-            app.sources.sync(source['id'])
+    # The selected project is always an input, even without an existing graph.
+    source=next((s for s in app.sources.connections() if s.get('kind')=='sharepoint-local' and s.get('path') and Path(s['path']).resolve()==Path(project['path']).resolve()),None)
+    if source is None:source=app.sources.save({'name':project['name'],'kind':'sharepoint-local','path':project['path']})[-1]
+    if source['id'] not in ids:ids.append(source['id'])
+    app.sources.sync(source['id'])
+    known={s['id'] for s in app.sources.connections()}
+    for sid in dict.fromkeys(ids):
+        if sid in known and not (app.sources.root/sid/'current.json').is_file():app.sources.sync(sid)
     return list(dict.fromkeys(ids))
+
+
+def chat_context(app, pid):
+    project=project_record(app,pid);files=inventory(app,pid);refs=project.get('workspace',{}).get('documentation',{})
+    graphs=[g for g in files['graphs'] if g.get('selectable',True) and g['id'] in refs.get('graphs',[])]
+    documents=[d for d in files['documentation'] if d['id'] in refs.get('documents',[])]
+    ids=[];bundle=[]
+    for graph in graphs:
+        if graph.get('reference'):
+            stored=document_graph.load_graph(app.home,graph['reference'])
+            for dep in stored['dependencies']:
+                ref=app.sources.bundle([dep['source']],{dep['source']:dep['snapshot']})[0]
+                bundle.append({**ref,'directory':str(ref['directory']),'indexVersion':dep['indexVersion'],'documentGraph':graph['reference'],'allowCodeGraph':False})
+        elif graph.get('source'):ids.append(graph['source'])
+    if ids:
+        bundle.extend({**r,'directory':str(r['directory']),'allowCodeGraph':True} for r in app.sources.bundle(list(dict.fromkeys(ids))))
+    return {'project':project,'graphs':graphs,'documentation':documents,'bundle':bundle}
 
 
 def read_file(app, pid, identifier):
     files = inventory(app, pid)
-    item = next((f for f in files['graphs']+files['asis'] if f['id'] == identifier), None)
+    item = next((f for f in files['graphs']+files['documentation'] if f['id'] == identifier), None)
     if not item:
         raise ValueError('File non disponibile per questo progetto.')
     path = Path(item['path'])

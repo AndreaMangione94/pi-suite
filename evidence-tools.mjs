@@ -11,17 +11,17 @@ export const knowledgeSchemas={
   knowledge_trace:{properties:{nodes:{type:'array',items:string,maxItems:20,minItems:1},depth:{...integer,maximum:3},limit:{...integer,maximum:40},includeInferred:{type:'boolean'}},required:['nodes']},
   read_evidence:{properties:{source:string,snapshot:string,document:string,mode:{type:'string',enum:['passage','section','full']},startLine:integer,lines:{...integer,maximum:1000},offset:{type:'integer',minimum:0},maxChars:{type:'integer',minimum:100,maximum:200000}},required:['source','document']},
   propose_relation:{properties:{sourceNode:string,targetNode:string,relation:{type:'string',enum:['implements','supports','contradicts','depends_on','same_concept','describes']},reason:string,evidence:{type:'array',minItems:1,maxItems:10,items:{type:'object',properties:{source:string,document:string,startLine:integer,endLine:integer},required:['source','document','startLine','endLine'],additionalProperties:false}}},required:['sourceNode','targetNode','relation','reason','evidence']},
-  prepare_asis:{properties:{objective:string,sources:{type:'array',items:string},refresh:{type:'boolean'}},required:['objective']},
-  register_asis:{properties:{},required:[]}
+  prepare_documentation:{properties:{objective:string,sources:{type:'array',items:string},refresh:{type:'boolean'}},required:['objective']},
+  register_documentation:{properties:{},required:[]}
 };
 const descriptions={
-  document_graph:'Consulta il grafo documentale SEMANTICO finale salvato per il progetto e fissato nel dossier: concetti e relazioni esplicite o inferite dal modello con evidenze. Per scrivere AS-IS parti da questo grafo, poi apri gli originali e confronta il grafo del codice. Non genera nuovi grafi.',
-  knowledge_search:'Cerca testo, requisiti e simboli negli snapshot fissati. Per creare AS-IS parti dal grafo documentale e apri gli originali; nelle normali consultazioni la ricerca e facoltativa. Non crea o aggiorna indici.',
-  knowledge_trace:'Esplora nodi vicini e relazioni con evidenze; per AS-IS esplora prima i collegamenti documentali. Vicinanza non prova significato o completezza. includeInferred mostra separatamente proposte semantiche con stato di revisione.',
+  document_graph:'Consulta il grafo documentale SEMANTICO finale salvato per il progetto e fissato nel dossier: concetti e relazioni esplicite o inferite dal modello con evidenze. Per scrivere documentazione tecnica parti da questo grafo, poi apri gli originali e confronta il grafo del codice. Non genera nuovi grafi.',
+  knowledge_search:'Cerca testo, requisiti e simboli negli snapshot fissati. Per creare documentazione tecnica parti dal grafo documentale e apri gli originali; nelle normali consultazioni la ricerca e facoltativa. Non crea o aggiorna indici.',
+  knowledge_trace:'Esplora nodi vicini e relazioni con evidenze; per documentazione tecnica esplora prima i collegamenti documentali. Vicinanza non prova significato o completezza. includeInferred mostra separatamente proposte semantiche con stato di revisione.',
   read_evidence:'Legge una fonte congelata verificandone integrita. mode full legge il contenuto completo disponibile, paginato se necessario: segui nextOffset. Dichiara sempre troncamenti e parti non lette.',
   propose_relation:'Salva una deduzione semantica con evidenze valide come proposta NON revisionata. Non modifica fonti, non certifica verita e non approva la propria proposta.',
-  prepare_asis:'SOLO per una richiesta esplicita di creare/aggiornare AS-IS: sincronizza se refresh=true, verifica/aggiorna prima grafi e indici e prepara il dossier. Poi leggi i suoi originali e scrivi i documenti. Non chiamare per semplici domande.',
-  register_asis:'Registra i documenti del dossier attivo gia prodotti: verifica citazioni primarie e integrita e crea una versione persistente consultabile. Non equivale a revisione semantica o approvazione umana.'
+  prepare_documentation:'SOLO per una richiesta esplicita di creare/aggiornare documentazione tecnica: sincronizza se refresh=true, verifica/aggiorna prima grafi e indici e prepara il dossier. Poi leggi i suoi originali e scrivi i documenti. Non chiamare per semplici domande.',
+  register_documentation:'Completa il dossier prodotto: valida citazioni e integrità, registra il Markdown e genera tramite LLM il grafo semantico di DOCUMENTAZIONE-TECNICA.md. Salva e seleziona automaticamente il grafo nel contesto. Non equivale ad approvazione umana.'
 };
 
 export async function invokeEvidence(action,args,bundle,options={}) {
@@ -33,7 +33,7 @@ export async function invokeEvidence(action,args,bundle,options={}) {
     let out='',err='',settled=false;
     const finish=(error,value)=>{if(settled)return;settled=true;clearTimeout(timer);options.signal?.removeEventListener('abort',abort);error?reject(error):resolve(value);};
     const abort=()=>{child.kill();finish(Error('Consultazione interrotta'));};
-    const timer=setTimeout(()=>{child.kill();finish(Error('Operazione evidenze scaduta'));},action==='prepare_asis'?1800000:180000);
+    const timer=setTimeout(()=>{child.kill();finish(Error('Operazione evidenze scaduta'));},['prepare_documentation','register_documentation'].includes(action)?1800000:180000);
     if(options.signal?.aborted){abort();return;}
     options.signal?.addEventListener('abort',abort,{once:true});
     child.stdout.on('data',chunk=>{out+=chunk.toString('utf8');if(out.length>16000000){child.kill();finish(Error('Risultato troppo grande: restringi la richiesta'));}});
@@ -45,7 +45,7 @@ export async function invokeEvidence(action,args,bundle,options={}) {
 }
 
 export function knowledgeTools(bundle,options={}) {
-  return Object.entries(knowledgeSchemas).filter(([name])=>options.parent||!['prepare_asis','register_asis'].includes(name)).map(([name,schema])=>({
+  return Object.entries(knowledgeSchemas).filter(([name])=>options.parent||!['prepare_documentation','register_documentation'].includes(name)).map(([name,schema])=>({
     name,label:name,description:descriptions[name],parameters:{type:'object',...schema,additionalProperties:false},
     async execute(_id,args,signal){const value=await invokeEvidence(name,args,bundle,{...options,signal});return {content:[{type:'text',text:JSON.stringify(value)}],details:{}};}
   }));

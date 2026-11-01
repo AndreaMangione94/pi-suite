@@ -7,13 +7,14 @@ import {registerAgentViaEvents} from 'pi-subagents/agents';
 import {registerSubagentCapabilityCeiling} from 'pi-subagents/capability-ceiling';
 import {registerRequiredChildExtensions} from 'pi-subagents/required-child-extensions';
 import {SUBAGENT_DELEGATION_REQUEST_EVENT as REQUEST,SUBAGENT_DELEGATION_RESPONSE_EVENT as RESPONSE,SUBAGENT_DELEGATION_UPDATE_EVENT as UPDATE,SUBAGENT_DELEGATION_CANCEL_EVENT as CANCEL} from 'pi-subagents/delegation';
+import {chatContext} from './chat-context.mjs';
 import {prepareBatch} from './delegation-core.mjs';
 import {evidenceScopeSchema,evidenceReadingSummary} from './evidence-reading.mjs';
 
 export default function registerDelegation(pi:ExtensionAPI,root:string,home:string,contextSources?:(ctx:any)=>any[],workspace?:(ctx:any)=>string) {
   let registrations:any[]=[],ready=false,used=0;
   let delegated=false,attempted=false,reminded=false;
-  const toolNames=['read_source','list_sources','propose_file','graph_query','read_skill','connected_sources','read_connected_source','connected_graph','document_graph','knowledge_search','knowledge_trace','read_evidence','report_evidence_reading','propose_relation'];
+  const toolNames=['read_source','list_sources','propose_file','graph_query','read_skill','read_documentation','connected_sources','read_connected_source','connected_graph','document_graph','knowledge_search','knowledge_trace','read_evidence','report_evidence_reading','propose_relation'];
   const launchPath=path.join(process.env.PI_CODING_AGENT_DIR||path.join(home,'pi-shell'),'suite-launch.json');
   let sessionConfig:any;
   const config=()=>structuredClone(sessionConfig);
@@ -60,7 +61,12 @@ export default function registerDelegation(pi:ExtensionAPI,root:string,home:stri
     async execute(_id,args,signal,onUpdate,ctx){
       attempted=true;
       if(!ready)throw Error('Avvia Pi tramite il launcher della suite dopo aver salvato orchestratore e subagenti.');
-      const cfg=config();if(!cfg.worker?.provider||!cfg.worker?.model)throw Error('Configura il modello dei subagenti nel pannello.');
+      const cfg=config();
+      const selection=chatContext(workspace?workspace(ctx):ctx.cwd);
+      for(const name of [...(selection?.graphs?.length?['graph-explorer']:[]),...(selection?.documentation?.length?['lettura-documentazione-tecnica']:[])]){
+        if(!cfg.skills.some((s:any)=>s.name===name))cfg.skills.push({name,description:name,content:fs.readFileSync(path.join(root,'skills',name,'SKILL.md'),'utf8')});
+      }
+      if(!cfg.worker?.provider||!cfg.worker?.model)throw Error('Configura il modello dei subagenti nel pannello.');
       if(contextSources)cfg.connectedSources=contextSources(ctx);
       if(used+args.tasks.length>cfg.maxCalls)throw Error('Limite di subagenti per questa sessione raggiunto.');
       const {root:batchRoot,batch}=prepareBatch(home,workspace?workspace(ctx):ctx.cwd,args.tasks,cfg,args.plan);used+=args.tasks.length;

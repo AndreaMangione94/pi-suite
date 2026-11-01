@@ -1,36 +1,20 @@
-# Pi Suite 0.6.5 — Fonti, grafi e AS-IS riutilizzabili
+# Pi Suite 0.6.5 — Fonti, grafi e documentazione tecnica riutilizzabile
 
-Guida aggiornata alla distribuzione Windows del 28 ottobre 2026.
+Guida aggiornata alla distribuzione Windows del 1 novembre 2026.
 
-## Modale Grafi di conoscenza
+## Grafi e documentazione tecnica nel contesto
 
-In **Il tuo workspace** seleziona un progetto e apri **Grafi di conoscenza**. Senza un progetto il pulsante è disabilitato. La modale contiene tre sezioni, nell’ordine: **I miei grafi**, **Crea un grafo** e **Esplora il grafo**. La X in alto chiude la modale; non ci sono pulsanti di chiusura o salvataggio nel fondo.
+L’icona **Progetto** permette di scegliere o creare un progetto e di tornare al contesto pulito; il suo badge indica 0 o 1. Accanto, l’icona **Grafi** apre l’elenco dei grafi disponibili, ciascuno con icona, label, selezione per la chat e × di rimozione. **Genera grafo** costruisce il grafo AST della cartella del progetto per Python, JavaScript e TypeScript. Se non esistono grafi è l’unica opzione disponibile.
 
-### Creare e salvare un grafo
+L’icona **Documentazione tecnica** permette di includere o escludere i documenti già creati. **Aggiungi** collega altre cartelle locali, SharePoint o repository Git HTTPS/Azure. **Genera documentazione tecnica** si abilita solo con almeno una fonte scelta tramite **documentazione tecnica → Aggiungi** e usa sempre anche il progetto e gli eventuali grafi selezionati. Non richiede un grafo di partenza.
 
-La creazione avviene direttamente nella modale, senza una card. Scegli **Grafo documentale** o **Grafo del codice**, inserisci il nome e seleziona l’origine:
+Il risultato comprende un **DOCUMENTAZIONE-TECNICA.md dettagliato**, scritto con i modelli e con delega ai subagenti configurati, e il **grafo semantico del documento finale**, generato tramite LLM dopo la revisione e la validazione delle citazioni. Il grafo viene salvato e selezionato automaticamente. I precedenti grafi documentali delle fonti rimangono consultabili separatamente.
 
-- **Cartella locale**: scegli la cartella con **Sfoglia…** oppure inserisci il percorso. Sono supportate anche cartelle di rete e cartelle SharePoint sincronizzate.
-- **Remoto**: compaiono il tipo di integrazione e l’URL. Azure DevOps richiede il branch ed eventualmente un PAT Code Read, oppure usa le credenziali Git configurate. SharePoint tramite Microsoft Graph richiede anche Drive ID, Folder Item ID e un access token con accesso in lettura alla cartella.
+`DocumentGraphBuilder` analizza i passaggi del Markdown, ricostruisce concetti e relazioni con evidenze e valida citazioni e riferimenti prima di pubblicare il grafo. La cache riusa le analisi semantiche valide dei contenuti invariati. Il grafo della documentazione tecnica usa soltanto DOCUMENTAZIONE-TECNICA.md; gli allegati non sostituiscono il documento principale.
 
-**Genera grafo** è l’unica azione di creazione e salvataggio: acquisisce i file, costruisce il grafo e, solo al buon esito, lo aggiunge con il nome scelto a **I miei grafi** e collega automaticamente la fonte al progetto. Una generazione fallita non aggiunge un grafo alla raccolta. Ogni generazione riuscita conserva una voce distinta, consultabile anche dopo la riapertura della modale.
+Le scelte sono salvate automaticamente. La chat e i suoi figli ricevono soltanto gli artefatti selezionati: la skill `graph-explorer` è inclusa se almeno un grafo è selezionato, `lettura-documentazione-tecnica` se almeno un documento di documentazione tecnica è selezionato. `read_documentation` offre una navigazione deterministica del testo con ricerca, righe e paginazione, anche senza grafi.
 
-Il **grafo del codice** analizza Python, JavaScript e TypeScript senza chiamate ai modelli. Il **grafo documentale** comprende elementi e riferimenti espliciti più concetti, relazioni fra documenti ed equivalenze ricostruiti dal modello Orchestratore; la generazione può comportare costi API. Non crea un dossier AS-IS.
-
-### Esplorare e riutilizzare i grafi
-
-In **Esplora il grafo** scegli un grafo salvato, cerca un termine e apri i nodi per seguirne le relazioni e leggere le fonti. Il clic su una voce di **I miei grafi** apre quel grafo nell’esplorazione. La raccolta mostra nome e data di creazione; le versioni salvate mantengono i propri snapshot delle fonti. L’esplorazione non avvia una nuova generazione.
-
-La modale **As-is** usa i grafi già preparati in **Grafi di conoscenza**. Alla prima apertura propone il grafo documentale più recente; le selezioni già salvate restano rispettate. Per ogni AS-IS puoi selezionare un grafo documentale e aggiungere uno o più grafi del codice.
-
-Il motore `DocumentGraphBuilder` gestisce la costruzione in due fasi:
-
-1. La suite acquisisce snapshot, originali, testo, mappe e indici delle relazioni esplicite.
-2. Il modello analizza tutti i passaggi documentali e poi sintetizza i collegamenti fra documenti. Concetti equivalenti possono essere uniti conservando alias ed evidenze. Citazioni, intervalli, riferimenti e assenza di relazioni verso nodi inesistenti vengono controllati prima del salvataggio.
-
-Le estrazioni semantiche dei documenti invariati vengono riutilizzate dalla cache, con controllo del modello e del contenuto. La sintesi fra documenti viene rivalutata se cambia il corpus. Il salvataggio pubblica una nuova versione solo dopo il completamento: un errore lascia disponibile il grafo precedente. Il controllo delle evidenze verifica provenienza e integrità, non certifica automaticamente l’interpretazione semantica.
-
-La modale **As-is** segue lo stesso schema: **I miei AS-IS**, **Crea un AS-IS** e **Esplora l’AS-IS**. Il form senza card salva automaticamente nome, grafi, obiettivo e opzione di aggiornamento delle fonti; **Genera AS-IS** è l’unica CTA di creazione. I documenti prodotti dalla chat appaiono automaticamente nella raccolta e sono consultabili prima della registrazione. Non ci sono CTA inferiori di chiusura o salvataggio.
+Dopo le modifiche integrate dall’orchestratore o dal modello singolo, la suite rigenera i grafi presenti interessati dal cambiamento e aggiorna i riferimenti della chat. Senza modifiche non parte una rigenerazione. Le selezioni restano rispettate durante l’aggiornamento.
 
 ## Preparare le fonti una volta
 
@@ -56,7 +40,7 @@ Gli estratti iniziali non sostituiscono gli originali. `read_evidence` permette 
 
 Una citazione ha forma `[sourceId:documentId]`; il riferimento puntuale puo usare `[sourceId:documentId]#L3-L12`. Sono indicati snapshot, hash, percorso, copertura e parti escluse. La validazione controlla identita, integrita e intervalli; non certifica il sostegno semantico della conclusione.
 
-Nella normale chat il corpus viene fissato alla prima consultazione e condiviso con i figli. `/sources-refresh` ricarica i riferimenti salvati per la chat; quando è disponibile il grafo documentale, ne conserva gli snapshot coerenti. Per usare nuove versioni dei documenti rigenera prima il grafo nella modale. Il comando non sincronizza né genera documenti. Nei dossier, `FONTI.json` mantiene invece le versioni esplicitamente fissate. Una consultazione non ricostruisce indici, non arricchisce automaticamente i grafi e non rigenera l'AS-IS.
+Nella normale chat il corpus viene fissato alla prima consultazione e condiviso con i figli. `/sources-refresh` ricarica i riferimenti salvati per la chat; quando è disponibile il grafo documentale, ne conserva gli snapshot coerenti. Per usare nuove versioni dei documenti rigenera prima il grafo nella modale. Il comando non sincronizza né genera documenti. Nei dossier, `FONTI.json` mantiene invece le versioni esplicitamente fissate. Una consultazione non ricostruisce indici, non arricchisce automaticamente i grafi e non rigenera la documentazione tecnica.
 
 Dal pannello puoi cercare nel grafo, esplorare i collegamenti e aprire le fonti nella sezione **Esplora il grafo** della modale Grafi di conoscenza.
 
@@ -70,29 +54,23 @@ Le letture riuscite con `read_evidence` e `read_connected_source` vengono regist
 
 Il risultato della delega contiene `evidenceReading`: copertura automatica, resoconto del figlio e segnalazioni `reportMissing` e `declarationStale`. Un resoconto diventa da aggiornare se seguono nuove letture. È previsto al massimo un richiamo al figlio per consegnarlo. Il genitore verifica risultati e lacune senza dover caricare prima tutti i documenti. La pagina **Attività subagenti** mostra perimetro, testi letti integralmente o in parte, citazioni, versioni e richieste di ampliamento. La copertura del testo estratto non attesta copertura integrale di immagini o altre parti escluse dall’originale.
 
-## Creare o aggiornare un AS-IS
+## Creare o aggiornare una documentazione tecnica
 
-Sono disponibili tre ingressi alla preparazione dei dossier, con selezioni diverse:
+Nel menu Documentazione tecnica scegli **Genera documentazione tecnica**, inserisci nome e obiettivo, poi avvia la richiesta. La suite acquisisce il progetto corrente e le fonti aggiunte; le nuove fonti vengono sincronizzate anche quando non si richiede di aggiornare quelle già acquisite. Il contesto conserva i grafi esplicitamente selezionati, senza costruire obbligatoriamente un grafo delle fonti prima della stesura.
 
-1. Nel pannello inserisci il nome e seleziona almeno un **Grafo di riferimento**, poi premi **Genera AS-IS**. Con **Aggiorna le fonti prima della generazione** selezionato, la suite sincronizza le fonti e aggiorna il grafo semantico; altrimenti fissa il grafo documentale salvato e i suoi snapshot. I vecchi grafi locali del progetto acquisiscono comunque la cartella corrente.
-2. `/asis [obiettivo]` nella chat aggiorna le fonti del dossier attivo o quelle salvate per il progetto corrente; fuori dai progetti registrati richiede di associare le fonti documentali a un progetto prima di costruire il grafo semantico. Non usa la selezione dei grafi del pannello.
-3. Su richiesta esplicita l’orchestratore può usare `prepare_asis` sul corpus della chat; il parametro `refresh` controlla la sincronizzazione delle fonti. Questo strumento non richiede la selezione dei grafi nella modale.
+`/documentazione-tecnica [obiettivo]` avvia la stessa preparazione nella chat corrente; `prepare_documentation` è disponibile all’orchestratore per richieste esplicite di generazione. Tutti gli ingressi producono un dossier con fonti fissate e contesto del progetto. Gli originali rimangono le evidenze principali e le consegne dei figli vengono controllate prima dell’integrazione.
 
-Prima di dichiarare pronto il dossier la suite verifica e aggiorna grafi e indici per gli snapshot selezionati, ricostruisce il grafo codice se manca e fissa insieme le versioni delle fonti e degli indici. Se un aggiornamento necessario fallisce, la generazione non parte. I formati non supportati sono dichiarati nella copertura, senza fingere un grafo completo.
-
-L'orchestratore e i subagenti leggono soprattutto documenti e codice originali, anche integralmente quando utile e compatibile con il contesto disponibile. Per produrre un AS-IS partono dal grafo documentale semantico salvato con `document_graph`, approfondiscono con `knowledge_search` e `knowledge_trace`, leggono gli originali e solo dopo confrontano l’implementazione con il grafo del codice. Questa priorità è inclusa nell’incarico del dossier e negli incarichi dei figli. Se sono disponibili solo evidenze di codice, dichiarano l’assenza di documentazione. Per le normali consultazioni i grafi restano facoltativi. Le attese delle deleghe restano a gruppi: non viene introdotto uno scambio continuo fra fratelli in esecuzione.
-
-Lo strumento `prepare_asis` restituisce una cartella nuova. Le proposte dei figli sono relative a quella cartella; il genitore le verifica e integra li. La preparazione non e gia un AS-IS completato.
+Il documento principale deve descrivere architettura, processi, dati, interfacce, operatività e lacune con citazioni verificabili. `register_documentation` completa la consegna creando il grafo semantico di quel Markdown. La preparazione del brief non equivale a una documentazione tecnica completata.
 
 ## Registrare il dossier prodotto
 
-Dopo aver scritto e controllato i documenti, l'orchestratore puo chiamare `register_asis`. L’incarico richiede questo passaggio alla fine della generazione. Puoi ripeterlo con `/asis-register` nella chat del dossier; il salvataggio e la consultazione in **I miei AS-IS** avvengono automaticamente e non richiedono una CTA di registrazione nel pannello.
+Dopo aver scritto e controllato i documenti, l'orchestratore puo chiamare `register_documentation`. L’incarico richiede questo passaggio alla fine della generazione. Puoi ripeterlo con `/documentazione-tecnica-register` nella chat del dossier; il salvataggio e la consultazione in **Documentazione tecnica salvata** avvengono automaticamente e non richiedono una CTA di registrazione nel pannello.
 
-La registrazione richiede AS-IS.md e citazioni valide delle fonti primarie fissate; raccoglie anche gli altri cinque documenti standard se presenti. Salva una copia versionata e indicizzata, conservando dipendenze e verifiche. Ripetere la registrazione degli stessi contenuti riutilizza la stessa versione. Lo stato semantico resta **non revisionato**: la registrazione non equivale ad approvazione umana.
+La registrazione richiede DOCUMENTAZIONE-TECNICA.md e citazioni valide delle fonti primarie fissate; raccoglie anche gli altri cinque documenti standard se presenti. Salva una copia versionata e indicizzata, conservando dipendenze e verifiche. Ripetere la registrazione degli stessi contenuti riutilizza la stessa versione. Lo stato semantico resta **non revisionato**: la registrazione non equivale ad approvazione umana.
 
-Gli AS-IS registrati diventano consultabili insieme alle fonti pertinenti, con rimandi agli originali. Non vengono importati indiscriminatamente tutti i Markdown del progetto. Non considerare AS-IS e fonte da esso riassunta due conferme indipendenti.
+I documenti di documentazione tecnica selezionati diventano consultabili nella chat con rimandi agli originali. Non vengono importati indiscriminatamente tutti i Markdown del progetto. Non considerare documentazione tecnica e fonte da esso riassunta due conferme indipendenti.
 
-Se cambiano i contenuti o la revisione delle fonti, il pannello indica **da rivalutare**. Una sincronizzazione senza variazioni dei contenuti indicizzati non basta a invalidare l'AS-IS. Le copie precedenti restano consultabili come storico, con la segnalazione esplicita. L'aggiornamento dei documenti parte soltanto su richiesta o tramite un'automazione configurata esternamente; questa versione non installa scheduler o rigenerazioni periodiche.
+Se cambiano i contenuti o la revisione delle fonti, il pannello indica **da rivalutare**. Una sincronizzazione senza variazioni dei contenuti indicizzati non basta a invalidare la documentazione tecnica. Le copie precedenti restano consultabili come storico, con la segnalazione esplicita. L'aggiornamento dei documenti parte su richiesta; i grafi presenti vengono aggiornati dopo le modifiche integrate nella chat; questa versione non installa scheduler o rigenerazioni periodiche.
 
 ## Interpretazioni semantiche opzionali
 
@@ -104,11 +82,11 @@ Non partono chiamate modello aggiuntive durante la sincronizzazione: l'arricchim
 
 ## Persistenza e costi
 
-La preparazione di una versione si sostiene una volta; gli artefatti rimangono su disco. Estrattori, ricerca e grafi strutturali consumano risorse locali. La creazione del grafo documentale semantico usa il modello configurato e può comportare costi API. La generazione dell'AS-IS e le interpretazioni semantiche usano i modelli scelti e possono avere costi API. Durante la consultazione restano i normali costi del modello che legge le evidenze e risponde; non si ripaga la creazione degli artefatti.
+La preparazione di una versione si sostiene una volta; gli artefatti rimangono su disco. Estrattori, ricerca e grafi strutturali consumano risorse locali. La creazione del grafo documentale semantico usa il modello configurato e può comportare costi API. La generazione della documentazione tecnica e le interpretazioni semantiche usano i modelli scelti e possono avere costi API. Durante la consultazione restano i normali costi del modello che legge le evidenze e risponde; non si ripaga la creazione degli artefatti.
 
 Il grafo documentale finale è in `data/graphs/<progetto>/documental/versions/<versione>/graph.json`; `current.json` indica l’ultima versione riuscita. La cache semantica è `data/graphs/document-semantic-cache.sqlite`. Ogni dossier conserva il riferimento in `GRAFO-DOCUMENTALE.json` e in `FONTI.json`; aggiornare il progetto non modifica le versioni già fissate.
 
-In `data/sources/<fonte>/<snapshot>/` sono conservati manifest, originali, testo, mappe e indici. `indexes/<versione>/` mantiene le versioni fissate dai dossier. I dossier prodotti sono in `data/documentation/<id>/`. Il registro degli AS-IS è in `data/sources/asis-registry.json`; le interpretazioni sono separate in `data/knowledge/proposals/`. Nella copia sorgente `data` corrisponde a `suite-data`; nell'installazione a `%LOCALAPPDATA%/PiSuite/data`.
+In `data/sources/<fonte>/<snapshot>/` sono conservati manifest, originali, testo, mappe e indici. `indexes/<versione>/` mantiene le versioni fissate dai dossier. I dossier prodotti sono in `data/documentation/<id>/`. Il registro dei documenti di documentazione tecnica è in `data/sources/documentazione-tecnica-registry.json`; le interpretazioni sono separate in `data/knowledge/proposals/`. Nella copia sorgente `data` corrisponde a `suite-data`; nell'installazione a `%LOCALAPPDATA%/PiSuite/data`.
 
 ## Copertura e limiti
 
@@ -127,6 +105,6 @@ In `data/sources/<fonte>/<snapshot>/` sono conservati manifest, originali, testo
 
 > Quali controlli impediscono di fatturare un ordine non confermato? Usa le fonti se servono, apri gli originali pertinenti e distingui specifica, implementazione e lacune.
 
-> Crea l'AS-IS del ciclo ordine usando le fonti configurate. Prepara prima grafi e indici aggiornati, leggi codice e documenti pertinenti e registra il dossier al termine.
+> Crea la documentazione tecnica del ciclo ordine usando le fonti configurate. Prepara prima grafi e indici aggiornati, leggi codice e documenti pertinenti e registra il dossier al termine.
 
-> Partendo dalle evidenze correnti e dall'AS-IS, prepara una specifica per aggiungere una nuova modalita di pagamento. Distingui stato attuale e TO-BE, segnala gli impatti verificati e quelli soltanto ipotizzati.
+> Partendo dalle evidenze correnti e dalla documentazione tecnica, prepara una specifica per aggiungere una nuova modalita di pagamento. Distingui stato attuale e TO-BE, segnala gli impatti verificati e quelli soltanto ipotizzati.
