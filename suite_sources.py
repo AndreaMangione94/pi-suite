@@ -93,6 +93,7 @@ class Sources:
         if kind=='sharepoint-local':
             if data.get('url'):s['url']=https_url(data['url'],('sharepoint.com',))
         if kind=='sharepoint-graph':
+            if data.get('url'):s['url']=https_url(data['url'],('sharepoint.com',))
             for key in ('driveId','folderId'):
                 value=str(data.get(key,'')).strip()
                 if not value or len(value)>300 or '/' in value: raise ValueError('Drive ID e Folder Item ID sono richiesti')

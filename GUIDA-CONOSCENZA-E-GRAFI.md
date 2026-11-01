@@ -4,17 +4,24 @@ Guida aggiornata alla distribuzione Windows del 28 ottobre 2026.
 
 ## Modale Grafi di conoscenza
 
-In **Il tuo workspace** seleziona un progetto e apri **Grafi di conoscenza**. Senza un progetto il pulsante è disabilitato e l’indicazione **Scegli un progetto per continuare.** spiega come abilitarlo. Funziona anche con cartelle senza Git. La prima riga della modale elenca i file persistenti del progetto, ciascuno con icona, nome e data di creazione; il clic apre il contenuto. La spiegazione descrive nodi e relazioni e il vantaggio della navigazione deterministica: a parità di versione, nodo di partenza e regole si seguono gli stessi collegamenti. Questo aiuta a ripetere le esplorazioni e risalire alle fonti, senza trasformare le interpretazioni semantiche in fatti verificati.
+In **Il tuo workspace** seleziona un progetto e apri **Grafi di conoscenza**. Senza un progetto il pulsante è disabilitato. La modale contiene tre sezioni, nell’ordine: **I miei grafi**, **Crea un grafo** e **Esplora il grafo**. La X in alto chiude la modale; non ci sono pulsanti di chiusura o salvataggio nel fondo.
 
-La modale **As-is** mostra i documenti già salvati e usa i grafi preparati in **Grafi di conoscenza**. Alla prima apertura propone i grafi documentali disponibili; le selezioni già salvate restano rispettate. Per creare un AS-IS dal pannello occorre selezionare almeno un grafo disponibile per il progetto; selezione e associazione del nuovo dossier al progetto sono persistenti.
+### Creare e salvare un grafo
 
-### Grafi documentali e grafo del codice nella stessa modale
+La creazione avviene direttamente nella modale, senza una card. Scegli **Grafo documentale** o **Grafo del codice**, inserisci il nome e seleziona l’origine:
 
-**Crea / aggiorna grafo del codice** costruisce il grafo AST della cartella selezionata e lo salva in `data/graphs/<progetto>/graph.json`. La ricerca visualizza al massimo 40 nodi; puoi restringere il termine e aprire un nodo per esplorarne i collegamenti. **Salva riferimenti** conserva le fonti collegate e i testi delle ricerche per il progetto. Il clic sui file salvati apre il JSON del grafo o il descrittore `evidence.json` della fonte, entro il limite di anteprima di 5 MB.
+- **Cartella locale**: scegli la cartella con **Sfoglia…** oppure inserisci il percorso. Sono supportate anche cartelle di rete e cartelle SharePoint sincronizzate.
+- **Remoto**: compaiono il tipo di integrazione e l’URL. Azure DevOps richiede il branch ed eventualmente un PAT Code Read, oppure usa le credenziali Git configurate. SharePoint tramite Microsoft Graph richiede anche Drive ID, Folder Item ID e un access token con accesso in lettura alla cartella.
 
-Il **grafo documentale semantico** è il grafo finale del progetto: comprende elementi e riferimenti espliciti più concetti, relazioni fra documenti ed equivalenze ricostruiti dal modello, anche quando i documenti non contengono ID o collegamenti. In **As-is → Grafi di riferimento** sono selezionabili questo grafo finale e il grafo del codice. Gli indici strutturali delle singole fonti restano consultabili nella modale, ma non sostituiscono il grafo semantico come input documentale dell’AS-IS.
+**Genera grafo** è l’unica azione di creazione e salvataggio: acquisisce i file, costruisce il grafo e, solo al buon esito, lo aggiunge con il nome scelto a **I miei grafi** e collega automaticamente la fonte al progetto. Una generazione fallita non aggiunge un grafo alla raccolta. Ogni generazione riuscita conserva una voce distinta, consultabile anche dopo la riapertura della modale.
 
-Le fonti si collegano in **Grafi di conoscenza → Grafo documentale del progetto**: cartelle locali o di rete (anche percorsi UNC e cartelle OneDrive/SharePoint sincronizzate), SharePoint remoto tramite Microsoft Graph o repository già supportati. **Salva collegamento** associa la fonte al progetto. Seleziona una o più cartelle e premi **Crea / aggiorna grafo documentale del progetto**. Questa operazione usa il modello Orchestratore configurato e può avere costi API; non crea un dossier AS-IS.
+Il **grafo del codice** analizza Python, JavaScript e TypeScript senza chiamate ai modelli. Il **grafo documentale** comprende elementi e riferimenti espliciti più concetti, relazioni fra documenti ed equivalenze ricostruiti dal modello Orchestratore; la generazione può comportare costi API. Non crea un dossier AS-IS.
+
+### Esplorare e riutilizzare i grafi
+
+In **Esplora il grafo** scegli un grafo salvato, cerca un termine e apri i nodi per seguirne le relazioni e leggere le fonti. Il clic su una voce di **I miei grafi** apre quel grafo nell’esplorazione. La raccolta mostra nome e data di creazione; le versioni salvate mantengono i propri snapshot delle fonti. L’esplorazione non avvia una nuova generazione.
+
+La modale **As-is** usa i grafi già preparati in **Grafi di conoscenza**. Alla prima apertura propone il grafo documentale più recente; le selezioni già salvate restano rispettate. Per ogni AS-IS puoi selezionare un grafo documentale e aggiungere uno o più grafi del codice.
 
 Il motore `DocumentGraphBuilder` gestisce la costruzione in due fasi:
 
@@ -23,13 +30,11 @@ Il motore `DocumentGraphBuilder` gestisce la costruzione in due fasi:
 
 Le estrazioni semantiche dei documenti invariati vengono riutilizzate dalla cache, con controllo del modello e del contenuto. La sintesi fra documenti viene rivalutata se cambia il corpus. Il salvataggio pubblica una nuova versione solo dopo il completamento: un errore lascia disponibile il grafo precedente. Il controllo delle evidenze verifica provenienza e integrità, non certifica automaticamente l’interpretazione semantica.
 
-I file Markdown nella riga **Documenti AS-IS salvati** sono consultabili prima della registrazione; **AS-IS consultabili** gestisce invece le copie registrate, indicizzate e riutilizzabili dagli agenti.
+La modale **As-is** segue lo stesso schema: **I miei AS-IS**, **Crea un AS-IS** e **Esplora l’AS-IS**. Il form senza card salva automaticamente nome, grafi, obiettivo e opzione di aggiornamento delle fonti; **Genera AS-IS** è l’unica CTA di creazione. I documenti prodotti dalla chat appaiono automaticamente nella raccolta e sono consultabili prima della registrazione. Non ci sono CTA inferiori di chiusura o salvataggio.
 
 ## Preparare le fonti una volta
 
-In **Il tuo workspace → Grafi di conoscenza**, collega cartelle SharePoint, cartelle locali o repository Azure e crea i grafi documentali. Nella stessa modale gestisci anche il grafo del codice, gli indici, la ricerca delle evidenze e le interpretazioni proposte. Le operazioni sui grafi restano nella modale, con stato e risultato. Ogni sincronizzazione salva uno snapshot con gli originali supportati, il testo estratto, gli hash e i localizzatori. **Acquisisci / aggiorna file** esegue solo estrazione e indicizzazione strutturale senza modelli; il pulsante di creazione del grafo documentale completa poi l’analisi semantica con il modello configurato.
-
-Nelle schede trovi numero di documenti, esclusioni, nodi e relazioni. Per aggiornare gli indici di snapshot gia acquisiti, seleziona le fonti e premi **Aggiorna indici espliciti delle fonti selezionate**. Questo aggiornamento riusa le estrazioni valide e non chiama provider. La creazione semantica invia invece i testi necessari al modello selezionato.
+In **Il tuo workspace → Grafi di conoscenza**, scegli il tipo di grafo e la cartella, poi premi **Genera grafo**. Lo stato dell’operazione resta nella sezione di creazione. Ogni acquisizione salva gli originali supportati, il testo estratto, gli hash, i localizzatori e gli indici strutturali. Per un grafo documentale segue l’analisi semantica con il modello configurato. Per aggiornare i contenuti, avvia una nuova generazione: i grafi precedenti restano in **I miei grafi**.
 
 Le parti indicizzate comprendono documenti, sezioni, tabelle documentali, riferimenti espliciti e identificatori come REQ-17, API-2, PROC-3, COMP-4 e DATA-5. I contratti OpenAPI/Swagger JSON espongono le operazioni dichiarate. Il codice Python, JavaScript e TypeScript usa il grafo AST gia integrato. Il parser SQL estrae dichiarazioni CREATE TABLE, colonne e REFERENCES, senza eseguire SQL.
 
@@ -53,7 +58,7 @@ Una citazione ha forma `[sourceId:documentId]`; il riferimento puntuale puo usar
 
 Nella normale chat il corpus viene fissato alla prima consultazione e condiviso con i figli. `/sources-refresh` ricarica i riferimenti salvati per la chat; quando è disponibile il grafo documentale, ne conserva gli snapshot coerenti. Per usare nuove versioni dei documenti rigenera prima il grafo nella modale. Il comando non sincronizza né genera documenti. Nei dossier, `FONTI.json` mantiene invece le versioni esplicitamente fissate. Una consultazione non ricostruisce indici, non arricchisce automaticamente i grafi e non rigenera l'AS-IS.
 
-Dal pannello puoi provare la ricerca, esplorare i collegamenti e aprire il testo completo nella sezione **Ricerca e indici delle fonti** della modale Grafi di conoscenza.
+Dal pannello puoi cercare nel grafo, esplorare i collegamenti e aprire le fonti nella sezione **Esplora il grafo** della modale Grafi di conoscenza.
 
 ## Lettura delegata con perimetro operativo
 
@@ -69,7 +74,7 @@ Il risultato della delega contiene `evidenceReading`: copertura automatica, reso
 
 Sono disponibili tre ingressi alla preparazione dei dossier, con selezioni diverse:
 
-1. Nel pannello seleziona almeno un **Grafo di riferimento**. **Aggiorna fonti e crea AS-IS** sincronizza le sue fonti e aggiorna il grafo semantico riusando la cache; **Usa snapshot esistenti** fissa la versione già salvata del grafo semantico e i suoi snapshot e acquisisce comunque la cartella corrente per il grafo locale.
+1. Nel pannello inserisci il nome e seleziona almeno un **Grafo di riferimento**, poi premi **Genera AS-IS**. Con **Aggiorna le fonti prima della generazione** selezionato, la suite sincronizza le fonti e aggiorna il grafo semantico; altrimenti fissa il grafo documentale salvato e i suoi snapshot. I vecchi grafi locali del progetto acquisiscono comunque la cartella corrente.
 2. `/asis [obiettivo]` nella chat aggiorna le fonti del dossier attivo o quelle salvate per il progetto corrente; fuori dai progetti registrati richiede di associare le fonti documentali a un progetto prima di costruire il grafo semantico. Non usa la selezione dei grafi del pannello.
 3. Su richiesta esplicita l’orchestratore può usare `prepare_asis` sul corpus della chat; il parametro `refresh` controlla la sincronizzazione delle fonti. Questo strumento non richiede la selezione dei grafi nella modale.
 
@@ -81,7 +86,7 @@ Lo strumento `prepare_asis` restituisce una cartella nuova. Le proposte dei figl
 
 ## Registrare il dossier prodotto
 
-Dopo aver scritto e controllato i documenti, l'orchestratore puo chiamare `register_asis`. In alternativa usa `/asis-register` nella chat del dossier, oppure inserisci la cartella in **AS-IS consultabili** e premi **Verifica citazioni e registra AS-IS**.
+Dopo aver scritto e controllato i documenti, l'orchestratore puo chiamare `register_asis`. L’incarico richiede questo passaggio alla fine della generazione. Puoi ripeterlo con `/asis-register` nella chat del dossier; il salvataggio e la consultazione in **I miei AS-IS** avvengono automaticamente e non richiedono una CTA di registrazione nel pannello.
 
 La registrazione richiede AS-IS.md e citazioni valide delle fonti primarie fissate; raccoglie anche gli altri cinque documenti standard se presenti. Salva una copia versionata e indicizzata, conservando dipendenze e verifiche. Ripetere la registrazione degli stessi contenuti riutilizza la stessa versione. Lo stato semantico resta **non revisionato**: la registrazione non equivale ad approvazione umana.
 

@@ -31,7 +31,7 @@ from suite_folder_picker import choose_folder
 
 ROOT = Path(__file__).resolve().parent
 APIS = ('openai-completions','openai-responses','anthropic-messages','google-generative-ai')
-OPERATIONS = ('graph','probe','sync-source','document-graphs','prepare-asis','auto-asis','index-sources','register-asis')
+OPERATIONS = ('generate-graph','graph','probe','sync-source','document-graphs','prepare-asis','auto-asis','index-sources','register-asis')
 
 def read_json(path):
     return json.loads(Path(path).read_text(encoding='utf-8-sig'))
@@ -489,7 +489,10 @@ class Suite:
                 if not isinstance(graph_ids,list) or any(not isinstance(g,str) for g in graph_ids):
                     raise ValueError('Grafi selezionati non validi')
                 references['graphs']=list(dict.fromkeys(graph_ids))
-                fields={'objective':20000,'dossierWorkspace':4000}
+                fields={'objective':20000,'dossierWorkspace':4000,'name':150}
+                refresh_sources=data.get('refreshSources',False)
+                if not isinstance(refresh_sources,bool):raise ValueError('Opzione aggiornamento fonti non valida')
+                references['refreshSources']=refresh_sources
             elif section=='graph':
                 ids=data.get('sources',workspace.source_references(project))
                 available={s['id'] for s in self.sources.connections()}
@@ -506,11 +509,46 @@ class Suite:
             save_json(self.settings_path,self.settings)
             return project['workspace']
 
-    def graph(self,pid,query='',node_id=None):
+    def graph(self,pid,query='',node_id=None,identifier=None):
         self.project(pid)
-        path=self.home/'graphs'/pid/'graph.json'
+        item=workspace.graph_entry(self,pid,identifier) if identifier else None
+        if item and item['kind']!='project':raise ValueError('Seleziona un grafo del codice.')
+        path=Path(item['path']) if item else self.home/'graphs'/pid/'graph.json'
         if not path.exists(): raise ValueError('Crea prima il grafo del progetto.')
         return query_graph(read_json(path),query,node_id)
+
+    def generate_graph(self,data):
+        pid=data['project'];project=workspace.project_record(self,pid)
+        name=str(data.get('name','')).strip()
+        kind=data.get('graphKind')
+        if not name or len(name)>150:raise ValueError('Inserisci un nome per il grafo, fino a 150 caratteri.')
+        if kind not in ('document','project'):raise ValueError('Tipo di grafo non valido.')
+        source_data=dict(data.get('source') or {})
+        source_data.pop('id',None);source_data['name']=name
+        if kind=='document':self.document_graph_profile()
+        rows=self.sources.save(source_data);sid=rows[-1]['id']
+        manifest=self.sources.sync(sid)
+        folder=self.sources.root/sid/manifest['id']
+        identifier='saved:'+uuid.uuid4().hex
+        if kind=='document':
+            graph=self.build_document_graph(pid,[sid],refresh=False)
+            ref={'project':pid,'version':graph['fingerprint']}
+            path=document_graph.graph_path(self.home,ref)
+            extra={'reference':ref,'documentCount':graph['stats']['documents']}
+        else:
+            path=folder/'graph.json'
+            if not path.is_file():raise ValueError('La cartella non contiene codice Python, JavaScript o TypeScript utilizzabile.')
+            graph=read_json(path);extra={}
+        item={'id':identifier,'name':name,'kind':kind,'path':str(path),'createdAt':graph['createdAt'],
+              'stats':graph['stats'],'source':sid,'snapshot':manifest['id'],**extra}
+        # Publish the graph in the library only after extraction and generation succeed.
+        saved=workspace.saved_graphs(self,pid)
+        save_json(self.home/'graphs'/pid/'saved.json',[*saved,item])
+        refs={**project.get('workspace',{}).get('graph',{})}
+        refs['sources']=list(dict.fromkeys([*workspace.source_references(project),sid]))
+        project.setdefault('workspace',{})['graph']=refs
+        save_json(self.settings_path,self.settings)
+        return {'project':pid,'graph':identifier,'kind':kind,'stats':graph['stats']}
 
     def document_graph_profile(self):
         profile=self.settings['roles'].get('orchestrator')
@@ -597,6 +635,11 @@ class Suite:
                 raise ValueError('Operazione non supportata')
             if operation in ('prepare-asis','auto-asis'):
                 workspace.selected_graphs(self,data)
+                if 'name' in data and (not isinstance(data['name'],str) or not data['name'].strip() or len(data['name'])>150):
+                    raise ValueError('Inserisci un nome per l’AS-IS, fino a 150 caratteri.')
+            if operation=='generate-graph':
+                workspace.project_record(self,data.get('project'))
+                if data.get('graphKind')=='document':self.document_graph_profile()
             if operation=='document-graphs':
                 ids=data.get('sources')
                 linked=workspace.source_references(workspace.project_record(self,data.get('project')))
@@ -614,7 +657,9 @@ class Suite:
             directory=self.home/'jobs'/self.job['id']; directory.mkdir(parents=True)
             env=os.environ.copy()
             env.update(PI_SUITE_GRAPH_CACHE=str(self.cache),PYTHONUTF8='1')
-            if operation=='sync-source':
+            if operation=='generate-graph':
+                self.job['result']=self.generate_graph(data)
+            elif operation=='sync-source':
                 manifest=self.sources.sync(data['source'])
                 self.job['result']={'source':data['source'],'documents':len(manifest['documents']),'excluded':len(manifest['excluded'])}
             elif operation=='document-graphs':
@@ -627,8 +672,9 @@ class Suite:
                 data['sources']=workspace.prepare_sources(self,data,operation)
                 result=self.prepare_documented_asis(data['sources'],data.get('objective',''),operation=='auto-asis',data['project'],
                     data.get('documentGraph'),bool(data.get('documentGraph')),progress)
-                save_json(Path(result['workspace'])/'PROGETTO.json',{'project':data['project'],'graphs':data['graphs'],'documentGraph':result.get('documentGraph')})
-                self.job['result']={k:v for k,v in result.items() if k not in ('sources','prompt')}
+                save_json(Path(result['workspace'])/'PROGETTO.json',{'project':data['project'],'name':data.get('name','').strip(),
+                    'graphs':data['graphs'],'documentGraph':result.get('documentGraph')})
+                self.job['result']={'project':data['project'],**{k:v for k,v in result.items() if k not in ('sources','prompt')}}
                 if data.get('openChat',True):self.open_chat(result['workspace'],result['prompt'])
             elif operation=='graph':
                 p=self.project(data['project']); repo=Path(p['path'])
@@ -757,12 +803,24 @@ class Handler(http.server.BaseHTTPRequestHandler):
             elif route=='/api/project' and not post: result=app.project(params['id'][0])
             elif route=='/api/project-files' and not post: result=workspace.inventory(app,params['id'][0])
             elif route=='/api/project-file' and not post: result=workspace.read_file(app,params['id'][0],params['file'][0])
-            elif route=='/api/graph' and not post: result=app.graph(params['id'][0],params.get('q',[''])[0],params.get('node',[None])[0])
+            elif route=='/api/graph' and not post: result=app.graph(params['id'][0],params.get('q',[''])[0],params.get('node',[None])[0],params.get('file',[None])[0])
             elif route=='/api/document-graph' and not post:
                 pid=params['id'][0];workspace.project_record(app,pid);ref=document_graph.current_ref(app.home,pid)
+                if params.get('file'):
+                    item=workspace.graph_entry(app,pid,params['file'][0])
+                    if item['kind']!='document':raise ValueError('Seleziona un grafo documentale.')
+                    ref=item['reference']
                 result=document_graph.query_graph(app.home,ref,{'query':params.get('q',[''])[0],'nodes':params.get('node',[]),'limit':30}) if ref else {'available':False,'nodes':[],'edges':[]}
             elif route=='/api/source' and not post:
                 project=app.project(params['id'][0]); name=params['path'][0]
+                if params.get('file'):
+                    item=workspace.graph_entry(app,project['id'],params['file'][0])
+                    if item.get('source'):
+                        bundle=app.sources.bundle([item['source']],{item['source']:item['snapshot']})[0]
+                        doc=next((d for d in bundle['manifest']['documents'] if d['path']==name),None)
+                        if not doc:raise ValueError('Sorgente non disponibile nel grafo.')
+                        result={'text':(Path(bundle['directory'])/(doc['id']+'.txt')).read_text(encoding='utf-8')}
+                        return self.send(200,result)
                 if name not in project['files']: raise ValueError('Sorgente non disponibile nel progetto')
                 root=Path(project['path']); target=root/checked_relative(name)
                 if not target.resolve().is_relative_to(root.resolve()) or target.is_symlink() or target.stat().st_size>200000:

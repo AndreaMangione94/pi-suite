@@ -4,23 +4,22 @@ const $=id=>document.getElementById(id);
 const token=location.hash.slice(1)||sessionStorage.getItem('pi-suite-token')||'';
 if(location.hash){sessionStorage.setItem('pi-suite-token',token);history.replaceState(null,'',location.pathname+location.search);}
 let state,settings,catalog=[],project=null,lastJob='',activePage='work',lastDelegations='';
-let workspaceFiles={graphs:[],asis:[]};const chosenGraphs=new Set();
+let workspaceFiles={graphs:[],asis:[]},graphExplorerId='',asisExplorerId='',asisPreviewSignature='',asisGraphListSignature='';const chosenGraphs=new Set();
 function asisAvailability(){
   const available=workspaceFiles.graphs.some(g=>g.selectable!==false&&chosenGraphs.has(g.id));
-  for(const id of ['auto-asis','prepare-asis'])$(id).disabled=!available||!!state?.busy;
+  $('generate-asis').disabled=!available||!!state?.busy;
   $('asis-graph-help').textContent=!workspaceFiles.graphs.some(g=>g.selectable!==false)?'Per creare un AS-IS, crea prima il grafo documentale semantico o il grafo del codice per questo progetto.':!available?'Seleziona almeno un grafo di conoscenza come riferimento.':'L’AS-IS esplorerà prima i grafi documentali selezionati, poi confronterà il codice disponibile.';
-  document.querySelectorAll('[data-asis-update]').forEach(b=>b.disabled=!available||!!state?.busy);
 }
 async function previewWorkspaceFile(kind,item){
   const pid=project.id,result=await api('project-file?id='+encodeURIComponent(pid)+'&file='+encodeURIComponent(item.id));
-  if(project?.id!==pid)return;
-  const host=$(kind+'-file-preview');host.replaceChildren(el('h3',item.name),el('pre',result.text));host.hidden=false;
+  if(project?.id!==pid||(kind==='asis'&&asisExplorerId!==item.id))return;
+  const host=$(kind+'-file-preview');host.replaceChildren(el('h3',item.name),el('pre',result.text));host.hidden=false;if(kind==='asis')asisPreviewSignature=item.id+':'+(item.modifiedAt||item.createdAt);
 }
 function renderSavedFiles(kind,items){
-  const host=$(kind+'-saved-files');host.replaceChildren();
+  const host=$(kind+'-saved-files'),signature=JSON.stringify(items);if(host.dataset.signature===signature)return;host.dataset.signature=signature;host.replaceChildren();
   if(!items.length){host.append(el('p',kind==='asis'?'Nessun documento AS-IS salvato per questo progetto.':'Nessun grafo di conoscenza salvato per questo progetto.','muted'));return;}
   for(const item of items){
-    const tile=btn('',()=>previewWorkspaceFile(kind,item),'saved-file');tile.title=item.path;
+    const tile=btn('',()=>kind==='graph'?selectGraph(item.id,true):selectAsis(item.id,true),'saved-file');tile.title=item.path;
     const icon=el('span',undefined,'file-icon');icon.setAttribute('aria-hidden','true');
     icon.innerHTML='<svg viewBox="0 0 24 28" width="26" height="32" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 1h12l6 6v20H3z"/><path d="M15 1v7h6M7 13h10M7 18h10M7 23h7"/></svg>';
     const timestamp=typeof item.createdAt==='number'?item.createdAt*1000:item.createdAt;
@@ -31,14 +30,23 @@ function renderSavedFiles(kind,items){
 async function refreshWorkspaceFiles(){
   if(!project)return;const pid=project.id,files=await api('project-files?id='+encodeURIComponent(pid));if(project?.id!==pid)return;
   workspaceFiles=files;for(const id of chosenGraphs)if(!files.graphs.some(g=>g.id===id&&g.selectable!==false))chosenGraphs.delete(id);
-  renderSavedFiles('asis',files.asis);renderSavedFiles('graph',files.graphs);
-  const host=$('asis-graph-list');host.replaceChildren();
-  for(const graph of files.graphs.filter(g=>g.selectable!==false)){const check=input('','checkbox');check.checked=chosenGraphs.has(graph.id);check.onchange=()=>{if(check.checked)chosenGraphs.add(graph.id);else chosenGraphs.delete(graph.id);asisAvailability();};const label=el('label',graph.name,'graph-choice');label.prepend(check);host.append(label);}
+  renderSavedFiles('asis',files.asis);renderSavedFiles('graph',files.graphs.filter(g=>g.selectable!==false));
+  const documents=files.asis;if(!documents.some(item=>item.id===asisExplorerId)){asisExplorerId=documents[0]?.id||'';asisPreviewSignature='';}
+  const documentOptions=documents.length?documents.map(item=>[item.id,item.name]):[['','Nessun AS-IS disponibile']],documentSignature=JSON.stringify(documentOptions);
+  if($('asis-explorer').dataset.signature!==documentSignature){options($('asis-explorer'),documentOptions,asisExplorerId);$('asis-explorer').dataset.signature=documentSignature;}
+  if($('asis-dialog').open)await selectAsis(asisExplorerId);
+  const graphs=files.graphs.filter(g=>g.selectable!==false);if(!graphs.some(g=>g.id===graphExplorerId))graphExplorerId=graphs[0]?.id||'';
+  options($('graph-explorer'),graphs.length?graphs.map(g=>[g.id,g.name+' · '+(g.kind==='document'?'Documentale':'Codice')]):[['','Nessun grafo disponibile']],graphExplorerId);
+  const host=$('asis-graph-list'),graphSignature=()=>JSON.stringify(files.graphs.map(g=>[g.id,g.name,g.selectable,chosenGraphs.has(g.id)]));
+  if(asisGraphListSignature!==graphSignature()){host.replaceChildren();
+  for(const graph of files.graphs.filter(g=>g.selectable!==false)){const check=input('','checkbox');check.checked=chosenGraphs.has(graph.id);check.dataset.graphId=graph.id;check.onchange=()=>{if(check.checked){if(graph.kind==='document')for(const other of files.graphs)if(other.kind==='document')chosenGraphs.delete(other.id);chosenGraphs.add(graph.id);}else chosenGraphs.delete(graph.id);host.querySelectorAll('input').forEach(n=>n.checked=chosenGraphs.has(n.dataset.graphId));asisGraphListSignature=graphSignature();asisAvailability();queueAsisReferences();};const label=el('label',graph.name,'graph-choice');label.prepend(check);host.append(label);}
+  asisGraphListSignature=graphSignature();}
   asisAvailability();
 }
-async function startAsis(operation,objective=$('asis-objective').value){
+async function startAsis(){
+  const operation=$('asis-refresh-sources').checked?'auto-asis':'prepare-asis',objective=$('asis-objective').value;
   await refreshWorkspaceFiles();if(!workspaceFiles.graphs.some(g=>g.selectable!==false&&chosenGraphs.has(g.id)))throw Error('Seleziona almeno un grafo di conoscenza disponibile per questo progetto.');
-  await saveReferences('asis');return action(operation,{project:project.id,graphs:[...chosenGraphs],objective,openChat:true});
+  queueAsisReferences();await flushAsisReferences();return action(operation,{project:project.id,graphs:[...chosenGraphs],name:$('asis-name').value.trim(),objective,openChat:true});
 }
 const roleNames={orchestrator:['Orchestratore','Definisce piano e criteri, delega ai figli configurati e verifica; senza figli svolge direttamente il lavoro'],worker:['Subagenti','Facoltativi: se selezioni un modello, ricevono sempre il lavoro operativo. Modello e ragionamento indipendenti']};
 function el(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;}
@@ -69,30 +77,59 @@ async function openWorkspaceDialog(kind){
   restoreReferences(kind);dialog.showModal();dialog.querySelector('.dialog-body').scrollTop=0;
   await refreshWorkspaceFiles();
   if(kind==='asis'){
-    if(!Object.hasOwn(project.workspace?.asis||{},'graphs')){for(const graph of workspaceFiles.graphs)if(graph.kind==='document')chosenGraphs.add(graph.id);await refreshWorkspaceFiles();}
-    await refreshEvidenceRegistry();
-  }else{fillSource();await loadSources();await refreshRelationProposals();await loadDocumentGraph();if(project.graph)await loadGraph();}
+    if(!Object.hasOwn(project.workspace?.asis||{},'graphs')){const graph=workspaceFiles.graphs.filter(g=>g.kind==='document').at(-1);if(graph)chosenGraphs.add(graph.id);await refreshWorkspaceFiles();}
+    await selectAsis(asisExplorerId);
+  }else{fillSource();await selectGraph(graphExplorerId);}
 }
 function restoreReferences(kind){
-  const refs=project?.workspace?.[kind]||{};
-  for(const section of ['asis','graph']){$(section+'-file-preview').replaceChildren();$(section+'-file-preview').hidden=true;$(section+'-saved-files').replaceChildren(el('p','Caricamento file salvati…','muted'));}
+  const refs=(kind==='asis'?pendingAsisSaves.get(project.id):null)||project?.workspace?.[kind]||{};
+  for(const section of ['asis','graph']){$(section+'-file-preview').replaceChildren();$(section+'-file-preview').hidden=true;$(section+'-saved-files').replaceChildren(el('p','Caricamento file salvati…','muted'));delete $(section+'-saved-files').dataset.signature;}
   if(kind==='asis'){chosenGraphs.clear();for(const id of refs.graphs||[])chosenGraphs.add(id);workspaceFiles={graphs:[],asis:[]};asisAvailability();}
   restoreProjectSources();
-  if(kind==='asis'){$('asis-registry').replaceChildren();$('asis-objective').value=refs.objective||'';$('dossier-workspace').value=refs.dossierWorkspace||'';}
-  else{$('source-list').replaceChildren(el('p','Caricamento fonti…','muted'));$('relation-proposals').replaceChildren();$('evidence-query').value=refs.evidenceQuery||'';$('evidence-results').replaceChildren();$('evidence-reader').replaceChildren();$('graph-path').value=project?.path||'';$('graph-search').value=refs.query||'';$('graph-stats').replaceChildren();$('graph-canvas').replaceChildren();$('graph-results').replaceChildren();}
+  if(kind==='asis'){asisExplorerId='';asisPreviewSignature='';$('asis-name').value=refs.name||'';$('asis-objective').value=refs.objective||'';$('asis-refresh-sources').checked=!!refs.refreshSources;}
+  else{graphExplorerId='';$('graph-search').value='';$('document-graph-search').value='';$('graph-stats').replaceChildren();$('graph-canvas').replaceChildren();$('graph-results').replaceChildren();$('document-graph-reader').replaceChildren();}
 }
-async function saveReferences(kind){
-  if(!project)throw Error('Seleziona prima un progetto.');
-  const references=kind==='asis'?{graphs:[...chosenGraphs],objective:$('asis-objective').value,dossierWorkspace:$('dossier-workspace').value}:{sources:[...chosenSources],query:$('graph-search').value,evidenceQuery:$('evidence-query').value};
-  project.workspace=await api('project-references',{project:project.id,section:kind,references});
-  notice('Riferimenti salvati per '+project.name+'.');
+const pendingAsisSaves=new Map();let asisSaveTimer,asisSaving;
+function queueAsisReferences(){
+  if(!project)return;
+  const references={...project.workspace?.asis,graphs:[...chosenGraphs],name:$('asis-name').value.trim(),objective:$('asis-objective').value,refreshSources:$('asis-refresh-sources').checked};
+  project.workspace={...project.workspace,asis:references};pendingAsisSaves.set(project.id,references);
+  $('asis-save-state').textContent='Salvataggio automatico…';clearTimeout(asisSaveTimer);
+  asisSaveTimer=setTimeout(()=>flushAsisReferences().catch(e=>notice(e.message,true)),350);
 }
+async function flushAsisReferences(){
+  if(asisSaving)return asisSaving;
+  asisSaving=(async()=>{
+    while(pendingAsisSaves.size&&!state?.busy){
+      const [pid,references]=pendingAsisSaves.entries().next().value;pendingAsisSaves.delete(pid);
+      try{
+        const workspace=await api('project-references',{project:pid,section:'asis',references});
+        if(project?.id===pid&&!pendingAsisSaves.has(pid)){project.workspace=workspace;$('asis-save-state').textContent='Impostazioni salvate automaticamente.';}
+      }catch(error){
+        if(!pendingAsisSaves.has(pid))pendingAsisSaves.set(pid,references);
+        if(project?.id===pid)$('asis-save-state').textContent='Salvataggio in attesa. Le impostazioni verranno salvate appena possibile.';
+        if(!error.message.includes('corso'))throw error;
+        return;
+      }
+    }
+  })();
+  try{await asisSaving;}finally{asisSaving=null;}
+}
+async function selectAsis(id,scroll=false){
+  asisExplorerId=id;$('asis-explorer').value=id;
+  const item=workspaceFiles.asis.find(doc=>doc.id===id);$('asis-explorer-empty').hidden=!!item;
+  if(!item){$('asis-file-preview').replaceChildren();$('asis-file-preview').hidden=true;asisPreviewSignature='';}
+  else if(asisPreviewSignature!==item.id+':'+(item.modifiedAt||item.createdAt))await previewWorkspaceFile('asis',item);
+  if(scroll)$('asis-explore-title').scrollIntoView({block:'start',behavior:'smooth'});
+}
+$('asis-explorer').onchange=()=>selectAsis($('asis-explorer').value).catch(e=>notice(e.message,true));
+for(const id of ['asis-name','asis-objective','asis-refresh-sources'])$(id).addEventListener('input',queueAsisReferences);
+$('asis-create-form').onsubmit=event=>{event.preventDefault();if(state?.busy)return;$('generate-asis').disabled=true;startAsis().catch(e=>notice(e.message,true)).finally(asisAvailability);};
 bind('open-asis',()=>openWorkspaceDialog('asis'));bind('open-graph',()=>openWorkspaceDialog('graph'));
-bind('save-asis-references',()=>saveReferences('asis'));bind('save-graph-references',async()=>{await saveReferences('graph');await refreshWorkspaceFiles();});
 document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>page(b.dataset.page));
 function setup(){referenceAvailability();const steps=[['Connessioni',`${settings.providers.length} provider configurati`,'providers',settings.providers.length>0],['La tua squadra',settings.roles.worker?'Orchestratore + subagenti':settings.roles.orchestrator?'Solo orchestratore':'Scegli l’orchestratore','roles',!!settings.roles.orchestrator],['Contesto locale',project?.name||'Scegli il tuo progetto','work',!!project]];$('setup').replaceChildren();steps.forEach(([title,desc,target,done],i)=>{const b=btn('',()=>page(target),'setup-step');b.append(el('span',done?'✓':String(i+1),'step-number'));const d=el('div',title);d.append(el('small',desc));b.append(d);$('setup').append(b);});}
 function projects(){options($('project'),[['','Nessun progetto · Chat con contesto pulito'],...settings.projects.map(p=>[p.id,settings.projects.filter(other=>other.name===p.name).length>1?p.name+' · '+p.path:p.name])],project?.id||'');for(const option of $('project').options)option.title=settings.projects.find(p=>p.id===option.value)?.path||'';}
-async function refresh(initial=false){state=await api('state');if(initial||!settings)settings=state.settings;else settings.projects=state.settings.projects;setup();renderJob();if(activePage==='runs')await loadDelegations();if(initial){projects();renderProviders();renderRoles();renderSkills();}const signature=state.job.id+':'+state.job.state;if(signature!==lastJob){lastJob=signature;if(state.job.state==='done'){notice('Operazione completata.');projects();if(state.job.operation==='graph'&&project){project=await api('project?id='+project.id);await loadGraph();}if(['sync-source','document-graphs','prepare-asis','auto-asis','index-sources','register-asis'].includes(state.job.operation)){await loadSources();if(project){await refreshWorkspaceFiles();if(state.job.operation==='document-graphs')await loadDocumentGraph();}if(state.job.result?.workspace)notice('Dossier pronto in '+state.job.result.workspace+'. La chat scriverà la documentazione.');}if(state.job.operation==='probe'){settings.modelChecks=state.settings.modelChecks;renderProviders();}if(state.job.operation==='probe')notice('Connessione e tool calling verificati. Ragionamento effettivo: '+state.job.result.effective);}if(state.job.state==='failed')notice(state.job.error,true);}document.querySelectorAll('[data-job-button]').forEach(b=>b.disabled=state.busy);asisAvailability();}
+async function refresh(initial=false){state=await api('state');if(initial||!settings)settings=state.settings;else settings.projects=state.settings.projects;setup();renderJob();if(activePage==='runs')await loadDelegations();if(initial){projects();renderProviders();renderRoles();renderSkills();}const signature=state.job.id+':'+state.job.state;if(signature!==lastJob){lastJob=signature;if(state.job.state==='done'){notice('Operazione completata.');projects();if(state.job.operation==='generate-graph'&&project?.id===state.job.result?.project){project=await api('project?id='+project.id);restoreProjectSources();graphExplorerId=state.job.result.graph;await refreshWorkspaceFiles();await selectGraph(graphExplorerId);notice('Grafo creato e salvato automaticamente in I miei grafi.');}if(state.job.operation==='graph'&&project){project=await api('project?id='+project.id);await loadGraph();}if(['sync-source','document-graphs','prepare-asis','auto-asis','index-sources','register-asis'].includes(state.job.operation)){await loadSources();if(project){await refreshWorkspaceFiles();if(state.job.operation==='document-graphs')await loadDocumentGraph();}if(state.job.result?.workspace)notice('Dossier pronto in '+state.job.result.workspace+'. La chat scriverà la documentazione.');}if(state.job.operation==='probe'){settings.modelChecks=state.settings.modelChecks;renderProviders();}if(state.job.operation==='probe')notice('Connessione e tool calling verificati. Ragionamento effettivo: '+state.job.result.effective);}if(state.job.state==='failed')notice(state.job.error,true);}if(!state.busy)await flushAsisReferences();if($('asis-dialog').open)await refreshWorkspaceFiles();document.querySelectorAll('[data-job-button]').forEach(b=>b.disabled=state.busy);asisAvailability();}
 bind('open-chat',async()=>{const selected=project;const result=await api('chat',selected?{project:selected.id}:{});notice(selected?'Chat Pi aperta per '+selected.name+' in '+result.folder:'Chat Pi aperta con contesto pulito in '+result.folder);});
 async function loadDelegations(){
   const batches=await api('delegations'),host=$('delegation-list'),signature=JSON.stringify(batches);
@@ -231,15 +268,15 @@ async function chooseDirectory(target,context,button,afterSelect){
   if(choosingFolder)return;
   const control=$(target),dialog=control.closest('dialog'),projectId=project?.id;
   const dialogVersion=folderDialogVersion;
-  const original=control.value,sourceKind=$('source-kind').value,sourceId=$('source-id').value;
-  const blocked=[...document.querySelectorAll('[data-folder-picker]'),$('create-project'),$('save-source'),$('new-source'),$('source-kind'),$('register-dossier'),$('clear-project-path')];
+  const original=control.value,sourceKind=$('source-kind').value,sourceModeValue=graphLocation();
+  const blocked=[...document.querySelectorAll('[data-folder-picker]'),$('create-project'),$('generate-graph'),$('graph-kind'),...document.querySelectorAll('[name=graph-location]'),$('source-kind'),$('generate-asis'),$('clear-project-path')];
   const disabled=blocked.map(n=>n.disabled);choosingFolder=true;
   blocked.forEach(n=>n.disabled=true);$(button).setAttribute('aria-busy','true');
   dialog.querySelector('[data-modal-notice]').hidden=true;
   try{
     const result=await api('folder',{context,initialPath:original||project?.path||''});
     if(result.path&&dialog.open&&folderDialogVersion===dialogVersion&&project?.id===projectId&&control.value===original&&
-      (context!=='source'||($('source-kind').value===sourceKind&&$('source-id').value===sourceId))){
+      (context!=='source'||($('source-kind').value===sourceKind&&graphLocation()===sourceModeValue))){
       control.value=result.path;control.dispatchEvent(new Event('change',{bubbles:true}));afterSelect?.(result.path);
     }
   }finally{choosingFolder=false;blocked.forEach((n,i)=>n.disabled=disabled[i]);$(button).removeAttribute('aria-busy');}
@@ -252,7 +289,7 @@ function chooseProjectFolder(){
 }
 bind('browse-project',chooseProjectFolder);bind('project-path',chooseProjectFolder);
 $('project-path').onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();chooseProjectFolder().catch(e=>notice(e.message,true));}};
-for(const [target,context,button]of [['source-path','source','browse-source'],['dossier-workspace','dossier','browse-dossier']]){
+for(const [target,context,button]of [['source-path','source','browse-source']]){
   bind(button,()=>chooseDirectory(target,context,button));
   // The editable field also opens Explorer; pasting a path remains supported.
   bind(target,()=>chooseDirectory(target,context,button));
@@ -268,14 +305,15 @@ $('project-form').onsubmit=event=>{
     await openProject();notice('Progetto pronto: '+created.name+'.');
   }).catch(e=>notice(e.message,true)).finally(()=>$('create-project').disabled=false);
 };
-async function action(operation,data={}){await api('action',{operation,...data});if(!(['graph','sync-source','document-graphs','index-sources'].includes(operation)&&$('graph-dialog').open))page('runs');await refresh();if(state.busy)notice('Operazione avviata. Puoi seguirne lo stato qui.');}
-bind('build-graph',()=>{if(!project)throw Error('Apri un progetto nel workspace.');return saveReferences('graph').then(()=>action('graph',{project:project.id}));});bind('search-graph',()=>loadGraph());$('graph-search').onkeydown=e=>{if(e.key==='Enter')loadGraph().catch(e=>notice(e.message,true));};
-async function loadGraph(node){if(!project)return;const data=await api('graph?id='+project.id+'&q='+encodeURIComponent($('graph-search').value)+(node?'&node='+encodeURIComponent(node):''));$('graph-project').textContent=project.name;$('graph-state').textContent=project.graph?.stale?'Il codice è cambiato: aggiorna il grafo.':'Grafo persistente del progetto · nessun consumo API';$('graph-stats').replaceChildren();for(const [label,value]of [['Nodi',data.stats.nodes],['Relazioni',data.stats.edges],['File riutilizzati',data.stats.reused],['File rianalizzati',data.stats.extracted]]){const s=el('div');s.append(el('strong',String(value)),el('small',label));$('graph-stats').append(s);}drawGraph(data);$('graph-results').replaceChildren();if(data.truncated)$('graph-results').append(el('p','Risultati parziali: restringi la ricerca.','muted'));if(!data.nodes.length)$('graph-results').append(el('p','Nessun simbolo corrispondente.','muted'));for(const n of data.nodes){const row=el('div',undefined,'graph-node');row.append(btn(n.label||n.id,()=>loadGraph(n.id),'text-button'),el('small',n.source_file+' · '+(n.source_location||'')));row.append(btn('Leggi sorgente',async()=>{const source=await api('source?id='+project.id+'&path='+encodeURIComponent(n.source_file.replace(/^repo\//,'')));const existing=$('graph-source');if(existing)existing.remove();const pre=el('pre',source.text);pre.id='graph-source';$('graph-results').prepend(pre);},'text-button'));$('graph-results').append(row);}}
+async function action(operation,data={}){await api('action',{operation,...data});if(!((['generate-graph','graph','sync-source','document-graphs','index-sources'].includes(operation)&&$('graph-dialog').open||['prepare-asis','auto-asis'].includes(operation)&&$('asis-dialog').open)))page('runs');await refresh();if(state.busy)notice('Operazione avviata. Puoi seguirne lo stato qui.');}
+bind('search-graph',()=>loadGraph());$('graph-search').onkeydown=e=>{if(e.key==='Enter')loadGraph().catch(e=>notice(e.message,true));};
+async function loadGraph(node){if(!project)return;const pid=project.id,selected=graphExplorerId,data=await api('graph?id='+pid+'&file='+encodeURIComponent(selected)+'&q='+encodeURIComponent($('graph-search').value)+(node?'&node='+encodeURIComponent(node):''));if(project?.id!==pid||graphExplorerId!==selected)return;$('graph-project').textContent=workspaceFiles.graphs.find(g=>g.id===selected)?.name||project.name;$('graph-state').textContent='Grafo salvato · nessun consumo API durante l’esplorazione';$('graph-stats').replaceChildren();for(const [label,value]of [['Nodi',data.stats.nodes],['Relazioni',data.stats.edges],['File riutilizzati',data.stats.reused],['File rianalizzati',data.stats.extracted]]){const s=el('div');s.append(el('strong',String(value)),el('small',label));$('graph-stats').append(s);}drawGraph(data);$('graph-results').replaceChildren();if(data.truncated)$('graph-results').append(el('p','Risultati parziali: restringi la ricerca.','muted'));if(!data.nodes.length)$('graph-results').append(el('p','Nessun simbolo corrispondente.','muted'));for(const n of data.nodes){const row=el('div',undefined,'graph-node');row.append(btn(n.label||n.id,()=>loadGraph(n.id),'text-button'),el('small',n.source_file+' · '+(n.source_location||'')));row.append(btn('Leggi sorgente',async()=>{const source=await api('source?id='+pid+'&file='+encodeURIComponent(selected)+'&path='+encodeURIComponent(workspaceFiles.graphs.find(g=>g.id===selected)?.source?n.source_file:n.source_file.replace(/^repo\//,'')));const existing=$('graph-source');if(existing)existing.remove();const pre=el('pre',source.text);pre.id='graph-source';$('graph-results').prepend(pre);},'text-button'));$('graph-results').append(row);}}
 function drawGraph(data,target='graph-canvas',onSelect=loadGraph){const svg=$(target),ns='http://www.w3.org/2000/svg';svg.replaceChildren();const nodes=data.nodes.slice(0,40),positions=new Map();nodes.forEach((n,i)=>{const columns=Math.min(6,nodes.length),rows=Math.ceil(nodes.length/columns);positions.set(n.id,{x:80+(i%columns)*(740/Math.max(1,columns-1)),y:65+Math.floor(i/columns)*(280/Math.max(1,rows-1))});});for(const edge of data.edges){const a=positions.get(edge.source),b=positions.get(edge.target);if(!a||!b)continue;const line=document.createElementNS(ns,'line');Object.entries({x1:a.x,y1:a.y,x2:b.x,y2:b.y}).forEach(([k,v])=>line.setAttribute(k,v));svg.append(line);}for(const n of nodes){const p=positions.get(n.id),g=document.createElementNS(ns,'g'),circle=document.createElementNS(ns,'circle');circle.setAttribute('cx',p.x);circle.setAttribute('cy',p.y);circle.setAttribute('r','11');const title=document.createElementNS(ns,'title');title.textContent=n.label+' · '+(n.source_file||n.path||n.kind||'');circle.append(title);circle.onclick=()=>onSelect(n.id).catch(e=>notice(e.message,true));circle.setAttribute('tabindex','0');circle.setAttribute('role','button');circle.setAttribute('aria-label',n.label||n.id);circle.onkeydown=e=>{if(e.key==='Enter')circle.onclick();};const text=document.createElementNS(ns,'text');text.setAttribute('x',p.x);text.setAttribute('y',p.y+25);text.setAttribute('text-anchor','middle');text.textContent=(n.label||n.id).slice(0,23);g.append(circle,text);svg.append(g);}}
 function renderJob(){
-  const j=state.job,names={graph:'Grafo del codice','sync-source':'Acquisizione e relazioni esplicite','document-graphs':'Grafo documentale semantico','index-sources':'Indici delle relazioni esplicite','prepare-asis':'Preparazione AS-IS','auto-asis':'Aggiornamento fonti e preparazione AS-IS','register-asis':'Registrazione AS-IS',probe:'Verifica modello'},states={running:'In corso',done:'Completata',failed:'Non completata'};
-  for(const host of [$('job-panel'),$('graph-job-panel')]){
-    if(host.id==='graph-job-panel')host.hidden=!['graph','sync-source','document-graphs','index-sources'].includes(j.operation);
+  const j=state.job,names={'generate-graph':'Generazione grafo',graph:'Grafo del codice','sync-source':'Acquisizione e relazioni esplicite','document-graphs':'Grafo documentale semantico','index-sources':'Indici delle relazioni esplicite','prepare-asis':'Preparazione AS-IS','auto-asis':'Aggiornamento fonti e preparazione AS-IS','register-asis':'Registrazione AS-IS',probe:'Verifica modello'},states={running:'In corso',done:'Completata',failed:'Non completata'};
+  for(const host of [$('job-panel'),$('graph-job-panel'),$('asis-job-panel')]){
+    if(host.id==='graph-job-panel')host.hidden=!['generate-graph','graph','sync-source','document-graphs','index-sources'].includes(j.operation);
+    if(host.id==='asis-job-panel')host.hidden=!['prepare-asis','auto-asis'].includes(j.operation);
     host.dataset.operation=j.operation||'';host.dataset.state=j.state||'';host.replaceChildren();
     host.append(el('h2',j.state==='running'?'Operazione in corso…':j.state==='failed'?'Operazione non completata':'Centro attività'));
     host.append(el('p',j.operation?`${names[j.operation]||j.operation} · ${states[j.state]||j.state}`:'Il prossimo task apparirà qui.','muted'));
@@ -288,18 +326,42 @@ function renderJob(){
 
 const chosenSources=new Set();let sourceRows=[];
 function restoreProjectSources(){chosenSources.clear();for(const id of project?.workspace?.graph?.sources??project?.workspace?.asis?.sources??[])chosenSources.add(id);}
-function sourceMode(){const kind=$('source-kind').value;$('source-local').hidden=!kind.endsWith('local');$('source-graph').hidden=kind!=='sharepoint-graph';$('source-branch-row').hidden=!kind.startsWith('azure');$('source-token-row').hidden=kind!=='sharepoint-graph'&&kind!=='azure-remote';$('source-url-row').hidden=kind==='sharepoint-graph'||kind==='azure-local';}
-$('source-kind').onchange=sourceMode;
-function fillSource(s={}){for(const [id,key]of [['source-id','id'],['source-name','name'],['source-path','path'],['source-url','url'],['source-drive','driveId'],['source-folder','folderId']])$(id).value=s[key]||'';$('source-kind').value=s.kind||'sharepoint-local';$('source-branch').value=s.branch||'main';$('source-token').value='';sourceMode();}
-bind('new-source',()=>fillSource());
-bind('save-source',async()=>{const rows=await api('sources',{id:$('source-id').value||undefined,name:$('source-name').value,kind:$('source-kind').value,path:$('source-path').value,url:$('source-url').value,driveId:$('source-drive').value,folderId:$('source-folder').value,branch:$('source-branch').value,token:$('source-token').value});chosenSources.add(rows.at(-1).id);await saveReferences('graph');fillSource();await loadSources();await refreshWorkspaceFiles();notice('Fonte collegata al progetto. Premi Crea / aggiorna grafo documentale del progetto per avviare estrazione e analisi del modello.');});
-async function loadSources(){sourceRows=await api('sources');const host=$('source-list');host.replaceChildren();for(const s of sourceRows){const card=el('div',undefined,'card'),check=input('','checkbox');check.checked=chosenSources.has(s.id);check.onchange=()=>{if(check.checked)chosenSources.add(s.id);else chosenSources.delete(s.id);};const title=el('label',s.name);title.prepend(check);card.append(title,el('p',s.kind+' · '+(s.path||s.url||'Drive '+s.driveId),'muted'));if(s.snapshot)card.append(el('p',s.snapshot.documents.length+' documenti · '+s.snapshot.excluded.length+' esclusi · '+s.snapshot.createdAt+(s.snapshot.revision?' · commit '+s.snapshot.revision:''),'muted'));else card.append(el('p','Non ancora sincronizzata.','muted'));if(s.snapshot?.index)card.append(el('p',s.snapshot.index.nodes+' nodi · '+s.snapshot.index.edges+' relazioni · indice '+s.snapshot.index.version,'muted'));const build=btn('Acquisisci / aggiorna file',async()=>{chosenSources.add(s.id);await saveReferences('graph');return action('sync-source',{source:s.id,project:project.id});});build.dataset.jobButton='';build.disabled=!!state?.busy;card.append(build,btn('Modifica collegamento',()=>fillSource(s)));if(s.snapshot?.excluded.length){const detail=el('details');detail.append(el('summary','File esclusi'),el('pre',JSON.stringify(s.snapshot.excluded,null,2)));card.append(detail);}host.append(card);}}
-bind('build-document-graphs',async()=>{const sources=selectedEvidenceSources();await saveReferences('graph');return action('document-graphs',{sources,project:project.id});});
-bind('prepare-asis',()=>startAsis('prepare-asis'));
+function graphLocation(){return document.querySelector('[name=graph-location]:checked').value;}
+function sourceMode(){
+  const remote=graphLocation()==='remote',kind=$('source-kind').value,documental=$('graph-kind').value==='document';
+  $('source-local').hidden=remote;$('source-remote').hidden=!remote;$('source-path').required=!remote;$('source-url').required=remote;
+  const sharepoint=remote&&kind==='sharepoint-graph';$('source-graph').hidden=!sharepoint;$('source-branch-row').hidden=kind!=='azure-remote';
+  for(const id of ['source-drive','source-folder','source-token'])$(id).required=sharepoint;
+  $('source-url').placeholder=kind==='sharepoint-graph'?'https://azienda.sharepoint.com/sites/progetto/Documenti':'https://dev.azure.com/organizzazione/progetto/_git/repository';
+  $('source-token-help').textContent=sharepoint?'Token Microsoft Graph con accesso in lettura alla cartella.':'PAT con permesso Code Read, oppure lascia vuoto per usare le credenziali Git configurate.';
+  $('document-graph-model').hidden=!documental;
+  $('graph-generation-help').textContent=documental?'Il grafo documentale usa il modello Orchestratore e può comportare costi API.':'Il grafo del codice analizza Python, JavaScript e TypeScript senza chiamare modelli.';
+}
+$('source-kind').onchange=sourceMode;$('graph-kind').onchange=sourceMode;
+for(const control of document.querySelectorAll('[name=graph-location]'))control.onchange=sourceMode;
+function fillSource(){
+  $('graph-create-form').reset();$('source-path').value=project?.path||'';sourceMode();
+}
+async function loadSources(){sourceRows=await api('sources');}
+async function selectGraph(id,scroll=false){
+  graphExplorerId=id;$('graph-explorer').value=id;
+  const item=workspaceFiles.graphs.find(g=>g.id===id&&g.selectable!==false);
+  $('graph-explorer-empty').hidden=!!item;$('document-graph-view').hidden=item?.kind!=='document';$('code-graph-view').hidden=item?.kind!=='project';
+  if(item){if(item.kind==='document')await loadDocumentGraph();else await loadGraph();}
+  if(scroll)$('graph-explore-title').scrollIntoView({block:'start',behavior:'smooth'});
+}
+$('graph-explorer').onchange=()=>selectGraph($('graph-explorer').value).catch(e=>notice(e.message,true));
+$('graph-create-form').onsubmit=event=>{
+  event.preventDefault();if(choosingFolder||state?.busy)return;
+  const button=$('generate-graph');button.disabled=true;
+  const remote=graphLocation()==='remote',source={name:$('source-name').value,kind:remote?$('source-kind').value:'sharepoint-local',
+    ...(remote?{url:$('source-url').value,driveId:$('source-drive').value,folderId:$('source-folder').value,branch:$('source-branch').value,token:$('source-token').value}:{path:$('source-path').value})};
+  action('generate-graph',{project:project.id,name:$('source-name').value,graphKind:$('graph-kind').value,source})
+    .then(()=>$('source-token').value='').catch(e=>notice(e.message,true)).finally(()=>button.disabled=!!state?.busy);
+};
 sourceMode();
 
-bind('auto-asis',()=>startAsis('auto-asis'));
-bind('asis-open-graphs',()=>{closeWorkspaceDialogs();return openWorkspaceDialog('graph');});
+
 
 function referenceAvailability(){
   const ready=!!project;

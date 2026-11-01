@@ -22,22 +22,36 @@ def source_references(project):
     return workspace.get('graph', {}).get('sources', workspace.get('asis', {}).get('sources', []))
 
 
+def saved_graphs(app, pid):
+    project_record(app, pid)
+    path = app.home/'graphs'/pid/'saved.json'
+    return load(path) if path.exists() else []
+
+
+def graph_entry(app, pid, identifier):
+    item = next((g for g in inventory(app, pid)['graphs'] if g['id'] == identifier and g.get('selectable', True)), None)
+    if item is None:
+        raise ValueError('Grafo non disponibile per questo progetto.')
+    return item
+
+
 def inventory(app, pid):
     project = project_record(app, pid)
     refs = project.get('workspace', {}).get('asis', {})
     linked = set(source_references(project))
     root = Path(project['path']).resolve()
-    graphs, documents = [], []
+    graphs, documents = saved_graphs(app, pid), []
+    saved_paths = {g['path'] for g in graphs}
 
     def entry(identifier, path, name, created, **extra):
         return dict(id=identifier, name=name, path=str(path), createdAt=created, **extra)
 
     path = app.home/'graphs'/pid/'graph.json'
-    if path.is_file():
+    if path.is_file() and str(path) not in saved_paths:
         info = load(path)
         graphs.append(entry('project:'+pid, path, project['name']+' · Grafo del codice', info['createdAt'], kind='project'))
     ref=document_graph.current_ref(app.home,pid)
-    if ref:
+    if ref and str(document_graph.graph_path(app.home,ref)) not in saved_paths:
         graph=document_graph.load_graph(app.home,ref)
         current={s['id']:(s.get('snapshot') or {}).get('id') for s in app.sources.public()}
         stale=any(current.get(d['source'])!=d['snapshot'] or d['source'] not in linked for d in graph['dependencies'])
@@ -58,16 +72,19 @@ def inventory(app, pid):
     for dossier in (app.home/'documentation').glob('*/FONTI.json'):
         folder = dossier.parent
         marker = folder/'PROGETTO.json'
+        metadata = load(marker) if marker.exists() else {}
         dependencies = {r['source'] for r in load(dossier)}
-        belongs = load(marker).get('project') == pid if marker.exists() else (
+        belongs = metadata.get('project') == pid if marker.exists() else (
             str(folder) == refs.get('dossierWorkspace') or bool(dependencies) and dependencies.issubset(linked))
         if not belongs:
             continue
         for path in sorted(folder.glob('*.md')):
             if path.name == 'INCARICO-AS-IS.md' or path.is_symlink():
                 continue
-            documents.append(entry('asis:'+folder.name+':'+path.name, path, path.name,
-                                   path.stat().st_birthtime, workspace=str(folder)))
+            title = metadata.get('name')
+            name = (title if path.name == 'AS-IS.md' else title+' · '+path.stem) if title else path.name
+            documents.append(entry('asis:'+folder.name+':'+path.name, path, name,
+                                   path.stat().st_birthtime, workspace=str(folder), modifiedAt=path.stat().st_mtime_ns))
     return {'graphs': sorted(graphs, key=lambda graph: (graph['kind']!='document',graph['kind']=='source-index')), 'asis': documents}
 
 
@@ -85,9 +102,14 @@ def prepare_sources(app, data, operation):
     ids = []
     for graph in graphs:
         if graph['kind'] == 'document':
+            if data.get('documentGraph') and data['documentGraph'] != graph['reference']:
+                raise ValueError('Seleziona un solo grafo documentale per ogni AS-IS.')
             data['documentGraph']=graph['reference']
             stored=document_graph.load_graph(app.home,graph['reference'])
             ids.extend(d['source'] for d in stored['dependencies'])
+            continue
+        if graph.get('source'):
+            ids.append(graph['source'])
             continue
         # Reuse the project's local connection when available; the source is read only.
         source = next((s for s in app.sources.connections() if s.get('path') and
