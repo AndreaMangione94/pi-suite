@@ -9,7 +9,7 @@ import { Type } from '@earendil-works/pi-ai';
 import registerDelegation from './suite-delegation.ts';
 import {sourceBundle,connectedTools,isCleanWorkspace} from './connected-sources.mjs';
 import {knowledgeTools,invokeEvidence} from './evidence-tools.mjs';
-import {chatContext,contextTools} from './chat-context.mjs';
+import {chatContext,contextTools,externalSourcesInstructions} from './chat-context.mjs';
 import {documentationInstructions} from './documentation-workflow.mjs';
 
 export default function(pi: ExtensionAPI) {
@@ -45,7 +45,7 @@ export default function(pi: ExtensionAPI) {
     try{await refreshGraphs(ctx,true);}catch(error:any){ctx.ui.notify(error.message,'error');}
     const context=chatContext(activeWorkspace(ctx));
     const instructions=[...(context?.graphs?.length?['graph-explorer']:[]),...(context?.documentation?.length?['lettura-documentazione-tecnico-funzionale']:[])].map(name=>fs.readFileSync(path.join(root,'skills',name,'SKILL.md'),'utf8')).join('\n')+'\n'+documentationInstructions(activeWorkspace(ctx));
-    return {systemPrompt:event.systemPrompt+'\nArtefatti selezionati e consultabili: '+JSON.stringify({project:context?.project?.path,graphs:context?.graphs?.map((g:any)=>({id:g.id,name:g.name,kind:g.kind})),documentation:context?.documentation?.map((d:any)=>({id:d.id,name:d.name}))})+'. Usa read_documentation per i documenti selezionati; i grafi sono opzionali e disponibili solo se selezionati.\n'+instructions};
+    return {systemPrompt:event.systemPrompt+'\nArtefatti selezionati e consultabili: '+JSON.stringify({project:context?.project?.path,graphs:context?.graphs?.map((g:any)=>({id:g.id,name:g.name,kind:g.kind})),documentation:context?.documentation?.map((d:any)=>({id:d.id,name:d.name}))})+'. Usa read_documentation per i documenti selezionati; i grafi sono opzionali e disponibili solo se selezionati.\n'+instructions+'\n\n'+externalSourcesInstructions};
   });
   pi.on('agent_end',async(_event,ctx)=>{
     try{

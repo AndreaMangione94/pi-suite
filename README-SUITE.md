@@ -32,6 +32,14 @@ Le icone **Grafi** e **Documentazione tecnico funzionale** sono accanto all’ic
 
 Modelli e squadra sono configurati nelle pagine dedicate e restano comuni alla suite. La selezione di un progetto non richiede modelli già configurati. Grafi e chat supportano anche cartelle senza Git.
 
+### Fonti esterne e destinazioni degli output
+
+Il progetto selezionato è l'ambito delle modifiche richieste al progetto. Documenti, Markdown, grafi, cartelle e repository esterni collegati sono **fonti in sola lettura**, inclusi originali remoti e snapshot. Selezionarli non autorizza orchestratore o subagenti a sovrascriverli, cancellarli, spostarli o rinominarli, neppure tramite shell o script.
+
+Le fonti possono servire per analisi, risposte, nuovi output richiesti dall'utente o come supporto alle modifiche del progetto. Se l'utente chiede di correggere o adattare un documento esterno, si produce una **nuova copia rielaborata**, lasciando intatto l'originale. Gli output si salvano nel progetto o nel dossier di output attivo; una destinazione esterna deve essere indicata dall'utente e distinta dalle fonti originali. Senza progetto si usa la cartella della chat o il dossier attivo. Un dossier aperto per produrre l'output è una destinazione di lavoro; gli altri dossier selezionati come riferimenti restano fonti.
+
+La regola viene inclusa nel contesto di sistema dell'orchestratore, anche senza subagenti, e in ogni `INCARICO.md`. L'orchestratore comunica la destinazione dell'output, controlla le proposte e distingue originali, copie prodotte e file del progetto modificati. Gli aggiornamenti gestiti dalla suite a cache, indici e grafi derivati non autorizzano modifiche alle fonti originali. È una regola operativa impartita ai modelli; non introduce una sandbox del filesystem per gli strumenti standard del genitore.
+
 ## Ricerca, grafi documentali e documentazione tecnico funzionale riutilizzabile
 
 La sincronizzazione conserva originali, localizzatori e indici persistenti. Orchestratore e subagenti possono usare facoltativamente knowledge_search, knowledge_trace e read_evidence, anche per leggere fonti complete con paginazione esplicita. Il documento finale DOCUMENTAZIONE-TECNICO-FUNZIONALE.md viene trasformato anche in un grafo semantico tramite LLM, automaticamente selezionato. I grafi presenti vengono aggiornati dopo le modifiche integrate nella chat. I dossier prodotti si possono registrare e consultare senza rigenerarli. [Guida conoscenza e grafi](GUIDA-CONOSCENZA-E-GRAFI.md).
