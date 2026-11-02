@@ -2,7 +2,7 @@
 import json
 from pathlib import Path
 from suite_evidence import CODE_EXTENSIONS
-from suite_documentation_migration import LEGACY, ASSIGNMENT, PRIMARY_DOCUMENT
+from suite_documentation_migration import LEGACY, ASSIGNMENT, PRIMARY_DOCUMENT, previous_name, is_primary_document
 import suite_document_graph as document_graph
 
 
@@ -18,7 +18,7 @@ def project_record(app, pid):
 
 
 def source_references(project):
-    """Graph management owns sources; read legacy documentazione tecnica links until first graph save."""
+    """Graph management owns sources; read legacy documentazione tecnico funzionale links until first graph save."""
     workspace = project.get('workspace', {})
     return workspace.get('graph', {}).get('sources', workspace.get('documentation', {}).get('sources', []))
 
@@ -80,12 +80,12 @@ def inventory(app, pid):
         if not belongs:
             continue
         for path in sorted(folder.glob('*.md')):
-            if path.name in (ASSIGNMENT,LEGACY['assignment'],'PIANO-DOCUMENTAZIONE.md') or path.is_symlink():
+            if path.name in (ASSIGNMENT,previous_name(ASSIGNMENT),LEGACY['assignment'],'PIANO-DOCUMENTAZIONE.md') or path.is_symlink():
                 continue
-            if path.name==LEGACY['primaryDocument'] and (folder/PRIMARY_DOCUMENT).is_file():
+            if path.name!=PRIMARY_DOCUMENT and is_primary_document(path.name) and (folder/PRIMARY_DOCUMENT).is_file():
                 continue
             title = metadata.get('name')
-            name = (title if path.name == 'DOCUMENTAZIONE-TECNICA.md' else title+' · '+path.stem) if title else path.name
+            name = (title if path.name == 'DOCUMENTAZIONE-TECNICO-FUNZIONALE.md' else title+' · '+path.stem) if title else path.name
             documents.append(entry('documentation:'+folder.name+':'+path.name, path, name,
                                    path.stat().st_birthtime, workspace=str(folder), modifiedAt=path.stat().st_mtime_ns))
     hidden=set(project.get('workspace',{}).get('removedGraphs',[]))

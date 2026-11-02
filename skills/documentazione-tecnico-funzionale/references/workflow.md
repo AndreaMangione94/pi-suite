@@ -1,4 +1,4 @@
-# Flusso AS-IS di documentazione tecnico-funzionale
+# Flusso AS-IS di documentazione tecnico funzionale
 
 Queste istruzioni valgono esclusivamente per la creazione o l'aggiornamento di questo dossier AS-IS. Descrivi l'utilizzo dell'applicazione, ogni funzionalità e i relativi flussi, con gli approfondimenti tecnici e architetturali necessari a comprenderli. Per domande, consultazioni, sviluppo e altre attività resta valida la normale modalità della suite. In questo flusso le regole specifiche seguenti precisano le indicazioni generali sulla delega.
 

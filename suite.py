@@ -25,7 +25,7 @@ from suite_graph import build_graph, project_files, scan, fingerprint, query_gra
 import suite_byok as byok
 import suite_workspace as workspace
 import suite_document_graph as document_graph
-from suite_documentation_migration import migrate_home, LEGACY
+from suite_documentation_migration import migrate_home, LEGACY, SKILL_RENAMES
 from suite_evidence import ensure_index, local_path
 
 from suite_folder_picker import choose_folder
@@ -100,7 +100,7 @@ def skills(extra=None):
     paths=list((ROOT/'skills').glob('*/SKILL.md'))
     if extra: paths+=list(Path(extra).glob('*/SKILL.md'))
     for p in sorted(paths):
-        if p.parent.name in LEGACY['skills']:continue
+        if p.parent.name in SKILL_RENAMES:continue
         content=p.read_text(encoding='utf-8')
         description=re.search(r'^description: (.+)$',content,re.M)
         result.append({'name':p.parent.name,'description':description.group(1) if description else p.parent.name,'content':content})
@@ -130,7 +130,7 @@ class Suite:
             self.settings['suiteSchema']=2
         previous=self.home/'last-job.json'
         if self.settings.get('suiteSchema',0)<3:
-            if 'documentazione-tecnica' not in self.settings['enabledSkills']:self.settings['enabledSkills'].append('documentazione-tecnica')
+            if 'documentazione-tecnico-funzionale' not in self.settings['enabledSkills']:self.settings['enabledSkills'].append('documentazione-tecnico-funzionale')
             self.settings['suiteSchema']=3
         self.byok=byok.Store(self.home,protect)
         self.settings.update(self.byok.load_or_migrate(self.settings))
@@ -381,8 +381,8 @@ class Suite:
                 'maxParallelWorkers':self.settings['maxParallelWorkers'],
                 'skills':[s for s in skills(self.home/'skills') if s['name'] in self.settings['enabledSkills'] and not s.get('parentOnly')]}
         if context is not None:
-            config['skills']=[s for s in config['skills'] if s['name'] not in ('graph-explorer','lettura-documentazione-tecnica')]
-            required={'graph-explorer':bool(context.get('graphs')),'lettura-documentazione-tecnica':bool(context.get('documentation'))}
+            config['skills']=[s for s in config['skills'] if s['name'] not in ('graph-explorer','lettura-documentazione-tecnico-funzionale')]
+            required={'graph-explorer':bool(context.get('graphs')),'lettura-documentazione-tecnico-funzionale':bool(context.get('documentation'))}
             config['skills'].extend(s for s in skills(self.home/'skills') if required.get(s['name']))
         save_json(directory/'suite-launch.json',config)
         settings_path=directory/'settings.json'
@@ -435,7 +435,7 @@ class Suite:
         data=data or {}
         titles={'project':'Scegli la cartella del progetto',
                 'source':'Scegli la cartella della fonte locale',
-                'dossier':'Scegli la cartella del dossier di documentazione tecnica'}
+                'dossier':'Scegli la cartella del dossier di documentazione tecnico funzionale'}
         context=data.get('context','project')
         initial=data.get('initialPath','')
         if not isinstance(context,str) or context not in titles:
@@ -622,18 +622,18 @@ class Suite:
         bundle=[{'source':sid,'snapshot':snapshot,'directory':str(directory),'manifest':read_json(directory/'manifest.json')}]
         graph=self.build_document_graph(pid,[sid],refresh=False,bundle=bundle,include_documentation=True)
         ref={'project':pid,'version':graph['fingerprint']};identifier='documentation-graph:'+folder.name
-        item={'id':identifier,'name':metadata.get('name') or 'documentazione tecnica','kind':'document','path':str(document_graph.graph_path(self.home,ref)),
+        item={'id':identifier,'name':metadata.get('name') or 'documentazione tecnico funzionale','kind':'document','path':str(document_graph.graph_path(self.home,ref)),
               'reference':ref,'source':sid,'snapshot':snapshot,'workspace':str(folder),'createdAt':graph['createdAt'],'stats':graph['stats']}
         save_json(self.home/'graphs'/pid/'saved.json',[g for g in workspace.saved_graphs(self,pid) if g['id']!=identifier]+[item])
         project=workspace.project_record(self,pid);prefs=project.setdefault('workspace',{}).setdefault('documentation',{})
         if auto_select:
             prefs['graphs']=list(dict.fromkeys([*prefs.get('graphs',[]),identifier]))
-            prefs['documents']=list(dict.fromkeys([*prefs.get('documents',[]),'documentation:'+folder.name+':DOCUMENTAZIONE-TECNICA.md']))
+            prefs['documents']=list(dict.fromkeys([*prefs.get('documents',[]),'documentation:'+folder.name+':DOCUMENTAZIONE-TECNICO-FUNZIONALE.md']))
         project['workspace']['removedGraphs']=[g for g in project['workspace'].get('removedGraphs',[]) if g!=identifier]
         project['workspace']['removedGraphPaths']=[p for p in project['workspace'].get('removedGraphPaths',[]) if p!=item['path']]
         save_json(self.settings_path,self.settings)
         from suite_graph import digest
-        save_json(folder/'FINALIZZATO.json',{'sha256':digest((folder/'DOCUMENTAZIONE-TECNICA.md').read_bytes()),'graph':identifier})
+        save_json(folder/'FINALIZZATO.json',{'sha256':digest((folder/'DOCUMENTAZIONE-TECNICO-FUNZIONALE.md').read_bytes()),'graph':identifier})
         return {**registered,'graph':identifier,'documentGraph':ref}
 
     def remove_graph(self,pid,identifier):
@@ -654,7 +654,7 @@ class Suite:
         matching=sorted((p for p in self.settings['projects'] if folder.is_relative_to(Path(p['path']).resolve())),key=lambda p:len(p['path']),reverse=True)
         return matching[0]['id'] if matching else None
 
-    def prepare_technical_documentation(self,ids,objective='',refresh=True,project=None,graph_ref=None,use_document_graph=False,progress=None):
+    def prepare_technical_functional_documentation(self,ids,objective='',refresh=True,project=None,graph_ref=None,use_document_graph=False,progress=None):
         progress=progress or (lambda message:self.job.update(log=(self.job.get('log','')+'\n'+message)[-30000:]))
         ids=list(dict.fromkeys(ids));snapshots={}
         if not use_document_graph:graph_ref=None
@@ -699,11 +699,11 @@ class Suite:
                 added=project.get('workspace',{}).get('documentation',{}).get('sources',[])
                 selected=data.get('sources',added);known={s['id'] for s in self.sources.connections()}
                 if not isinstance(selected,list) or not selected or any(not isinstance(s,str) or s not in added or s not in known for s in selected):
-                    raise ValueError('Aggiungi almeno una fonte dal menu Documentazione tecnica → Aggiungi.')
+                    raise ValueError('Aggiungi almeno una fonte dal menu Documentazione tecnico funzionale → Aggiungi.')
                 data={**data,'sources':list(dict.fromkeys(selected))}
                 workspace.selected_graphs(self,data)
                 if 'name' in data and (not isinstance(data['name'],str) or not data['name'].strip() or len(data['name'])>150):
-                    raise ValueError('Inserisci un nome per la documentazione tecnica, fino a 150 caratteri.')
+                    raise ValueError('Inserisci un nome per la documentazione tecnico funzionale, fino a 150 caratteri.')
             if operation=='generate-graph':
                 workspace.project_record(self,data.get('project'))
                 if data.get('graphKind')=='document':self.document_graph_profile()
@@ -737,12 +737,12 @@ class Suite:
             elif operation in ('prepare-documentation','auto-documentation'):
                 def progress(message):self.job['log']=(self.job.get('log','')+'\n'+message)[-30000:]
                 data['sources']=workspace.prepare_sources(self,data,operation)
-                result=self.prepare_technical_documentation(data['sources'],data.get('objective',''),operation=='auto-documentation',data['project'],
+                result=self.prepare_technical_functional_documentation(data['sources'],data.get('objective',''),operation=='auto-documentation',data['project'],
                     data.get('documentGraph'),False,progress)
                 save_json(Path(result['workspace'])/'PROGETTO.json',{'project':data['project'],'name':data.get('name','').strip(),
                     'graphs':data['graphs'],'documentGraph':result.get('documentGraph')})
                 save_json(Path(result['workspace'])/'CONTESTO.json',workspace.chat_context(self,data['project']))
-                result['prompt']+=' Produci un documento DOCUMENTAZIONE-TECNICA.md tecnico-funzionale dettagliato e autosufficiente. Applica il workflow AS-IS incluso nell’incarico: prima PIANO-DOCUMENTAZIONE.md, poi un task distinto per ogni micro modulo o funzionalità terminale. I figli descrivono solo la propria unità e lasciano riferimenti alle altre. Integra le proposte verificate, aggiorna il piano e crea nuovi task per le lacune; segnala eventuali unità ancora parziali o bloccate. Alla fine chiama register_documentation: genera anche il grafo semantico LLM del Markdown finale e lo seleziona nel contesto.'
+                result['prompt']+=' Produci un documento DOCUMENTAZIONE-TECNICO-FUNZIONALE.md tecnico-funzionale dettagliato e autosufficiente. Applica il workflow AS-IS incluso nell’incarico: prima PIANO-DOCUMENTAZIONE.md, poi un task distinto per ogni micro modulo o funzionalità terminale. I figli descrivono solo la propria unità e lasciano riferimenti alle altre. Integra le proposte verificate, aggiorna il piano e crea nuovi task per le lacune; segnala eventuali unità ancora parziali o bloccate. Alla fine chiama register_documentation: genera anche il grafo semantico LLM del Markdown finale e lo seleziona nel contesto.'
                 self.job['result']={'project':data['project'],**{k:v for k,v in result.items() if k not in ('sources','prompt')}}
                 if data.get('openChat',True):self.open_chat(result['workspace'],result['prompt'])
             elif operation=='graph':
@@ -848,7 +848,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 with app.guard:
                     if app.busy:raise ValueError('Attendi il completamento dell’operazione in corso.')
                     result=app.sources.save(data)
-            elif route=='/api/documentazione-tecnica-registry' and not post:result=app.sources.documentation_registry()
+            elif route=='/api/documentazione-tecnico-funzionale-registry' and not post:result=app.sources.documentation_registry()
             elif route=='/api/evidence' and post:
                 from suite_evidence import query
                 if data['action'] not in ('knowledge_search','knowledge_trace','read_evidence'):raise ValueError('Consultazione non supportata')

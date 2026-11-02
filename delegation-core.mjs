@@ -77,7 +77,7 @@ export function prepareBatch(home,project,tasks,settings,plan) {
   validateTasks(tasks);
   const source=fs.realpathSync(project);
   const context=chatContext(source);
-  settings={...settings,skills:(settings.skills||[]).filter(s=>s.name!=='graph-explorer'||context?.graphs?.length).filter(s=>s.name!=='lettura-documentazione-tecnica'||context?.documentation?.length)};
+  settings={...settings,skills:(settings.skills||[]).filter(s=>s.name!=='graph-explorer'||context?.graphs?.length).filter(s=>s.name!=='lettura-documentazione-tecnico-funzionale'||context?.documentation?.length)};
   if(!fs.statSync(source).isDirectory()) throw Error('Apri una cartella di progetto');
   const connectedSources=settings.connectedSources??sourceBundle(home,source);
   const evidenceScopes=tasks.map(task=>normalizeEvidenceScope(task,connectedSources));

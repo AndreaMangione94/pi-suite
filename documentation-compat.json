@@ -6,12 +6,12 @@
   "registry": "asis-registry.json",
   "dossierEntry": "suite-asis-dossier",
   "skills": {
-    "as-is-documentation": "documentazione-tecnica",
-    "as-is-reader": "lettura-documentazione-tecnica"
+    "as-is-documentation": "documentazione-tecnico-funzionale",
+    "as-is-reader": "lettura-documentazione-tecnico-funzionale"
   },
   "commands": {
-    "/asis-register": "/documentazione-tecnica-register",
-    "/asis": "/documentazione-tecnica"
+    "/asis-register": "/documentazione-tecnico-funzionale-register",
+    "/asis": "/documentazione-tecnico-funzionale"
   },
   "tools": {
     "read_asis": "read_documentation",

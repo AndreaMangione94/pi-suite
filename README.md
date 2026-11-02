@@ -71,7 +71,7 @@ cloud possono avere un costo. Credenziali e pesi dei modelli non sono inclusi.
 La modale **Grafi di conoscenza** gestisce le fonti da cartelle locali,
 remote e SharePoint, il grafo documentale semantico e quello della codebase.
 Il grafo documentale conserva versioni e prove sulle relazioni esplicite
-e inferite dal modello; la stesura della documentazione tecnica usa questo grafo insieme a quello del codice.
+e inferite dal modello; la stesura della documentazione tecnico funzionale usa questo grafo insieme a quello del codice.
 
 I subagenti ricevono un perimetro di lettura delle evidenze e possono leggere
 gli snapshot per intero, per sezione o per passaggio con paginazione.
@@ -83,7 +83,7 @@ all'orchestratore e visibili nelle attivita.
 - [Panoramica e comandi](README-SUITE.md)
 - [Primo avvio](RESOCONTO-E-PRIMO-AVVIO.md)
 - [Connessioni e chiavi](GUIDA-BYOK.md)
-- [Fonti e documentazione tecnica](GUIDA-FONTI-DOCUMENTAZIONE-TECNICA.md)
+- [Fonti e documentazione tecnico funzionale](GUIDA-FONTI-DOCUMENTAZIONE-TECNICO-FUNZIONALE.md)
 - [Conoscenza e grafi](GUIDA-CONOSCENZA-E-GRAFI.md)
 - [Benchmark](GUIDA-BENCHMARK.md)
 - [Contesto e consegne](MEMORY.md)

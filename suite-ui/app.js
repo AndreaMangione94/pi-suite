@@ -8,12 +8,12 @@ let workspaceFiles={graphs:[],documentation:[]},graphExplorerId='',documentation
 function documentationAvailability(){
   const available=workspaceFiles.graphs.some(g=>g.selectable!==false&&chosenGraphs.has(g.id));
   const hasSources=!!project?.workspace?.documentation?.sources?.length,disabled=!hasSources||!!state?.busy;
-  const reason=hasSources?'':'Aggiungi almeno una fonte dal menu Documentazione tecnica → Aggiungi.';
+  const reason=hasSources?'':'Aggiungi almeno una fonte dal menu Documentazione tecnico funzionale → Aggiungi.';
   for(const id of ['configure-documentation','generate-documentation']){$(id).disabled=disabled;$(id).title=reason;}
-  $('documentation-graph-help').textContent=reason||(available?'La documentazione tecnica userà le fonti aggiunte, il progetto e i grafi selezionati.':'La documentazione tecnica analizzerà le fonti aggiunte e il progetto. Non occorre un grafo esistente.');
+  $('documentation-graph-help').textContent=reason||(available?'La documentazione tecnico funzionale userà le fonti aggiunte, il progetto e i grafi selezionati.':'La documentazione tecnico funzionale analizzerà le fonti aggiunte e il progetto. Non occorre un grafo esistente.');
 }
 function updateContextSelectionCounts(){
-  for(const [kind,label,selection] of [['graph','Grafi',chosenGraphs],['documentation','Documentazione tecnica',chosenDocumentation]]){
+  for(const [kind,label,selection] of [['graph','Grafi',chosenGraphs],['documentation','Documentazione tecnico funzionale',chosenDocumentation]]){
     const count=project?selection.size:0,badge=$(kind+'-selection-count'),button=$('open-'+kind);
     badge.textContent=String(count);badge.classList.toggle('has-selection',count>0);
     const description=label+' · '+count+' '+(count===1?'elemento selezionato':'elementi selezionati');
@@ -52,7 +52,7 @@ document.addEventListener('click',event=>{if(!event.composedPath().some(n=>n.cla
 document.addEventListener('keydown',event=>{if(event.key==='Escape')for(const kind of ['project','graph','documentation'])if(!$(kind+'-menu').hidden){$(kind+'-menu').hidden=true;$('open-'+kind).setAttribute('aria-expanded','false');$('open-'+kind).focus();}});
 function renderSavedFiles(kind,items){
   const host=$(kind+'-saved-files'),signature=JSON.stringify(items);if(host.dataset.signature===signature)return;host.dataset.signature=signature;host.replaceChildren();
-  if(!items.length){host.append(el('p',kind==='documentation'?'Nessun documento di documentazione tecnica salvato per questo progetto.':'Nessun grafo di conoscenza salvato per questo progetto.','muted'));return;}
+  if(!items.length){host.append(el('p',kind==='documentation'?'Nessun documento di documentazione tecnico funzionale salvato per questo progetto.':'Nessun grafo di conoscenza salvato per questo progetto.','muted'));return;}
   for(const item of items){
     const tile=kind==='graph'?btn('',()=>selectGraph(item.id,true),'saved-file'):el('div',undefined,'saved-file');tile.title=item.path;
     const icon=el('span',undefined,'file-icon');icon.setAttribute('aria-hidden','true');
@@ -77,7 +77,7 @@ async function refreshWorkspaceFiles(){
   documentationAvailability();
 }
 async function startDocumentation(){
-  if(!project?.workspace?.documentation?.sources?.length)throw Error('Aggiungi almeno una fonte dal menu Documentazione tecnica → Aggiungi.');
+  if(!project?.workspace?.documentation?.sources?.length)throw Error('Aggiungi almeno una fonte dal menu Documentazione tecnico funzionale → Aggiungi.');
   const operation=$('documentation-refresh-sources').checked?'auto-documentation':'prepare-documentation',objective=$('documentation-objective').value;
   await refreshWorkspaceFiles();
   queueDocumentationReferences();await flushDocumentationReferences();return action(operation,{project:project.id,graphs:[...chosenGraphs],sources:project.workspace?.documentation?.sources||[],name:$('documentation-name').value.trim(),objective,openChat:true});
@@ -158,7 +158,7 @@ bind('quick-generate-graph',()=>action('generate-graph',{project:project.id}));
 bind('configure-documentation',()=>openWorkspaceDialog('documentation'));
 bind('add-documentation-source',async()=>{
   addingDocumentationSource=true;await openWorkspaceDialog('graph');
-  $('graph-title').textContent='Aggiungi fonte per la documentazione tecnica';$('graph-description').firstChild.textContent='Cartella locale, remota o repository · ';
+  $('graph-title').textContent='Aggiungi fonte per la documentazione tecnico funzionale';$('graph-description').firstChild.textContent='Cartella locale, remota o repository · ';
   for(const section of $('graph-dialog').querySelectorAll('.graph-section'))section.hidden=section.getAttribute('aria-labelledby')!=='graph-create-title';
   $('graph-create-title').textContent='Scegli la fonte';$('graph-kind').closest('label').hidden=true;$('generate-graph').textContent='Aggiungi';document.querySelector('#graph-create-form > p:last-child')?.setAttribute('hidden','');sourceMode();
 });
@@ -367,7 +367,7 @@ bind('search-graph',()=>loadGraph());$('graph-search').onkeydown=e=>{if(e.key===
 async function loadGraph(node){if(!project)return;const pid=project.id,selected=graphExplorerId,data=await api('graph?id='+pid+'&file='+encodeURIComponent(selected)+'&q='+encodeURIComponent($('graph-search').value)+(node?'&node='+encodeURIComponent(node):''));if(project?.id!==pid||graphExplorerId!==selected)return;$('graph-project').textContent=workspaceFiles.graphs.find(g=>g.id===selected)?.name||project.name;$('graph-state').textContent='Grafo salvato · nessun consumo API durante l’esplorazione';$('graph-stats').replaceChildren();for(const [label,value]of [['Nodi',data.stats.nodes],['Relazioni',data.stats.edges],['File riutilizzati',data.stats.reused],['File rianalizzati',data.stats.extracted]]){const s=el('div');s.append(el('strong',String(value)),el('small',label));$('graph-stats').append(s);}drawGraph(data);$('graph-results').replaceChildren();if(data.truncated)$('graph-results').append(el('p','Risultati parziali: restringi la ricerca.','muted'));if(!data.nodes.length)$('graph-results').append(el('p','Nessun simbolo corrispondente.','muted'));for(const n of data.nodes){const row=el('div',undefined,'graph-node');row.append(btn(n.label||n.id,()=>loadGraph(n.id),'text-button'),el('small',n.source_file+' · '+(n.source_location||'')));row.append(btn('Leggi sorgente',async()=>{const source=await api('source?id='+pid+'&file='+encodeURIComponent(selected)+'&path='+encodeURIComponent(workspaceFiles.graphs.find(g=>g.id===selected)?.source?n.source_file:n.source_file.replace(/^repo\//,'')));const existing=$('graph-source');if(existing)existing.remove();const pre=el('pre',source.text);pre.id='graph-source';$('graph-results').prepend(pre);},'text-button'));$('graph-results').append(row);}}
 function drawGraph(data,target='graph-canvas',onSelect=loadGraph){const svg=$(target),ns='http://www.w3.org/2000/svg';svg.replaceChildren();const nodes=data.nodes.slice(0,40),positions=new Map();nodes.forEach((n,i)=>{const columns=Math.min(6,nodes.length),rows=Math.ceil(nodes.length/columns);positions.set(n.id,{x:80+(i%columns)*(740/Math.max(1,columns-1)),y:65+Math.floor(i/columns)*(280/Math.max(1,rows-1))});});for(const edge of data.edges){const a=positions.get(edge.source),b=positions.get(edge.target);if(!a||!b)continue;const line=document.createElementNS(ns,'line');Object.entries({x1:a.x,y1:a.y,x2:b.x,y2:b.y}).forEach(([k,v])=>line.setAttribute(k,v));svg.append(line);}for(const n of nodes){const p=positions.get(n.id),g=document.createElementNS(ns,'g'),circle=document.createElementNS(ns,'circle');circle.setAttribute('cx',p.x);circle.setAttribute('cy',p.y);circle.setAttribute('r','11');const title=document.createElementNS(ns,'title');title.textContent=n.label+' · '+(n.source_file||n.path||n.kind||'');circle.append(title);circle.onclick=()=>onSelect(n.id).catch(e=>notice(e.message,true));circle.setAttribute('tabindex','0');circle.setAttribute('role','button');circle.setAttribute('aria-label',n.label||n.id);circle.onkeydown=e=>{if(e.key==='Enter')circle.onclick();};const text=document.createElementNS(ns,'text');text.setAttribute('x',p.x);text.setAttribute('y',p.y+25);text.setAttribute('text-anchor','middle');text.textContent=(n.label||n.id).slice(0,23);g.append(circle,text);svg.append(g);}}
 function renderJob(){
-  const j=state.job,names={'generate-graph':'Generazione grafo',graph:'Grafo del codice','sync-source':'Acquisizione e relazioni esplicite','document-graphs':'Grafo documentale semantico','index-sources':'Indici delle relazioni esplicite','prepare-documentation':'Preparazione della documentazione tecnica','auto-documentation':'Aggiornamento fonti e preparazione documentazione tecnica','register-documentation':'Registrazione documentazione tecnica',probe:'Verifica modello'},states={running:'In corso',done:'Completata',failed:'Non completata'};
+  const j=state.job,names={'generate-graph':'Generazione grafo',graph:'Grafo del codice','sync-source':'Acquisizione e relazioni esplicite','document-graphs':'Grafo documentale semantico','index-sources':'Indici delle relazioni esplicite','prepare-documentation':'Preparazione della documentazione tecnico funzionale','auto-documentation':'Aggiornamento fonti e preparazione documentazione tecnico funzionale','register-documentation':'Registrazione documentazione tecnico funzionale',probe:'Verifica modello'},states={running:'In corso',done:'Completata',failed:'Non completata'};
   for(const host of [$('job-panel'),$('graph-job-panel'),$('documentation-job-panel')]){
     if(host.id==='graph-job-panel')host.hidden=!['generate-graph','graph','sync-source','document-graphs','index-sources'].includes(j.operation);
     if(host.id==='documentation-job-panel')host.hidden=!['prepare-documentation','auto-documentation'].includes(j.operation);
@@ -392,7 +392,7 @@ function sourceMode(){
   $('source-url').placeholder=kind==='sharepoint-graph'?'https://azienda.sharepoint.com/sites/progetto/Documenti':kind==='git-remote'?'https://github.com/organizzazione/repository.git':'https://dev.azure.com/organizzazione/progetto/_git/repository';
   $('source-token-help').textContent=sharepoint?'Token Microsoft Graph con accesso in lettura alla cartella.':kind==='git-remote'?'Token facoltativo, oppure usa le credenziali Git configurate.':'PAT con permesso Code Read, oppure lascia vuoto per usare le credenziali Git configurate.';
   $('document-graph-model').hidden=addingDocumentationSource||!documental;
-  $('graph-generation-help').textContent=addingDocumentationSource?'La fonte sarà analizzata insieme al progetto durante la generazione documentazione tecnica.':documental?'Il grafo documentale usa il modello Orchestratore e può comportare costi API.':'Il grafo del codice analizza Python, JavaScript e TypeScript senza chiamare modelli.';
+  $('graph-generation-help').textContent=addingDocumentationSource?'La fonte sarà analizzata insieme al progetto durante la generazione documentazione tecnico funzionale.':documental?'Il grafo documentale usa il modello Orchestratore e può comportare costi API.':'Il grafo del codice analizza Python, JavaScript e TypeScript senza chiamare modelli.';
 }
 $('source-kind').onchange=sourceMode;$('graph-kind').onchange=sourceMode;
 for(const control of document.querySelectorAll('[name=graph-location]'))control.onchange=sourceMode;
@@ -414,7 +414,7 @@ $('graph-create-form').onsubmit=event=>{
   const remote=graphLocation()==='remote',source={name:$('source-name').value,kind:remote?$('source-kind').value:'sharepoint-local',
     ...(remote?{url:$('source-url').value,driveId:$('source-drive').value,folderId:$('source-folder').value,branch:$('source-branch').value,token:$('source-token').value}:{path:$('source-path').value})};
   if(addingDocumentationSource){
-    api('sources',source).then(async rows=>{project.workspace??={};project.workspace.documentation??={};project.workspace.documentation.sources=[...new Set([...(project.workspace.documentation.sources||[]),rows.at(-1).id])];queueDocumentationReferences();await flushDocumentationReferences();$('source-token').value='';$('graph-dialog').close();renderContextMenus();notice('Fonte aggiunta alla documentazione tecnica.');}).catch(e=>notice(e.message,true)).finally(()=>button.disabled=!!state?.busy);return;
+    api('sources',source).then(async rows=>{project.workspace??={};project.workspace.documentation??={};project.workspace.documentation.sources=[...new Set([...(project.workspace.documentation.sources||[]),rows.at(-1).id])];queueDocumentationReferences();await flushDocumentationReferences();$('source-token').value='';$('graph-dialog').close();renderContextMenus();notice('Fonte aggiunta alla documentazione tecnico funzionale.');}).catch(e=>notice(e.message,true)).finally(()=>button.disabled=!!state?.busy);return;
   }
   action('generate-graph',{project:project.id,name:$('source-name').value,graphKind:$('graph-kind').value,source})
     .then(()=>$('source-token').value='').catch(e=>notice(e.message,true)).finally(()=>button.disabled=!!state?.busy);

@@ -28,16 +28,16 @@ Le chiavi modello e i token delle fonti sono protetti con Windows DPAPI e legati
 
 ## Comportamenti della versione distribuita
 
-La gestione di fonti, grafi documentali, indici e grafo del codice è riunita nella modale Grafi di conoscenza. Il motore DocumentGraphBuilder usa il modello Orchestratore dopo l’estrazione strutturale, salva il grafo semantico finale per progetto e riusa dalla cache i documenti invariati. La generazione documentale è indipendente dalla documentazione tecnica; i dossier partono dal grafo documentale e dagli originali prima di confrontare il codice. I riferimenti precedenti restano compatibili.
+La gestione di fonti, grafi documentali, indici e grafo del codice è riunita nella modale Grafi di conoscenza. Il motore DocumentGraphBuilder usa il modello Orchestratore dopo l’estrazione strutturale, salva il grafo semantico finale per progetto e riusa dalla cache i documenti invariati. La generazione documentale è indipendente dalla documentazione tecnico funzionale; i dossier partono dal grafo documentale e dagli originali prima di confrontare il codice. I riferimenti precedenti restano compatibili.
 
 - Il workspace crea cartelle in `data/projects/<nome>` o collega cartelle esistenti tramite selettore Windows, anche senza Git. La scelta della cartella si conferma con **Crea progetto**.
-- **Documentazione tecnica** e **Grafi di conoscenza** si abilitano dopo la selezione del progetto. Le modali mostrano i file salvati con nome, data di creazione e anteprima. **Salva riferimenti** conserva le scelte per progetto.
-- Per creare documentazione tecnica dal pannello serve almeno un grafo disponibile e selezionato. La creazione usa le sue fonti; con un grafo locale acquisisce la cartella corrente anche scegliendo **Usa snapshot esistenti**. `/documentazione-tecnica` in chat usa invece le fonti del dossier o quelle salvate per il progetto.
+- **Documentazione tecnico funzionale** e **Grafi di conoscenza** si abilitano dopo la selezione del progetto. Le modali mostrano i file salvati con nome, data di creazione e anteprima. **Salva riferimenti** conserva le scelte per progetto.
+- Per creare documentazione tecnico funzionale dal pannello serve almeno un grafo disponibile e selezionato. La creazione usa le sue fonti; con un grafo locale acquisisce la cartella corrente anche scegliendo **Usa snapshot esistenti**. `/documentazione-tecnico-funzionale` in chat usa invece le fonti del dossier o quelle salvate per il progetto.
 - I dossier fissano snapshot e indici in `FONTI.json`; quelli creati dal pannello conservano l’associazione in `PROGETTO.json`. Consultare i file salvati e registrare un dossier per la ricerca sono operazioni distinte.
 - Con Subagenti selezionati la delega è obbligatoria; senza modello Subagenti il genitore lavora direttamente. I figli producono proposte per i soli percorsi assegnati; il genitore verifica e integra.
 - Il laboratorio benchmark gestisce prove manuali A/B e tutte le 16 dimensioni. Inspect valuta soltanto le versioni originali di `math-001` ed `extract-001`, per successo, correttezza e formato; gli altri casi richiedono scorer dedicati o revisione umana.
 
-Per i passaggi operativi vedi [Primo avvio](RESOCONTO-E-PRIMO-AVVIO.md), [Fonti e documentazione tecnica](GUIDA-FONTI-DOCUMENTAZIONE-TECNICA.md) e [Conoscenza e grafi](GUIDA-CONOSCENZA-E-GRAFI.md).
+Per i passaggi operativi vedi [Primo avvio](RESOCONTO-E-PRIMO-AVVIO.md), [Fonti e documentazione tecnico funzionale](GUIDA-FONTI-DOCUMENTAZIONE-TECNICO-FUNZIONALE.md) e [Conoscenza e grafi](GUIDA-CONOSCENZA-E-GRAFI.md).
 
 ## Disponibilità degli strumenti di collaudo
 
@@ -77,12 +77,12 @@ Il controllo locale `test_evidence_reading.cjs` verifica il perimetro fissato ne
 
 ## Verifiche OneDrive della versione 0.6.6
 
-Il 28 ottobre 2026 sono passati i 20 test Python di `test_onedrive`, `test_document_graph` e `test_workspace`, il controllo sintattico JavaScript e il test Chromium `test_workspace_ui.cjs` su desktop e mobile. Le verifiche coprono cartelle OneDrive con TXT e Markdown, sottocartelle, drive personale e drive esplicito, radice, paginazione, metadati, separazione dei token dai download, esclusioni, snapshot precedenti dopo un errore e uso delle evidenze nel grafo semantico e nel dossier di documentazione tecnica. Le chiamate Microsoft Graph e il modello sono simulati: nessun account OneDrive reale è stato collegato nel collaudo. Il login Microsoft interattivo, il rinnovo automatico dei token e la sincronizzazione continua non sono inclusi.
+Il 28 ottobre 2026 sono passati i 20 test Python di `test_onedrive`, `test_document_graph` e `test_workspace`, il controllo sintattico JavaScript e il test Chromium `test_workspace_ui.cjs` su desktop e mobile. Le verifiche coprono cartelle OneDrive con TXT e Markdown, sottocartelle, drive personale e drive esplicito, radice, paginazione, metadati, separazione dei token dai download, esclusioni, snapshot precedenti dopo un errore e uso delle evidenze nel grafo semantico e nel dossier di documentazione tecnico funzionale. Le chiamate Microsoft Graph e il modello sono simulati: nessun account OneDrive reale è stato collegato nel collaudo. Il login Microsoft interattivo, il rinnovo automatico dei token e la sincronizzazione continua non sono inclusi.
 
 ## Correzione della selezione cartelle
 
 I campi Cartella progetto, Cartella locale delle fonti e Cartella del dossier
-documentazione tecnica aprono il selettore nativo di Esplora file tramite il campo o **Sfoglia…**.
+documentazione tecnico funzionale aprono il selettore nativo di Esplora file tramite il campo o **Sfoglia…**.
 Il selettore usa direttamente Windows IFileDialog, senza processi PowerShell;
 consente di esplorare cartelle del PC, unità e percorsi di rete disponibili.
 Annulla conserva il percorso precedente. Una sola finestra può essere aperta
@@ -143,6 +143,6 @@ La CTA è disabilitata finché test, risposta salvata e criteri del valutatore n
 
 ## Chat senza progetto · 29 ottobre 2026
 
-**Apri chat Pi** è disponibile anche con un elenco progetti vuoto o dopo aver scelto **Nessun progetto · Chat con contesto pulito**. Ogni apertura usa una nuova cartella `data/chats/<id>/`, conserva connessioni, modelli, profili e skill salvati ed esclude istruzioni ereditate, fonti e grafi dei progetti. documentazione tecnica e Grafi di conoscenza continuano a richiedere un progetto.
+**Apri chat Pi** è disponibile anche con un elenco progetti vuoto o dopo aver scelto **Nessun progetto · Chat con contesto pulito**. Ogni apertura usa una nuova cartella `data/chats/<id>/`, conserva connessioni, modelli, profili e skill salvati ed esclude istruzioni ereditate, fonti e grafi dei progetti. documentazione tecnico funzionale e Grafi di conoscenza continuano a richiedere un progetto.
 
 Sono passati quattro test Python sull’avvio, sulle cartelle distinte, sulla configurazione della sessione con e senza profili e sulla conservazione del contesto per progetti e dossier. Il collaudo JavaScript verifica l’isolamento delle fonti e del grafo nelle deleghe, anche con un progetto registrato nella cartella superiore. Edge headless a 1440 e 390 pixel verifica avvio senza progetti, aperture ripetute, selezione e deselezione, risposte tardive e progetti non disponibili. I controlli sintattici passano. Il collaudo usa dati fittizi e intercetta l’avvio del terminale, senza richieste ai modelli.

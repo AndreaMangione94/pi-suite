@@ -2,33 +2,33 @@
 
 Guida aggiornata alla distribuzione Windows del 1 novembre 2026.
 
-Vedi anche [Conoscenza e grafi](GUIDA-CONOSCENZA-E-GRAFI.md) per ricerca opzionale, lettura completa, registrazione documentazione tecnica e relazioni semantiche revisionabili.
+Vedi anche [Conoscenza e grafi](GUIDA-CONOSCENZA-E-GRAFI.md) per ricerca opzionale, lettura completa, registrazione documentazione tecnico funzionale e relazioni semantiche revisionabili.
 
-## Progetto, grafi e documentazione tecnica
+## Progetto, grafi e documentazione tecnico funzionale
 
-L’icona **Progetto** apre un menu per scegliere un progetto salvato, crearne uno nuovo o tornare al contesto pulito. Le icone **Grafi** e **Documentazione tecnica** si trovano nella stessa sezione. Il menu Grafi mostra gli artefatti con icona e label: fai clic per includerli o escluderli dal contesto e usa la × per rimuoverli dalla raccolta. Se non sono presenti grafi, l’unica azione è **Genera grafo**: analizza la cartella del progetto, anche senza Git, per codice Python, JavaScript o TypeScript supportato da Graphify.
+L’icona **Progetto** apre un menu per scegliere un progetto salvato, crearne uno nuovo o tornare al contesto pulito. Le icone **Grafi** e **Documentazione tecnico funzionale** si trovano nella stessa sezione. Il menu Grafi mostra gli artefatti con icona e label: fai clic per includerli o escluderli dal contesto e usa la × per rimuoverli dalla raccolta. Se non sono presenti grafi, l’unica azione è **Genera grafo**: analizza la cartella del progetto, anche senza Git, per codice Python, JavaScript o TypeScript supportato da Graphify.
 
-Nel menu Documentazione tecnica seleziona i documenti già prodotti da rendere consultabili. **Aggiungi** collega una cartella locale o di rete, SharePoint tramite Microsoft Graph, Azure DevOps o un repository Git HTTPS. Le fonti aggiunte vengono acquisite alla prima generazione; non occorre costruire prima un grafo.
+Nel menu Documentazione tecnico funzionale seleziona i documenti già prodotti da rendere consultabili. **Aggiungi** collega una cartella locale o di rete, SharePoint tramite Microsoft Graph, Azure DevOps o un repository Git HTTPS. Le fonti aggiunte vengono acquisite alla prima generazione; non occorre costruire prima un grafo.
 
-**Genera documentazione tecnica** è abilitato solo dopo aver selezionato almeno una fonte tramite **documentazione tecnica → Aggiungi**; il progetto e i grafi da soli non lo abilitano. Apre il form per nome, obiettivo e aggiornamento delle fonti. Il progetto è sempre incluso e viene acquisito dal filesystem corrente. Gli eventuali grafi selezionati e i documenti di documentazione tecnica selezionati accompagnano il contesto della richiesta. Le scelte si salvano automaticamente.
+**genera .md e grafo** è abilitato solo dopo aver selezionato almeno una fonte tramite **documentazione tecnico funzionale → Aggiungi**; il progetto e i grafi da soli non lo abilitano. Apre il form per nome, obiettivo e aggiornamento delle fonti. Il progetto è sempre incluso e viene acquisito dal filesystem corrente. Gli eventuali grafi selezionati e i documenti di documentazione tecnico funzionale selezionati accompagnano il contesto della richiesta. Le scelte si salvano automaticamente.
 
-L’orchestratore produce un **DOCUMENTAZIONE-TECNICA.md tecnico-funzionale dettagliato e autosufficiente**, centrato sull'utilizzo dell'applicazione e sui flussi delle sue funzionalità, con gli approfondimenti tecnici e architetturali pertinenti. La preparazione di INCARICO-DOCUMENTAZIONE-TECNICA.md e FONTI.json è solo l’avvio della generazione.
+L’orchestratore produce un **DOCUMENTAZIONE-TECNICO-FUNZIONALE.md tecnico-funzionale dettagliato e autosufficiente**, centrato sull'utilizzo dell'applicazione e sui flussi delle sue funzionalità, con gli approfondimenti tecnici e architetturali pertinenti. La preparazione di INCARICO-DOCUMENTAZIONE-TECNICO-FUNZIONALE.md e FONTI.json è solo l’avvio della generazione.
 
 Solo per questo flusso AS-IS, prima della stesura salva **PIANO-DOCUMENTAZIONE.md** con ID, confini, dipendenze e stato di ogni micro modulo o funzionalità. Assegna un task separato per ciascuna unità terminale, in batch successivi entro i limiti configurati. Ogni figlio descrive soltanto l'unità assegnata e lascia riferimenti alle altre; segnala nuove funzionalità e lacune al genitore. L'orchestratore controlla e integra le consegne, risolve i riferimenti e aggiorna il piano, creando altri task mirati quando servono. Se manca il profilo Subagenti, prepara il piano e segnala la configurazione necessaria; se termina il budget di chiamate, conserva i task pendenti e indica che il dossier è parziale. Le altre attività della chat mantengono la normale modalità di delega.
 
-Dopo la revisione, `register_documentation` verifica le citazioni e genera con il modello il **grafo semantico del Markdown finale**. Il grafo viene aggiunto alla raccolta Grafi e preselezionato; il documento diventa consultabile nel menu Documentazione tecnica. Un errore nella generazione semantica viene segnalato e non pubblica un grafo incompleto. La registrazione non attesta approvazione umana.
+Dopo la revisione, `register_documentation` verifica le citazioni e genera con il modello il **grafo semantico del Markdown finale**. Il grafo viene aggiunto alla raccolta Grafi e preselezionato; il documento diventa consultabile nel menu Documentazione tecnico funzionale. Un errore nella generazione semantica viene segnalato e non pubblica un grafo incompleto. La registrazione non attesta approvazione umana.
 
 ## Consultazione e aggiornamento
 
-**Apri chat Pi** conserva le selezioni in un contesto della sessione, disponibile anche ai subagenti. `graph-explorer` viene caricata soltanto quando almeno un grafo è selezionato; `lettura-documentazione-tecnica` soltanto quando ci sono documenti di documentazione tecnica selezionati. `read_documentation` permette ricerca deterministica, righe numerate e paginazione; i grafi semantici si consultano con `document_graph`, quelli del codice con `graph_query` e `connected_graph`.
+**Apri chat Pi** conserva le selezioni in un contesto della sessione, disponibile anche ai subagenti. `graph-explorer` viene caricata soltanto quando almeno un grafo è selezionato; `lettura-documentazione-tecnico-funzionale` soltanto quando ci sono documenti di documentazione tecnico funzionale selezionati. `read_documentation` permette ricerca deterministica, righe numerate e paginazione; i grafi semantici si consultano con `document_graph`, quelli del codice con `graph_query` e `connected_graph`.
 
 Alla fine di una richiesta, dopo l’integrazione delle modifiche da parte dell’orchestratore o del modello singolo, la suite confronta i contenuti con l’inizio della richiesta e rigenera i grafi già presenti quando necessario. Aggiorna anche i riferimenti della chat mantenendo gli stessi identificativi e le selezioni esplicite. Una semplice consultazione senza modifiche non rigenera i grafi.
 
 ## Comando nella chat
 
 ```text
-/documentazione-tecnica
-/documentazione-tecnica Ricostruisci il ciclo ordine confrontando documenti, backend, frontend e database
+/documentazione-tecnico-funzionale
+/documentazione-tecnico-funzionale Ricostruisci il ciclo ordine confrontando documenti, backend, frontend e database
 ```
 
 Il comando avvia un nuovo dossier nella chat corrente. Riusa le fonti del dossier attivo oppure il progetto e le fonti scelte nel pannello. Non richiede un grafo preesistente. Anche `prepare_documentation` usa il progetto selezionato. La generazione richiede un modello disponibile e può comportare costi API; le fonti lette vengono inviate ai provider configurati.
@@ -37,7 +37,7 @@ I dossier conservano progetto e nome in `PROGETTO.json`, corpus in `FONTI.json` 
 
 ## Compatibilità dei dati salvati
 
-La rinomina aggiorna automaticamente preferenze, selezioni, nomi dei file del dossier e skill abilitate. Il documento principale è `DOCUMENTAZIONE-TECNICA.md`; i comandi sono `/documentazione-tecnica` e `/documentazione-tecnica-register`, con le skill `documentazione-tecnica` e `lettura-documentazione-tecnica`.
+La rinomina aggiorna automaticamente preferenze, selezioni, nomi dei file del dossier e skill abilitate, anche per i dati già migrati dalla versione precedente. Il documento principale è `DOCUMENTAZIONE-TECNICO-FUNZIONALE.md`; i comandi sono `/documentazione-tecnico-funzionale` e `/documentazione-tecnico-funzionale-register`, con le skill `documentazione-tecnico-funzionale` e `lettura-documentazione-tecnico-funzionale`.
 
 Gli snapshot delle evidenze e i grafi versionati conservano contenuti e hash originali, così le citazioni storiche restano verificabili. `documentation-compat.json` contiene soltanto le corrispondenze usate per leggere e migrare i dati delle versioni precedenti.
 
@@ -92,7 +92,7 @@ Il genitore può delegare la lettura con `evidenceScope`: assegna domande, fonti
 
 ## Consegne del dossier
 
-L’incarico iniziale chiede DOCUMENTAZIONE-TECNICA.md, ARCHITETTURA.md, FLUSSI-E-INTERFACCE.md, OPERATIVITA.md, LACUNE-E-DOMANDE.md e MATRICE-FONTI.md. Puoi adattarle in chat. La skill documentazione-tecnica è inclusa e abilitata.
+L’incarico iniziale chiede DOCUMENTAZIONE-TECNICO-FUNZIONALE.md, ARCHITETTURA.md, FLUSSI-E-INTERFACCE.md, OPERATIVITA.md, LACUNE-E-DOMANDE.md e MATRICE-FONTI.md. Puoi adattarle in chat. La skill documentazione-tecnico-funzionale è inclusa e abilitata.
 
 Le affermazioni sostanziali devono riportare citazioni `[sourceId:documentId]`, percorso e righe/simboli pertinenti. La matrice collega sezioni, evidenze, hash, data e commit. Contraddizioni fra specifiche e codice restano esplicite. Informazioni non provate, ambiente di produzione e proposte future non devono essere presentati come stato attuale verificato.
 

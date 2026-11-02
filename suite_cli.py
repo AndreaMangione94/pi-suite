@@ -41,9 +41,9 @@ def main():
         clean_workspace=env.get('PI_SUITE_CLEAN_WORKSPACE')
         if clean_workspace and Path.cwd().resolve()==Path(clean_workspace).resolve():
             extra+=['--no-context-files']
-        names=[n for n in app.settings['enabledSkills'] if n not in ('graph-explorer','lettura-documentazione-tecnica')]
+        names=[n for n in app.settings['enabledSkills'] if n not in ('graph-explorer','lettura-documentazione-tecnico-funzionale')]
         if context.get('graphs'):names.append('graph-explorer')
-        if context.get('documentation'):names.append('lettura-documentazione-tecnica')
+        if context.get('documentation'):names.append('lettura-documentazione-tecnico-funzionale')
         for name in names:
             folder=ROOT/'skills'/name
             if name=='pi-subagents': folder=ROOT/'node_modules/pi-subagents/skills/pi-subagents'

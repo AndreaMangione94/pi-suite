@@ -1,4 +1,4 @@
-import {isTechnicalDocumentation,legacyDocumentation} from './documentation-compat.mjs';
+import {isTechnicalFunctionalDocumentation,legacyDocumentation} from './documentation-compat.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -22,7 +22,7 @@ export function sourceBundle(home,project) {
     return [...refs,...(selection.bundle||[]).filter(g=>!refs.some(r=>r.source===g.source&&r.snapshot===g.snapshot&&JSON.stringify(r.documentGraph)===JSON.stringify(g.documentGraph)))];
   }
   const dossier=path.join(project,'FONTI.json');let refs,documentGraph;
-  if(fs.existsSync(dossier)&&(fs.existsSync(path.join(project,'INCARICO-DOCUMENTAZIONE-TECNICA.md'))||fs.existsSync(path.join(project,legacyDocumentation.assignment))))refs=JSON.parse(fs.readFileSync(dossier,'utf8'));
+  if(fs.existsSync(dossier)&&(fs.existsSync(path.join(project,'INCARICO-DOCUMENTAZIONE-TECNICO-FUNZIONALE.md'))||fs.existsSync(path.join(project,legacyDocumentation.assignment))))refs=JSON.parse(fs.readFileSync(dossier,'utf8'));
   else {
     const root=path.join(home,'sources');refs=[];
     const settingsPath=path.join(home,'settings.json'),normalize=p=>process.platform==='win32'?path.resolve(p).toLowerCase():path.resolve(p);
@@ -77,7 +77,7 @@ export function connectedTools(bundle) {
   return [
     {name:'connected_graph',label:'Grafo delle fonti Azure',description:'Cerca simboli nel grafo Graphify degli snapshot collegati, con riferimenti ai documenti e al commit. Analisi AST strutturale, non prova di deployment.',parameters:{type:'object',properties:{query:{type:'string'},source:{type:'string'}},additionalProperties:false},execute:async(_id,args)=>{
       const graphs=[];for(const s of bundle){if(s.allowCodeGraph===false||args.source&&args.source!==s.source)continue;const file=path.join(s.directory,'graph.json');if(!fs.existsSync(file))continue;const g=JSON.parse(fs.readFileSync(file,'utf8'));const matches=g.nodes.filter(n=>JSON.stringify(n).toLowerCase().includes((args.query||'').toLowerCase())),nodes=matches.slice(0,40),ids=new Set(nodes.map(n=>n.id));graphs.push({source:s.source,snapshot:s.snapshot,revision:s.manifest.revision,nodes,edges:g.edges.filter(e=>ids.has(e.source)||ids.has(e.target)).slice(0,100),truncated:matches.length>40,limits:g.limits});}return response({graphs});}},
-    {name:'connected_sources',label:'Fonti SharePoint e Azure',description:'Elenca evidenze e snapshot locali collegati. Controlla date, commit ed esclusioni prima di scrivere una documentazione tecnica.',parameters:{type:'object',properties:{query:{type:'string'},offset:{type:'integer',minimum:0}},additionalProperties:false},execute:async(_id,args)=>{
+    {name:'connected_sources',label:'Fonti SharePoint e Azure',description:'Elenca evidenze e snapshot locali collegati. Controlla date, commit ed esclusioni prima di scrivere una documentazione tecnico funzionale.',parameters:{type:'object',properties:{query:{type:'string'},offset:{type:'integer',minimum:0}},additionalProperties:false},execute:async(_id,args)=>{
       const matches=bundle.flatMap(s=>s.manifest.documents.map(d=>({source:s.source,snapshot:s.snapshot,name:s.name,...d}))).filter(d=>JSON.stringify(d).toLowerCase().includes((args.query||'').toLowerCase()));const offset=Math.max(0,args.offset||0);
       return response({sources:bundle.map(s=>({id:s.source,name:s.name,snapshot:s.snapshot,createdAt:s.manifest.createdAt,revision:s.manifest.revision,documents:s.manifest.documents.length,excluded:s.manifest.excluded,limits:s.manifest.limits})),documents:matches.slice(offset,offset+60),totalMatches:matches.length,nextOffset:offset+60<matches.length?offset+60:null});}},
     {name:'read_connected_source',label:'Leggi evidenza collegata',description:'Legge il testo estratto di una fonte SharePoint/Azure dallo snapshot fissato, con citazione, hash, revisione e righe. Nessuna richiesta di rete.',parameters:{type:'object',properties:{source:{type:'string'},document:{type:'string'},startLine:{type:'integer',minimum:1},lines:{type:'integer',minimum:1,maximum:300}},required:['source','document'],additionalProperties:false},execute:async(_id,args)=>{

@@ -1,18 +1,18 @@
-# Pi Suite 0.6.5 — Fonti, grafi e documentazione tecnica riutilizzabile
+# Pi Suite 0.6.5 — Fonti, grafi e documentazione tecnico funzionale riutilizzabile
 
 Guida aggiornata alla distribuzione Windows del 1 novembre 2026.
 
-## Grafi e documentazione tecnica nel contesto
+## Grafi e documentazione tecnico funzionale nel contesto
 
 L’icona **Progetto** permette di scegliere o creare un progetto e di tornare al contesto pulito; il suo badge indica 0 o 1. Accanto, l’icona **Grafi** apre l’elenco dei grafi disponibili, ciascuno con icona, label, selezione per la chat e × di rimozione. **Genera grafo** costruisce il grafo AST della cartella del progetto per Python, JavaScript e TypeScript. Se non esistono grafi è l’unica opzione disponibile.
 
-L’icona **Documentazione tecnica** permette di includere o escludere i documenti già creati. **Aggiungi** collega altre cartelle locali, SharePoint o repository Git HTTPS/Azure. **Genera documentazione tecnica** si abilita solo con almeno una fonte scelta tramite **documentazione tecnica → Aggiungi** e usa sempre anche il progetto e gli eventuali grafi selezionati. Non richiede un grafo di partenza.
+L’icona **Documentazione tecnico funzionale** permette di includere o escludere i documenti già creati. **Aggiungi** collega altre cartelle locali, SharePoint o repository Git HTTPS/Azure. **genera .md e grafo** si abilita solo con almeno una fonte scelta tramite **documentazione tecnico funzionale → Aggiungi** e usa sempre anche il progetto e gli eventuali grafi selezionati. Non richiede un grafo di partenza.
 
-Il risultato comprende un **DOCUMENTAZIONE-TECNICA.md dettagliato**, scritto con i modelli e con delega ai subagenti configurati, e il **grafo semantico del documento finale**, generato tramite LLM dopo la revisione e la validazione delle citazioni. Il grafo viene salvato e selezionato automaticamente. I precedenti grafi documentali delle fonti rimangono consultabili separatamente.
+Il risultato comprende un **DOCUMENTAZIONE-TECNICO-FUNZIONALE.md dettagliato**, scritto con i modelli e con delega ai subagenti configurati, e il **grafo semantico del documento finale**, generato tramite LLM dopo la revisione e la validazione delle citazioni. Il grafo viene salvato e selezionato automaticamente. I precedenti grafi documentali delle fonti rimangono consultabili separatamente.
 
-`DocumentGraphBuilder` analizza i passaggi del Markdown, ricostruisce concetti e relazioni con evidenze e valida citazioni e riferimenti prima di pubblicare il grafo. La cache riusa le analisi semantiche valide dei contenuti invariati. Il grafo della documentazione tecnica usa soltanto DOCUMENTAZIONE-TECNICA.md; gli allegati non sostituiscono il documento principale.
+`DocumentGraphBuilder` analizza i passaggi del Markdown, ricostruisce concetti e relazioni con evidenze e valida citazioni e riferimenti prima di pubblicare il grafo. La cache riusa le analisi semantiche valide dei contenuti invariati. Il grafo della documentazione tecnico funzionale usa soltanto DOCUMENTAZIONE-TECNICO-FUNZIONALE.md; gli allegati non sostituiscono il documento principale.
 
-Le scelte sono salvate automaticamente. La chat e i suoi figli ricevono soltanto gli artefatti selezionati: la skill `graph-explorer` è inclusa se almeno un grafo è selezionato, `lettura-documentazione-tecnica` se almeno un documento di documentazione tecnica è selezionato. `read_documentation` offre una navigazione deterministica del testo con ricerca, righe e paginazione, anche senza grafi.
+Le scelte sono salvate automaticamente. La chat e i suoi figli ricevono soltanto gli artefatti selezionati: la skill `graph-explorer` è inclusa se almeno un grafo è selezionato, `lettura-documentazione-tecnico-funzionale` se almeno un documento di documentazione tecnico funzionale è selezionato. `read_documentation` offre una navigazione deterministica del testo con ricerca, righe e paginazione, anche senza grafi.
 
 Dopo le modifiche integrate dall’orchestratore o dal modello singolo, la suite rigenera i grafi presenti interessati dal cambiamento e aggiorna i riferimenti della chat. Senza modifiche non parte una rigenerazione. Le selezioni restano rispettate durante l’aggiornamento.
 
@@ -40,7 +40,7 @@ Gli estratti iniziali non sostituiscono gli originali. `read_evidence` permette 
 
 Una citazione ha forma `[sourceId:documentId]`; il riferimento puntuale puo usare `[sourceId:documentId]#L3-L12`. Sono indicati snapshot, hash, percorso, copertura e parti escluse. La validazione controlla identita, integrita e intervalli; non certifica il sostegno semantico della conclusione.
 
-Nella normale chat il corpus viene fissato alla prima consultazione e condiviso con i figli. `/sources-refresh` ricarica i riferimenti salvati per la chat; quando è disponibile il grafo documentale, ne conserva gli snapshot coerenti. Per usare nuove versioni dei documenti rigenera prima il grafo nella modale. Il comando non sincronizza né genera documenti. Nei dossier, `FONTI.json` mantiene invece le versioni esplicitamente fissate. Una consultazione non ricostruisce indici, non arricchisce automaticamente i grafi e non rigenera la documentazione tecnica.
+Nella normale chat il corpus viene fissato alla prima consultazione e condiviso con i figli. `/sources-refresh` ricarica i riferimenti salvati per la chat; quando è disponibile il grafo documentale, ne conserva gli snapshot coerenti. Per usare nuove versioni dei documenti rigenera prima il grafo nella modale. Il comando non sincronizza né genera documenti. Nei dossier, `FONTI.json` mantiene invece le versioni esplicitamente fissate. Una consultazione non ricostruisce indici, non arricchisce automaticamente i grafi e non rigenera la documentazione tecnico funzionale.
 
 Dal pannello puoi cercare nel grafo, esplorare i collegamenti e aprire le fonti nella sezione **Esplora il grafo** della modale Grafi di conoscenza.
 
@@ -54,11 +54,11 @@ Le letture riuscite con `read_evidence` e `read_connected_source` vengono regist
 
 Il risultato della delega contiene `evidenceReading`: copertura automatica, resoconto del figlio e segnalazioni `reportMissing` e `declarationStale`. Un resoconto diventa da aggiornare se seguono nuove letture. È previsto al massimo un richiamo al figlio per consegnarlo. Il genitore verifica risultati e lacune senza dover caricare prima tutti i documenti. La pagina **Attività subagenti** mostra perimetro, testi letti integralmente o in parte, citazioni, versioni e richieste di ampliamento. La copertura del testo estratto non attesta copertura integrale di immagini o altre parti escluse dall’originale.
 
-## Creare o aggiornare una documentazione tecnica
+## Creare o aggiornare una documentazione tecnico funzionale
 
-Nel menu Documentazione tecnica scegli **Genera documentazione tecnica**, inserisci nome e obiettivo, poi avvia la richiesta. La suite acquisisce il progetto corrente e le fonti aggiunte; le nuove fonti vengono sincronizzate anche quando non si richiede di aggiornare quelle già acquisite. Il contesto conserva i grafi esplicitamente selezionati, senza costruire obbligatoriamente un grafo delle fonti prima della stesura.
+Nel menu Documentazione tecnico funzionale scegli **genera .md e grafo**, inserisci nome e obiettivo, poi avvia la richiesta. La suite acquisisce il progetto corrente e le fonti aggiunte; le nuove fonti vengono sincronizzate anche quando non si richiede di aggiornare quelle già acquisite. Il contesto conserva i grafi esplicitamente selezionati, senza costruire obbligatoriamente un grafo delle fonti prima della stesura.
 
-`/documentazione-tecnica [obiettivo]` avvia la stessa preparazione nella chat corrente; `prepare_documentation` è disponibile all’orchestratore per richieste esplicite di generazione. Tutti gli ingressi producono un dossier con fonti fissate e contesto del progetto. Gli originali rimangono le evidenze principali e le consegne dei figli vengono controllate prima dell’integrazione.
+`/documentazione-tecnico-funzionale [obiettivo]` avvia la stessa preparazione nella chat corrente; `prepare_documentation` è disponibile all’orchestratore per richieste esplicite di generazione. Tutti gli ingressi producono un dossier con fonti fissate e contesto del progetto. Gli originali rimangono le evidenze principali e le consegne dei figli vengono controllate prima dell’integrazione.
 
 Per questo flusso AS-IS l'orchestratore salva prima PIANO-DOCUMENTAZIONE.md e assegna un task distinto per ogni micro modulo o funzionalità terminale. I figli rimangono nel proprio ambito, lasciando riferimenti alle altre unità. Il genitore integra le consegne e aggiorna piano e incarichi per nuove unità, lacune e contraddizioni. Questa modalità è specifica del dossier tecnico-funzionale e richiede il profilo Subagenti; non cambia la delega delle altre richieste.
 
@@ -66,13 +66,13 @@ Il documento principale deve descrivere l'utilizzo di ciascuna funzionalità: at
 
 ## Registrare il dossier prodotto
 
-Dopo aver scritto e controllato i documenti, l'orchestratore puo chiamare `register_documentation`. L’incarico richiede questo passaggio alla fine della generazione. Puoi ripeterlo con `/documentazione-tecnica-register` nella chat del dossier; il salvataggio e la consultazione in **Documentazione tecnica salvata** avvengono automaticamente e non richiedono una CTA di registrazione nel pannello.
+Dopo aver scritto e controllato i documenti, l'orchestratore puo chiamare `register_documentation`. L’incarico richiede questo passaggio alla fine della generazione. Puoi ripeterlo con `/documentazione-tecnico-funzionale-register` nella chat del dossier; il salvataggio e la consultazione in **Documentazione tecnico funzionale salvata** avvengono automaticamente e non richiedono una CTA di registrazione nel pannello.
 
-La registrazione richiede DOCUMENTAZIONE-TECNICA.md e citazioni valide delle fonti primarie fissate; raccoglie anche gli altri cinque documenti standard se presenti. Salva una copia versionata e indicizzata, conservando dipendenze e verifiche. Ripetere la registrazione degli stessi contenuti riutilizza la stessa versione. Lo stato semantico resta **non revisionato**: la registrazione non equivale ad approvazione umana.
+La registrazione richiede DOCUMENTAZIONE-TECNICO-FUNZIONALE.md e citazioni valide delle fonti primarie fissate; raccoglie anche gli altri cinque documenti standard se presenti. Salva una copia versionata e indicizzata, conservando dipendenze e verifiche. Ripetere la registrazione degli stessi contenuti riutilizza la stessa versione. Lo stato semantico resta **non revisionato**: la registrazione non equivale ad approvazione umana.
 
-I documenti di documentazione tecnica selezionati diventano consultabili nella chat con rimandi agli originali. Non vengono importati indiscriminatamente tutti i Markdown del progetto. Non considerare documentazione tecnica e fonte da esso riassunta due conferme indipendenti.
+I documenti di documentazione tecnico funzionale selezionati diventano consultabili nella chat con rimandi agli originali. Non vengono importati indiscriminatamente tutti i Markdown del progetto. Non considerare documentazione tecnico funzionale e fonte da esso riassunta due conferme indipendenti.
 
-Se cambiano i contenuti o la revisione delle fonti, il pannello indica **da rivalutare**. Una sincronizzazione senza variazioni dei contenuti indicizzati non basta a invalidare la documentazione tecnica. Le copie precedenti restano consultabili come storico, con la segnalazione esplicita. L'aggiornamento dei documenti parte su richiesta; i grafi presenti vengono aggiornati dopo le modifiche integrate nella chat; questa versione non installa scheduler o rigenerazioni periodiche.
+Se cambiano i contenuti o la revisione delle fonti, il pannello indica **da rivalutare**. Una sincronizzazione senza variazioni dei contenuti indicizzati non basta a invalidare la documentazione tecnico funzionale. Le copie precedenti restano consultabili come storico, con la segnalazione esplicita. L'aggiornamento dei documenti parte su richiesta; i grafi presenti vengono aggiornati dopo le modifiche integrate nella chat; questa versione non installa scheduler o rigenerazioni periodiche.
 
 ## Interpretazioni semantiche opzionali
 
@@ -84,11 +84,11 @@ Non partono chiamate modello aggiuntive durante la sincronizzazione: l'arricchim
 
 ## Persistenza e costi
 
-La preparazione di una versione si sostiene una volta; gli artefatti rimangono su disco. Estrattori, ricerca e grafi strutturali consumano risorse locali. La creazione del grafo documentale semantico usa il modello configurato e può comportare costi API. La generazione della documentazione tecnica e le interpretazioni semantiche usano i modelli scelti e possono avere costi API. Durante la consultazione restano i normali costi del modello che legge le evidenze e risponde; non si ripaga la creazione degli artefatti.
+La preparazione di una versione si sostiene una volta; gli artefatti rimangono su disco. Estrattori, ricerca e grafi strutturali consumano risorse locali. La creazione del grafo documentale semantico usa il modello configurato e può comportare costi API. La generazione della documentazione tecnico funzionale e le interpretazioni semantiche usano i modelli scelti e possono avere costi API. Durante la consultazione restano i normali costi del modello che legge le evidenze e risponde; non si ripaga la creazione degli artefatti.
 
 Il grafo documentale finale è in `data/graphs/<progetto>/documental/versions/<versione>/graph.json`; `current.json` indica l’ultima versione riuscita. La cache semantica è `data/graphs/document-semantic-cache.sqlite`. Ogni dossier conserva il riferimento in `GRAFO-DOCUMENTALE.json` e in `FONTI.json`; aggiornare il progetto non modifica le versioni già fissate.
 
-In `data/sources/<fonte>/<snapshot>/` sono conservati manifest, originali, testo, mappe e indici. `indexes/<versione>/` mantiene le versioni fissate dai dossier. I dossier prodotti sono in `data/documentation/<id>/`. Il registro dei documenti di documentazione tecnica è in `data/sources/documentazione-tecnica-registry.json`; le interpretazioni sono separate in `data/knowledge/proposals/`. Nella copia sorgente `data` corrisponde a `suite-data`; nell'installazione a `%LOCALAPPDATA%/PiSuite/data`.
+In `data/sources/<fonte>/<snapshot>/` sono conservati manifest, originali, testo, mappe e indici. `indexes/<versione>/` mantiene le versioni fissate dai dossier. I dossier prodotti sono in `data/documentation/<id>/`. Il registro dei documenti di documentazione tecnico funzionale è in `data/sources/documentation-registry.json`; le interpretazioni sono separate in `data/knowledge/proposals/`. Nella copia sorgente `data` corrisponde a `suite-data`; nell'installazione a `%LOCALAPPDATA%/PiSuite/data`.
 
 ## Copertura e limiti
 
@@ -107,6 +107,6 @@ In `data/sources/<fonte>/<snapshot>/` sono conservati manifest, originali, testo
 
 > Quali controlli impediscono di fatturare un ordine non confermato? Usa le fonti se servono, apri gli originali pertinenti e distingui specifica, implementazione e lacune.
 
-> Crea la documentazione tecnica del ciclo ordine usando le fonti configurate. Prepara prima grafi e indici aggiornati, leggi codice e documenti pertinenti e registra il dossier al termine.
+> Crea la documentazione tecnico funzionale del ciclo ordine usando le fonti configurate. Prepara prima grafi e indici aggiornati, leggi codice e documenti pertinenti e registra il dossier al termine.
 
-> Partendo dalle evidenze correnti e dalla documentazione tecnica, prepara una specifica per aggiungere una nuova modalita di pagamento. Distingui stato attuale e TO-BE, segnala gli impatti verificati e quelli soltanto ipotizzati.
+> Partendo dalle evidenze correnti e dalla documentazione tecnico funzionale, prepara una specifica per aggiungere una nuova modalita di pagamento. Distingui stato attuale e TO-BE, segnala gli impatti verificati e quelli soltanto ipotizzati.

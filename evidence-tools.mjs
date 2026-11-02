@@ -15,13 +15,13 @@ export const knowledgeSchemas={
   register_documentation:{properties:{},required:[]}
 };
 const descriptions={
-  document_graph:'Consulta il grafo documentale SEMANTICO finale salvato per il progetto e fissato nel dossier: concetti e relazioni esplicite o inferite dal modello con evidenze. Per scrivere documentazione tecnica parti da questo grafo, poi apri gli originali e confronta il grafo del codice. Non genera nuovi grafi.',
-  knowledge_search:'Cerca testo, requisiti e simboli negli snapshot fissati. Per creare documentazione tecnica parti dal grafo documentale e apri gli originali; nelle normali consultazioni la ricerca e facoltativa. Non crea o aggiorna indici.',
-  knowledge_trace:'Esplora nodi vicini e relazioni con evidenze; per documentazione tecnica esplora prima i collegamenti documentali. Vicinanza non prova significato o completezza. includeInferred mostra separatamente proposte semantiche con stato di revisione.',
+  document_graph:'Consulta il grafo documentale SEMANTICO finale salvato per il progetto e fissato nel dossier: concetti e relazioni esplicite o inferite dal modello con evidenze. Per scrivere documentazione tecnico funzionale parti da questo grafo, poi apri gli originali e confronta il grafo del codice. Non genera nuovi grafi.',
+  knowledge_search:'Cerca testo, requisiti e simboli negli snapshot fissati. Per creare documentazione tecnico funzionale parti dal grafo documentale e apri gli originali; nelle normali consultazioni la ricerca e facoltativa. Non crea o aggiorna indici.',
+  knowledge_trace:'Esplora nodi vicini e relazioni con evidenze; per documentazione tecnico funzionale esplora prima i collegamenti documentali. Vicinanza non prova significato o completezza. includeInferred mostra separatamente proposte semantiche con stato di revisione.',
   read_evidence:'Legge una fonte congelata verificandone integrita. mode full legge il contenuto completo disponibile, paginato se necessario: segui nextOffset. Dichiara sempre troncamenti e parti non lette.',
   propose_relation:'Salva una deduzione semantica con evidenze valide come proposta NON revisionata. Non modifica fonti, non certifica verita e non approva la propria proposta.',
-  prepare_documentation:'SOLO per una richiesta esplicita di creare/aggiornare documentazione tecnica: sincronizza se refresh=true, verifica/aggiorna prima grafi e indici e prepara il dossier. Poi leggi i suoi originali e scrivi i documenti. Non chiamare per semplici domande.',
-  register_documentation:'Completa il dossier prodotto: valida citazioni e integrità, registra il Markdown e genera tramite LLM il grafo semantico di DOCUMENTAZIONE-TECNICA.md. Salva e seleziona automaticamente il grafo nel contesto. Non equivale ad approvazione umana.'
+  prepare_documentation:'SOLO per una richiesta esplicita di creare/aggiornare documentazione tecnico funzionale: sincronizza se refresh=true, verifica/aggiorna prima grafi e indici e prepara il dossier. Poi leggi i suoi originali e scrivi i documenti. Non chiamare per semplici domande.',
+  register_documentation:'Completa il dossier prodotto: valida citazioni e integrità, registra il Markdown e genera tramite LLM il grafo semantico di DOCUMENTAZIONE-TECNICO-FUNZIONALE.md. Salva e seleziona automaticamente il grafo nel contesto. Non equivale ad approvazione umana.'
 };
 
 export async function invokeEvidence(action,args,bundle,options={}) {

@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 export const legacyDocumentation=JSON.parse(fs.readFileSync(new URL('./documentation-compat.json',import.meta.url),'utf8'));
-export const isTechnicalDocumentation=manifest=>['documentation',legacyDocumentation.kind].includes(manifest?.kind);
+export const isTechnicalFunctionalDocumentation=manifest=>['documentation',legacyDocumentation.kind].includes(manifest?.kind);
 export function upgradeDocumentationContext(value){
   if(!value)return value;
   const old=legacyDocumentation.workspaceKey;

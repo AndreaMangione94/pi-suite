@@ -18,12 +18,12 @@ def refresh(app, folder, context_path=None, baseline=False):
     previous=read_json(state_path) if state_path.exists() else {}
     signature=fingerprint(scan(root));changed=previous.get('project')!=signature;updated=[]
     if baseline:
-        previous={'project':signature,**{g['id']:digest((Path(g['workspace'])/'DOCUMENTAZIONE-TECNICA.md').read_bytes()) for g in graphs if g.get('workspace') and (Path(g['workspace'])/'DOCUMENTAZIONE-TECNICA.md').is_file()}}
+        previous={'project':signature,**{g['id']:digest((Path(g['workspace'])/'DOCUMENTAZIONE-TECNICO-FUNZIONALE.md').read_bytes()) for g in graphs if g.get('workspace') and (Path(g['workspace'])/'DOCUMENTAZIONE-TECNICO-FUNZIONALE.md').is_file()}}
         save_json(state_path,previous);return []
     if not graphs:return []
     for item in graphs:
         if item.get('workspace'):
-            doc=Path(item['workspace'])/'DOCUMENTAZIONE-TECNICA.md'
+            doc=Path(item['workspace'])/'DOCUMENTAZIONE-TECNICO-FUNZIONALE.md'
             if doc.is_file():
                 value=digest(doc.read_bytes())
                 manifest=read_json(app.sources.root/item['source']/item['snapshot']/'manifest.json')
@@ -51,7 +51,7 @@ def refresh(app, folder, context_path=None, baseline=False):
     previous['project']=signature;save_json(state_path,previous)
     if context_path and Path(context_path).exists():
         old=read_json(context_path);fresh=workspace.chat_context(app,pid)
-        # Keep the chat's explicit selection; newly generated documentazione tecnica graphs are added automatically.
+        # Keep the chat's explicit selection; newly generated documentazione tecnico funzionale graphs are added automatically.
         ids={g['id'] for g in old.get('graphs',[])}|{g['id'] for g in fresh['graphs'] if g.get('workspace') and Path(g['workspace']).resolve()==Path(folder).resolve()}
         fresh['graphs']=[g for g in workspace.inventory(app,pid)['graphs'] if g['id'] in ids]
         old_ids={d['id'] for d in old.get('documentation',[])}|{d['id'] for d in fresh['documentation'] if Path(d['workspace']).resolve()==Path(folder).resolve()}

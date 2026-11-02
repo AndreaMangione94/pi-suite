@@ -41,9 +41,9 @@ def main():
             if project:
                 prefs=suite_workspace.project_record(app,project).get('workspace',{}).get('documentation',{})
                 ids=suite_workspace.prepare_sources(app,{'project':project,'graphs':prefs.get('graphs',[]),'sources':ids or prefs.get('sources',[])},'prepare-documentation')
-            if not ids:raise ValueError('Seleziona un progetto o delle fonti per generare documentazione tecnica.')
+            if not ids:raise ValueError('Seleziona un progetto o delle fonti per generare documentazione tecnico funzionale.')
             graph_ref=None if args.get('sources') else next((r['documentGraph'] for r in bundle if r.get('documentGraph')),None)
-            prepared=app.prepare_technical_documentation(ids,args.get('objective',''),args.get('refresh',True),project or (graph_ref or {}).get('project'),graph_ref)
+            prepared=app.prepare_technical_functional_documentation(ids,args.get('objective',''),args.get('refresh',True),project or (graph_ref or {}).get('project'),graph_ref)
             result={k:v for k,v in prepared.items() if k!='sources'}
     else:raise ValueError('Operazione non supportata')
     print(json.dumps(result,ensure_ascii=False))

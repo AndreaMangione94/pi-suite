@@ -63,7 +63,7 @@ export default function registerDelegation(pi:ExtensionAPI,root:string,home:stri
       if(!ready)throw Error('Avvia Pi tramite il launcher della suite dopo aver salvato orchestratore e subagenti.');
       const cfg=config();
       const selection=chatContext(workspace?workspace(ctx):ctx.cwd);
-      for(const name of [...(selection?.graphs?.length?['graph-explorer']:[]),...(selection?.documentation?.length?['lettura-documentazione-tecnica']:[])]){
+      for(const name of [...(selection?.graphs?.length?['graph-explorer']:[]),...(selection?.documentation?.length?['lettura-documentazione-tecnico-funzionale']:[])]){
         if(!cfg.skills.some((s:any)=>s.name===name))cfg.skills.push({name,description:name,content:fs.readFileSync(path.join(root,'skills',name,'SKILL.md'),'utf8')});
       }
       if(!cfg.worker?.provider||!cfg.worker?.model)throw Error('Configura il modello dei subagenti nel pannello.');
