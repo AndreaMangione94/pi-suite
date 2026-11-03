@@ -121,7 +121,7 @@ class Suite:
         self.job={'state':'idle'}
         self.settings=read_json(self.settings_path) if self.settings_path.exists() else {
             'providers':[],'roles':{},'enabledSkills':[s['name'] for s in skills()],
-            'maxCalls':24,'maxParallelWorkers':2,'projects':[]}
+            'maxCalls':24,'maxParallelWorkers':2,'delegationPolicy':'auto','projects':[]}
         migrate_home(self.home,self.settings,save_json)
         # Add the new bundled parent skill once, preserving later user opt-outs.
         if self.settings.get('suiteSchema',0)<2:
@@ -330,7 +330,8 @@ class Suite:
             available={s['name'] for s in skills(self.home/'skills')}
             self.settings={**self.settings,'enabledSkills':[s for s in data.get('enabledSkills',[]) if s in available],
                 'maxCalls':max(4,min(int(data.get('maxCalls',24)),100)),
-                'maxParallelWorkers':max(1,min(int(data.get('maxParallelWorkers',2)),4))}
+                'maxParallelWorkers':max(1,min(int(data.get('maxParallelWorkers',2)),4)),
+                'delegationPolicy':'always' if data.get('delegationPolicy')=='always' else 'auto'}
             try:return self._commit_byok(config,providers)
             except Exception:
                 self.settings=previous;raise
@@ -378,7 +379,7 @@ class Suite:
         directory=self.model_dir(self.home/'sessions'/uuid.uuid4().hex if snapshot else self.home/'pi-shell')
         profile=self.settings['roles'].get('worker')
         config={'worker':profile,'byokRevision':self.byok.revision(),'projects':self.settings['projects'],'maxCalls':self.settings['maxCalls'],
-                'maxParallelWorkers':self.settings['maxParallelWorkers'],
+                'maxParallelWorkers':self.settings['maxParallelWorkers'],'delegationPolicy':self.settings.get('delegationPolicy','auto'),
                 'skills':[s for s in skills(self.home/'skills') if s['name'] in self.settings['enabledSkills'] and not s.get('parentOnly')]}
         if context is not None:
             config['skills']=[s for s in config['skills'] if s['name'] not in ('graph-explorer','lettura-documentazione-tecnico-funzionale')]
