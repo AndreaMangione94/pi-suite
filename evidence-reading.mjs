@@ -7,8 +7,9 @@ const text={type:'string',minLength:1,maxLength:16000};
 const id={type:'string',pattern:'^[a-f0-9]{32}$'},documentId={type:'string',pattern:'^[a-f0-9]{20}$'};
 const initialDocument={type:'object',additionalProperties:false,properties:{source:id,document:documentId,snapshot:id},required:['source','document']};
 export const evidenceScopeSchema={type:'object',additionalProperties:false,properties:{focus:text,questions:{type:'array',items:text,minItems:1,maxItems:12},sourceIds:{type:'array',items:id,maxItems:100},documents:{type:'array',items:initialDocument,maxItems:200},graphNodes:{type:'array',items:{type:'string',minLength:1,maxLength:200},maxItems:40},limits:text,expectedOutput:text},required:['focus','questions','limits','expectedOutput']};
-const citation={type:'object',additionalProperties:false,properties:{source:id,snapshot:id,document:documentId,startLine:{type:'integer',minimum:1},endLine:{type:'integer',minimum:1}},required:['source','document','startLine','endLine']};
-export const evidenceReportSchema={type:'object',additionalProperties:false,properties:{summary:text,citations:{type:'array',items:citation,maxItems:100},unreadDocuments:{type:'array',items:{type:'object',additionalProperties:false,properties:{source:id,document:documentId,reason:text},required:['source','document','reason']},maxItems:200},uncertainties:{type:'array',items:text,maxItems:30},scopeExpansionRequests:{type:'array',items:text,maxItems:30}},required:['summary','citations','unreadDocuments','uncertainties','scopeExpansionRequests']};
+// Schema volutamente permissivo: gli errori dei riferimenti diventano avvisi nel resoconto, non tentativi ripetuti.
+const loose={type:'string'},citation={type:'object',properties:{source:loose,snapshot:loose,document:loose,startLine:{type:'integer'},endLine:{type:'integer'}},required:['source','document','startLine','endLine']};
+export const evidenceReportSchema={type:'object',additionalProperties:false,properties:{summary:text,citations:{type:'array',items:citation,maxItems:100},unreadDocuments:{type:'array',items:{type:'object',properties:{source:loose,snapshot:loose,document:loose,reason:loose},required:['source','document']},maxItems:200},uncertainties:{type:'array',items:loose,maxItems:30},scopeExpansionRequests:{type:'array',items:loose,maxItems:30}},required:['summary']};
 const hash=value=>crypto.createHash('sha256').update(value).digest('hex');
 const chars=value=>{let count=0;for(const _char of value)count++;return count;};
 const key=ref=>[ref.source,ref.snapshot,ref.document].join(':');
@@ -120,13 +121,20 @@ export function evidenceReadingSummary(directory,contract){
 
 function validateReport(contract,state,report){
   if(!report||typeof report!=='object')throw Error('Consegna sulle evidenze non valida');
-  if(Object.keys(report).some(name=>!Object.hasOwn(evidenceReportSchema.properties,name)))throw Error('La copertura e calcolata dagli strumenti: campo del resoconto non previsto');
-  const summary=field(report.summary,'summary'),uncertainties=array(report.uncertainties,'uncertainties',30).map(v=>field(v,'uncertainties')),scopeExpansionRequests=array(report.scopeExpansionRequests,'scopeExpansionRequests',30).map(v=>field(v,'scopeExpansionRequests'));
-  const coverage=documentsCoverage(state),bundle=contract.connectedSources||[],verified=new Map();
-  const citations=array(report.citations,'citations',100).map(value=>{
-    const {ref,doc}=resolveDocument(bundle,value),observed=coverage.find(r=>key(r)===key({source:ref.source,snapshot:ref.snapshot,document:doc.id}));
-    if(!observed)throw Error('La citazione deve riferirsi a un documento letto con gli strumenti del figlio');
-    const documentKey=key({source:ref.source,snapshot:ref.snapshot,document:doc.id});
+  const warnings=[],summary=field(report.summary,'summary');
+  for(const name of Object.keys(report))if(!Object.hasOwn(evidenceReportSchema.properties,name))warnings.push('Campo ignorato: '+name);
+  const list=(value,label,max)=>{if(value===undefined)return [];if(!Array.isArray(value)){warnings.push('Elenco '+label+' non valido: ignorato');return [];}return value.slice(0,max);};
+  const texts=(value,label)=>list(value,label,30).filter(v=>typeof v==='string'&&v.trim()).map(v=>v.trim().slice(0,16000));
+  const uncertainties=texts(report.uncertainties,'uncertainties'),scopeExpansionRequests=texts(report.scopeExpansionRequests,'scopeExpansionRequests');
+  const coverage=documentsCoverage(state),bundle=contract.connectedSources||[],verified=new Map(),citations=[];
+  for(const value of list(report.citations,'citations',100)){
+    let resolved;
+    try{resolved=resolveDocument(bundle,value);}catch(error){warnings.push('Citazione scartata ('+error.message+'): '+JSON.stringify(value).slice(0,200));continue;}
+    const {ref,doc}=resolved,start=value.startLine,end=value.endLine,documentKey=key({source:ref.source,snapshot:ref.snapshot,document:doc.id});
+    const base={source:ref.source,snapshot:ref.snapshot,document:doc.id,path:doc.path,startLine:start,endLine:end,citation:'['+ref.source+':'+doc.id+']#L'+start+'-L'+end};
+    if(!Number.isInteger(start)||!Number.isInteger(end)||start<1||end<start){warnings.push('Citazione scartata: intervallo non valido '+base.citation);continue;}
+    const observed=coverage.find(r=>key(r)===documentKey);
+    if(!observed){citations.push({...base,verified:false,issue:'documento non letto con gli strumenti del figlio'});continue;}
     if(!verified.has(documentKey)){
       if(doc.original){
         if(doc.original!=='originals/'+doc.id+'.bin'||hash(fs.readFileSync(path.join(ref.directory,doc.original)))!==doc.sha256)throw Error('Originale dello snapshot alterato durante il resoconto');
@@ -138,19 +146,26 @@ function validateReport(contract,state,report){
       for(const length of lengths){starts.push(offset);offset+=length+1;}
       verified.set(documentKey,{lines,lengths,starts});
     }
-    const {lines,lengths,starts}=verified.get(documentKey),start=value.startLine,end=value.endLine;
-    if(!Number.isInteger(start)||!Number.isInteger(end)||start<1||end<start||end>lines.length)throw Error('Intervallo di citazione non valido');
+    const {lines,lengths,starts}=verified.get(documentKey);
+    if(end>lines.length){citations.push({...base,verified:false,issue:'intervallo oltre la fine del documento'});continue;}
     const begin=starts[start-1],finish=starts[end-1]+lengths[end-1];
-    if(!covers(observed.characterIntervals,begin,finish)&&!covers(observed.completeLineIntervals,start,end+1))throw Error('Le righe citate non risultano lette integralmente: completa il passaggio prima di citarlo');
-    return {source:ref.source,snapshot:ref.snapshot,document:doc.id,startLine:start,endLine:end,citation:'['+ref.source+':'+doc.id+']#L'+start+'-L'+end};
-  });
-  const unreadDocuments=array(report.unreadDocuments,'unreadDocuments',200).map(value=>{
-    const {ref,doc}=resolveDocument(bundle,value);
-    if(coverage.some(read=>read.source===ref.source&&read.snapshot===ref.snapshot&&read.document===doc.id))throw Error('Un documento parzialmente letto va indicato fra i dubbi; non dichiararlo non letto');
-    return {source:ref.source,snapshot:ref.snapshot,document:doc.id,path:doc.path,reason:field(value.reason,'reason')};
-  });
-  for(const doc of contract.evidenceScope?.initialDocuments||[])if(!coverage.some(read=>key(read)===key(doc))&&!unreadDocuments.some(unread=>key(unread)===key(doc)))throw Error('Dichiara il motivo per ogni documento iniziale non letto: '+doc.path);
-  return {summary,citations,unreadDocuments,uncertainties,scopeExpansionRequests,submittedAt:new Date().toISOString(),readCalls:state.reads.length};
+    const read=covers(observed.characterIntervals,begin,finish)||covers(observed.completeLineIntervals,start,end+1);
+    citations.push(read?{...base,verified:true}:{...base,verified:false,issue:'righe non lette integralmente'});
+  }
+  const unreadDocuments=[];
+  for(const value of list(report.unreadDocuments,'unreadDocuments',200)){
+    let resolved;
+    try{resolved=resolveDocument(bundle,value);}catch(error){warnings.push('Documento non letto ignorato ('+error.message+')');continue;}
+    const {ref,doc}=resolved;
+    if(coverage.some(read=>read.source===ref.source&&read.snapshot===ref.snapshot&&read.document===doc.id)){warnings.push('Letto in parte, non "non letto": '+doc.path);continue;}
+    unreadDocuments.push({source:ref.source,snapshot:ref.snapshot,document:doc.id,path:doc.path,reason:typeof value.reason==='string'&&value.reason.trim()?value.reason.trim().slice(0,16000):'motivo non indicato'});
+  }
+  for(const doc of contract.evidenceScope?.initialDocuments||[])
+    if(!coverage.some(read=>key(read)===key(doc))&&!unreadDocuments.some(unread=>key(unread)===key(doc))){
+      unreadDocuments.push({source:doc.source,snapshot:doc.snapshot,document:doc.document,path:doc.path,reason:'non letto e non dichiarato dal figlio'});
+      warnings.push('Documento iniziale non letto e non dichiarato: '+doc.path);
+    }
+  return {summary,citations,unreadDocuments,uncertainties,scopeExpansionRequests,warnings,submittedAt:new Date().toISOString(),readCalls:state.reads.length};
 }
 export function evidenceReadingTool(directory,contract){
   return {name:'report_evidence_reading',label:'Consegna analisi e copertura delle evidenze',description:'Prima della consegna riporta sintesi, citazioni, documenti iniziali non letti e motivi, dubbi e richieste di ampliamento. La copertura e calcolata dalle letture effettive; full/section/passage restano una tua scelta nel perimetro operativo.',
