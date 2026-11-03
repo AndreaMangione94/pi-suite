@@ -22,6 +22,14 @@ MAX_FILES=1000
 TEXT={'.md','.txt','.rst','.csv','.json','.yaml','.yml','.xml','.html','.htm','.py','.js','.jsx','.ts','.tsx','.mjs','.cjs','.cs','.java','.sql','.ps1','.sh','.toml','.ini','.cfg','.properties','.tf','.bicep','.css','.vue','.go','.rs'}
 SKIP={'.git','.venv','node_modules','__pycache__','bin','obj','dist','build'}
 PRIVATE_CONFIG={'credentials.dpapi.json','settings.pre-byok.json','auth.json'}
+# Stesse regole dei subagenti (delegation-core.mjs): i file con possibili credenziali non entrano negli snapshot.
+SENSITIVE=json.loads((Path(__file__).resolve().with_name('sensitive-files.json')).read_text(encoding='utf-8'))
+SENSITIVE_NAME=re.compile(SENSITIVE['names'],re.I);PUBLIC_EXAMPLE=re.compile(SENSITIVE['publicExamples'],re.I)
+SENSITIVE_DIRS={d.lower() for d in SENSITIVE['directories']}
+
+def sensitive_path(name):
+    parts=str(name).replace('\\','/').split('/');base=parts[-1]
+    return any(p.lower() in SENSITIVE_DIRS for p in parts[:-1]) or bool(SENSITIVE_NAME.search(base)) and not PUBLIC_EXAMPLE.search(base)
 
 def stamp(): return datetime.now(timezone.utc).isoformat()
 def long_path(path):
@@ -183,6 +191,8 @@ class Sources:
         for index,(name,raw,origin) in enumerate(iterator):
             if Path(name).name.lower() in PRIVATE_CONFIG:
                 excluded.append({'path':name,'reason':'archivio credenziali escluso'});continue
+            if sensitive_path(name):
+                excluded.append({'path':name,'reason':'possibili credenziali: file escluso'});continue
             if index>=MAX_FILES:raise ValueError('Fonte oltre 1000 file; restringi la cartella o il repository')
             if raw is None:excluded.append({'path':name,'reason':origin['reason']});continue
             total+=len(raw)

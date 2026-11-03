@@ -71,7 +71,9 @@ Quando cambi destinazione o tipo di una connessione con una chiave già associat
 
 I protocolli disponibili sono `openai-completions`, `openai-responses`, `anthropic-messages` e `google-generative-ai`. HTTPS e obbligatorio per gli endpoint pubblici; HTTP e consentito soltanto sul loopback e sugli IP privati espliciti descritti sopra. Le richieste di inferenza rifiutano i redirect: configura la destinazione finale del servizio. OAuth/Entra ID, discovery, URL completi con routing Azure specifico, header multipli e opzioni avanzate non fanno parte di questo formato iniziale. Ulteriori connessioni dei provider nativi sono compilate tramite i metadati del catalogo Pi soltanto per i quattro protocolli supportati.
 
-Le variabili necessarie vengono fornite al processo della sessione. Non costituiscono isolamento dai programmi avviati con gli stessi privilegi: codice fidato nel processo può leggerle. Non eseguire estensioni non fidate con credenziali attive.
+Le chiavi **secret** non vengono messe nell’ambiente della sessione, che ereditano anche i comandi shell avviati dal modello. La variabile `PI_SUITE_KEY_<ID>` contiene soltanto il segnaposto `pi-suite-credential:PI_SUITE_KEY_<ID>`. `byok-network.mjs` lo sostituisce con la chiave, decifrata una volta per processo da `suite_credentials.py`, solo nelle richieste verso le origini della connessione ricavate dal catalogo Pi (`PI_SUITE_CREDENTIAL_ORIGINS`). Verso qualunque altra origine la richiesta viene rifiutata. Se il catalogo non indica l’endpoint (per esempio Azure nativo senza `baseUrl`), la chiave resta nell’ambiente come in precedenza e l’avvio della chat lo segnala: indica un `baseUrl` per proteggerla. Le connessioni **env** usano invece il valore della variabile indicata.
+
+Non costituisce isolamento dai programmi avviati con gli stessi privilegi: codice eseguito con il tuo account può decifrare DPAPI o leggere la memoria del processo. Lo scopo è evitare che una chiave finisca in un dump dell’ambiente, nei log o nella conversazione. Non eseguire estensioni non fidate con credenziali attive.
 
 ## Dati, migrazione e sessioni
 

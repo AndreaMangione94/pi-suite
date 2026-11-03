@@ -1,6 +1,8 @@
 """Versioned, data-only BYOK configuration. Credentials never belong to exports."""
 from __future__ import annotations
+import base64
 import copy
+import ctypes
 import hashlib
 import ipaddress
 import json
@@ -12,8 +14,41 @@ from pathlib import Path
 
 APIS=('openai-completions','openai-responses','anthropic-messages','google-generative-ai')
 EFFORTS=('off','minimal','low','medium','high','xhigh')
+# Valore non segreto messo nell'ambiente di Pi al posto della chiave: byok-network.mjs lo sostituisce solo verso l'origine della connessione.
+CREDENTIAL_PREFIX='pi-suite-credential:'
 PRIVATE_NETWORKS=tuple(ipaddress.ip_network(network) for network in ('10.0.0.0/8','172.16.0.0/12','192.168.0.0/16','fc00::/7'))
 ROOT=Path(__file__).resolve().parent
+
+def protect(text, decrypt=False):
+    """Windows DPAPI, current user; credentials are never serialized as plaintext."""
+    if os.name != 'nt':
+        raise ValueError('Il salvataggio chiavi richiede Windows; usare variabili ambiente su altri sistemi.')
+    from ctypes import wintypes
+    class Blob(ctypes.Structure):
+        _fields_=[('cbData',wintypes.DWORD),('pbData',ctypes.POINTER(ctypes.c_ubyte))]
+    raw=base64.b64decode(text) if decrypt else text.encode('utf-8')
+    buf=(ctypes.c_ubyte*len(raw)).from_buffer_copy(raw)
+    source=Blob(len(raw),buf); output=Blob()
+    library=ctypes.WinDLL('crypt32',use_last_error=True)
+    fn=library.CryptUnprotectData if decrypt else library.CryptProtectData
+    fn.argtypes=[ctypes.POINTER(Blob),ctypes.c_void_p,ctypes.c_void_p,ctypes.c_void_p,ctypes.c_void_p,wintypes.DWORD,ctypes.POINTER(Blob)]
+    fn.restype=wintypes.BOOL
+    if not fn(ctypes.byref(source),None,None,None,None,1,ctypes.byref(output)):
+        raise ctypes.WinError(ctypes.get_last_error())
+    try: result=ctypes.string_at(output.pbData,output.cbData)
+    finally:
+        free=ctypes.WinDLL('kernel32').LocalFree
+        free.argtypes=[ctypes.c_void_p]; free.restype=ctypes.c_void_p
+        free(output.pbData)
+    return result.decode('utf-8') if decrypt else base64.b64encode(result).decode('ascii')
+
+def url_origin(value):
+    """Origine come la calcola URL.origin in Node: schema, host e porta solo se non predefinita."""
+    u=urllib.parse.urlsplit(value);scheme=u.scheme.lower();host=(u.hostname or '').lower()
+    if not scheme or not host:raise ValueError('URL senza origine: '+value)
+    if ':' in host:host='['+host+']'
+    port=u.port;default={'http':80,'https':443}.get(scheme)
+    return scheme+'://'+host+('' if port in (None,default) else ':'+str(port))
 
 def atomic(path,value):
     path=Path(path);path.parent.mkdir(parents=True,exist_ok=True)

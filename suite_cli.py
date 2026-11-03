@@ -17,9 +17,15 @@ def main():
     management=bool(args and args[0] in ('install','remove','uninstall','update','list','config','auth','mcp'))
     if not management:app.validate_profiles()
     env=app.secret_environment()
+    for notice in app.credential_notices:print('Pi Suite: '+notice,file=sys.stderr)
     import json
     context_path=env.get('PI_SUITE_CONTEXT')
-    if not context_path and (Path.cwd()/'CONTESTO.json').is_file():context_path=str(Path.cwd()/'CONTESTO.json');env['PI_SUITE_CONTEXT']=context_path
+    local_context=Path.cwd()/'CONTESTO.json'
+    if not context_path and local_context.is_file():
+        import suite_workspace
+        # Un CONTESTO.json fuori dall'area dati (per esempio in un repository clonato) potrebbe indicare percorsi arbitrari.
+        if suite_workspace.suite_context_file(home,local_context):context_path=str(local_context);env['PI_SUITE_CONTEXT']=context_path
+        else:print('Pi Suite: CONTESTO.json ignorato perché non è stato creato dalla suite in questa area dati.',file=sys.stderr)
     context=json.loads(Path(context_path).read_text(encoding='utf-8')) if context_path else {'graphs':[],'documentation':[]}
     if not context_path and not env.get('PI_SUITE_CLEAN_WORKSPACE'):
         import suite_workspace

@@ -10,6 +10,16 @@ def load(path):
     return json.loads(Path(path).read_text(encoding='utf-8-sig'))
 
 
+def suite_context_file(home, path):
+    """Un CONTESTO.json trovato su disco vale solo se la suite lo ha scritto nei dossier o nelle sessioni dell'area dati."""
+    try:
+        real = Path(path).resolve(strict=True)
+        base = Path(home).resolve()
+    except OSError:
+        return False
+    return real.is_file() and any(real.is_relative_to(base/folder) for folder in ('documentation', 'sessions'))
+
+
 def project_record(app, pid):
     project = next((p for p in app.settings['projects'] if p['id'] == pid), None)
     if project is None:

@@ -33,7 +33,7 @@ Alla fine di una richiesta, dopo l’integrazione delle modifiche da parte dell�
 
 Il comando avvia un nuovo dossier nella chat corrente. Riusa le fonti del dossier attivo oppure il progetto e le fonti scelte nel pannello. Non richiede un grafo preesistente. Anche `prepare_documentation` usa il progetto selezionato. La generazione richiede un modello disponibile e può comportare costi API; le fonti lette vengono inviate ai provider configurati.
 
-I dossier conservano progetto e nome in `PROGETTO.json`, corpus in `FONTI.json` e artefatti selezionati in `CONTESTO.json`. `FINALIZZATO.json` identifica il Markdown che ha completato anche la generazione del grafo. I documenti rimangono in `data/documentation/<id>/`; la consultazione è limitata a file di 5 MB.
+I dossier conservano progetto e nome in `PROGETTO.json`, corpus in `FONTI.json` e artefatti selezionati in `CONTESTO.json`. `FINALIZZATO.json` identifica il Markdown che ha completato anche la generazione del grafo. I documenti rimangono in `data/documentation/<id>/`; la consultazione è limitata a file di 5 MB. Un `CONTESTO.json` vale solo se si trova nei dossier o nelle sessioni dell’area dati: uno presente in un’altra cartella, per esempio in un repository clonato, viene ignorato perché potrebbe indicare percorsi arbitrari.
 
 ## Compatibilità dei dati salvati
 

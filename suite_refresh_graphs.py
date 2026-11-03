@@ -31,7 +31,7 @@ def project_source_id(app, root):
     return next((s['id'] for s in app.sources.connections() if s.get('kind')=='sharepoint-local' and s.get('path') and Path(s['path']).resolve()==Path(root).resolve()),None)
 
 
-def refresh(app, folder, context_path=None, baseline=False):
+def refresh(app, folder, context_path=None, baseline=False, update_context=True):
     pid=app.project_for_workspace(folder)
     if not pid:return []
     project=workspace.project_record(app,pid);root=Path(project['path'])
@@ -81,7 +81,7 @@ def refresh(app, folder, context_path=None, baseline=False):
             save_json(app.home/'graphs'/pid/'saved.json',[item if g['id']==item['id'] else g for g in workspace.saved_graphs(app,pid)])
             updated.append(item['id'])
     previous['projectLight']=signature;save_json(state_path,previous)
-    if context_path and Path(context_path).exists():
+    if update_context and context_path and Path(context_path).exists():
         old=read_json(context_path);fresh=workspace.chat_context(app,pid)
         # Keep the chat's explicit selection; newly generated documentazione tecnico funzionale graphs are added automatically.
         ids={g['id'] for g in old.get('graphs',[])}|{g['id'] for g in fresh['graphs'] if g.get('workspace') and Path(g['workspace']).resolve()==Path(folder).resolve()}
@@ -100,5 +100,8 @@ def refresh(app, folder, context_path=None, baseline=False):
 if __name__=='__main__':
     parser=argparse.ArgumentParser();parser.add_argument('--home',required=True);parser.add_argument('--workspace',required=True);parser.add_argument('--baseline',action='store_true')
     args=parser.parse_args()
-    try:refresh(Suite(args.home),args.workspace,os.environ.get('PI_SUITE_CONTEXT') or str(Path(args.workspace)/'CONTESTO.json'),args.baseline)
+    context=os.environ.get('PI_SUITE_CONTEXT') or str(Path(args.workspace)/'CONTESTO.json')
+    # Il CONTESTO.json della cartella di lavoro si aggiorna solo se è un file della suite.
+    trusted=bool(os.environ.get('PI_SUITE_CONTEXT')) or workspace.suite_context_file(args.home,context)
+    try:refresh(Suite(args.home),args.workspace,context,args.baseline,update_context=trusted)
     except Exception as error:print(str(error),file=sys.stderr);sys.exit(1)

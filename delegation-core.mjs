@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import {Worker} from 'node:worker_threads';
 import {sourceBundle,connectedTools} from './connected-sources.mjs';
 import {knowledgeTools} from './evidence-tools.mjs';
 import {chatContext,contextTools,externalSourcesInstructions} from './chat-context.mjs';
@@ -32,10 +33,20 @@ export function readText(file,maxBytes=200000) {
   if(bytes.includes(0)) throw Error('File binario non supportato');
   return new TextDecoder('utf-8',{fatal:true}).decode(bytes);
 }
+// File che possono contenere credenziali: regole condivise con suite_sources.py in sensitive-files.json.
+const SENSITIVE=JSON.parse(fs.readFileSync(new URL('./sensitive-files.json',import.meta.url),'utf8'));
+const sensitiveName=new RegExp(SENSITIVE.names,'i'),publicExample=new RegExp(SENSITIVE.publicExamples,'i'),sensitiveDirs=new Set(SENSITIVE.directories.map(d=>d.toLowerCase()));
+export function isSensitivePath(relative){
+  const parts=String(relative).split('/'),name=parts.at(-1);
+  return parts.slice(0,-1).some(p=>sensitiveDirs.has(p.toLowerCase()))||sensitiveName.test(name)&&!publicExample.test(name);
+}
+const sensitiveError=value=>Error('File escluso perché può contenere credenziali: '+value+'. Se serve, chiedi al genitore un estratto senza segreti.');
 // --- Strumenti di lettura e ricerca per i subagenti ---
 const READ_MAX_CHARS=40000,READ_DEFAULT_LINES=300,READ_MAX_LINES=1000,LARGE_FILE=2000000;
 export function readSourceRange(project,args){
-  const text=readText(safePath(project,args.path),LARGE_FILE).replace(/\r\n/g,'\n'),all=text.split('\n');
+  const file=safePath(project,args.path);
+  if(isSensitivePath(args.path))throw sensitiveError(args.path);
+  const text=readText(file,LARGE_FILE).replace(/\r\n/g,'\n'),all=text.split('\n');
   const ranged=args.startLine!==undefined||args.lines!==undefined||args.startColumn!==undefined;
   if(!ranged&&text.length<=READ_MAX_CHARS)return '['+args.path+'] righe 1-'+all.length+' di '+all.length+' · file completo\n'+text;
   const start=Math.max(1,args.startLine||1);
@@ -74,15 +85,16 @@ export function searchProject(project,args){
   catch(error){throw Error('Espressione regolare non valida: '+error.message+'. Usa literal=true per cercare il testo esatto.');}
   const glob=args.glob?globRegExp(args.glob):null,basenameOnly=!!args.glob&&!args.glob.includes('/');
   const root=fs.realpathSync(project),base=args.directory?safePath(root,args.directory):root;
-  const results=[];let files=0,skipped=0,stop=false,truncated=false;
+  const results=[];let files=0,skipped=0,sensitive=0,stop=false,truncated=false;
   const visit=dir=>{
     let entries;try{entries=fs.readdirSync(dir,{withFileTypes:true});}catch{return;}
     for(const entry of entries.sort((a,b)=>a.name.localeCompare(b.name))){
       if(stop)return;
       if(entry.name.startsWith('.')||entry.isSymbolicLink())continue;
       const full=path.join(dir,entry.name),rel=path.relative(root,full).split(path.sep).join('/');
-      if(entry.isDirectory()){if(!SEARCH_SKIP.has(entry.name))visit(full);continue;}
+      if(entry.isDirectory()){if(!SEARCH_SKIP.has(entry.name)&&!sensitiveDirs.has(entry.name.toLowerCase()))visit(full);continue;}
       if(!entry.isFile()||glob&&!glob.test(basenameOnly?entry.name:rel))continue;
+      if(isSensitivePath(rel)){sensitive++;continue;}
       if(++files>20000){truncated=stop=true;return;}
       let bytes;try{if(fs.statSync(full).size>1000000){skipped++;continue;}bytes=fs.readFileSync(full);}catch{continue;}
       if(bytes.subarray(0,8000).includes(0))continue;
@@ -96,8 +108,23 @@ export function searchProject(project,args){
     }
   };
   visit(base);
-  if(!results.length)return 'Nessuna corrispondenza per '+JSON.stringify(args.pattern)+(skipped?' ('+skipped+' file oltre 1 MB esclusi)':'')+'. Prova un pattern più ampio, literal=true o un altro glob.';
-  return results.length+' corrispondenze'+(truncated?' (elenco troncato: restringi pattern, glob o directory)':'')+(skipped?' · '+skipped+' file oltre 1 MB esclusi':'')+'\n'+results.join('\n');
+  const excluded=(skipped?' · '+skipped+' file oltre 1 MB esclusi':'')+(sensitive?' · '+sensitive+' file con possibili credenziali esclusi':'');
+  if(!results.length)return 'Nessuna corrispondenza per '+JSON.stringify(args.pattern)+excluded+'. Prova un pattern più ampio, literal=true o un altro glob.';
+  return results.length+' corrispondenze'+(truncated?' (elenco troncato: restringi pattern, glob o directory)':'')+excluded+'\n'+results.join('\n');
+}
+// Il pattern arriva dal modello: la ricerca gira in un worker interrotto alla scadenza, così una regex catastrofica non blocca il figlio.
+const SEARCH_TIMEOUT_MS=20000;
+export function searchProjectGuarded(project,args,timeoutMs=SEARCH_TIMEOUT_MS){
+  return new Promise((resolve,reject)=>{
+    let settled=false;
+    const worker=new Worker("const {parentPort,workerData}=require('node:worker_threads');import(workerData.module).then(m=>parentPort.postMessage({value:m.searchProject(workerData.project,workerData.args)})).catch(e=>parentPort.postMessage({error:e.message}));",
+      {eval:true,workerData:{module:import.meta.url,project,args}});
+    const finish=(error,value)=>{if(settled)return;settled=true;clearTimeout(timer);void worker.terminate();error?reject(error):resolve(value);};
+    const timer=setTimeout(()=>finish(Error('Ricerca interrotta dopo '+Math.round(timeoutMs/1000)+' s: pattern troppo costoso. Semplificalo, usa literal=true oppure restringi glob e directory.')),timeoutMs);
+    worker.once('message',m=>finish(m.error?Error(m.error):null,m.value));
+    worker.once('error',finish);
+    worker.once('exit',()=>finish(Error('Ricerca terminata senza risultato')));
+  });
 }
 export function applyTextEdits(content,edits){
   if(!Array.isArray(edits)||!edits.length||edits.length>50)throw Error('Specifica da 1 a 50 modifiche');
@@ -223,7 +250,7 @@ export function scopedTools(directory) {
   });
   return [...evidenceTools,...contextTools(contract.context),evidenceReadingTool(directory,contract),
     {name:'read_source',label:'Leggi il progetto',description:'Legge un file di testo del progetto (fino a 2 MB). File piccoli: interi. File grandi: 300 righe per volta; continua con startLine indicato nell\'intestazione.',parameters:{type:'object',properties:{path:{type:'string'},startLine:{type:'integer',minimum:1},startColumn:{type:'integer',minimum:0},lines:{type:'integer',minimum:1,maximum:1000}},required:['path'],additionalProperties:false},execute:async(_id,args)=>response(readSourceRange(project,args))},
-    {name:'search_project',label:'Cerca nel progetto',description:'Cerca testo o regex in tutti i file del progetto. Restituisce percorso:riga: estratto. Usalo PRIMA di aprire file. glob filtra i file (es. *.ts o src/**/*.py).',parameters:{type:'object',properties:{pattern:{type:'string'},glob:{type:'string'},directory:{type:'string'},literal:{type:'boolean'},caseSensitive:{type:'boolean'},maxResults:{type:'integer',minimum:1,maximum:200},perFile:{type:'integer',minimum:1,maximum:50}},required:['pattern'],additionalProperties:false},execute:async(_id,args)=>response(searchProject(project,args))},
+    {name:'search_project',label:'Cerca nel progetto',description:'Cerca testo o regex in tutti i file del progetto. Restituisce percorso:riga: estratto. Usalo PRIMA di aprire file. glob filtra i file (es. *.ts o src/**/*.py).',parameters:{type:'object',properties:{pattern:{type:'string'},glob:{type:'string'},directory:{type:'string'},literal:{type:'boolean'},caseSensitive:{type:'boolean'},maxResults:{type:'integer',minimum:1,maximum:200},perFile:{type:'integer',minimum:1,maximum:50}},required:['pattern'],additionalProperties:false},execute:async(_id,args)=>response(await searchProjectGuarded(project,args))},
     {name:'list_sources',label:'Esplora il progetto',description:'Elenca una directory del progetto (massimo 500 elementi). directory vuota indica la radice. Puoi esplorare oltre le fonti iniziali dell’incarico.',parameters:{type:'object',properties:{directory:{type:'string'}},additionalProperties:false},execute:async(_id,args)=>{
       const folder=args.directory?safePath(project,args.directory):project;
       const entries=fs.readdirSync(folder,{withFileTypes:true}).filter(e=>e.name!=='.git');
@@ -335,6 +362,7 @@ export async function resolveRefs(project,refs=[],bundle=[]){
     const wanted=ref.end===undefined?REF_MAX_LINES:Math.min(REF_MAX_LINES,ref.end-ref.start+1);
     let text,label;
     if(ref.kind==='file'){
+      if(isSensitivePath(ref.path))throw sensitiveError(raw);
       const all=readText(safePath(project,ref.path),LARGE_FILE).replace(/\r\n/g,'\n').split('\n');
       if(ref.start>all.length)throw Error('Riferimento oltre la fine del file: '+raw);
       const end=Math.min(all.length,ref.start+wanted-1);

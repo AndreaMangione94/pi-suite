@@ -1,8 +1,6 @@
 """Pi Suite: authenticated loopback control panel and Pi chat launcher."""
 from __future__ import annotations
 import argparse
-import base64
-import ctypes
 import hmac
 import http.server
 import json
@@ -55,28 +53,7 @@ def checked_relative(value):
         raise ValueError('Percorso fuori perimetro: ' + value)
     return path
 
-def protect(text, decrypt=False):
-    """Windows DPAPI, current user; credentials are never serialized as plaintext."""
-    if os.name != 'nt':
-        raise ValueError('Il salvataggio chiavi richiede Windows; usare variabili ambiente su altri sistemi.')
-    from ctypes import wintypes
-    class Blob(ctypes.Structure):
-        _fields_=[('cbData',wintypes.DWORD),('pbData',ctypes.POINTER(ctypes.c_ubyte))]
-    raw=base64.b64decode(text) if decrypt else text.encode('utf-8')
-    buf=(ctypes.c_ubyte*len(raw)).from_buffer_copy(raw)
-    source=Blob(len(raw),buf); output=Blob()
-    library=ctypes.WinDLL('crypt32',use_last_error=True)
-    fn=library.CryptUnprotectData if decrypt else library.CryptProtectData
-    fn.argtypes=[ctypes.POINTER(Blob),ctypes.c_void_p,ctypes.c_void_p,ctypes.c_void_p,ctypes.c_void_p,wintypes.DWORD,ctypes.POINTER(Blob)]
-    fn.restype=wintypes.BOOL
-    if not fn(ctypes.byref(source),None,None,None,None,1,ctypes.byref(output)):
-        raise ctypes.WinError(ctypes.get_last_error())
-    try: result=ctypes.string_at(output.pbData,output.cbData)
-    finally:
-        free=ctypes.WinDLL('kernel32').LocalFree
-        free.argtypes=[ctypes.c_void_p]; free.restype=ctypes.c_void_p
-        free(output.pbData)
-    return result.decode('utf-8') if decrypt else base64.b64encode(result).decode('ascii')
+protect=byok.protect
 
 def key_env(provider):
     return 'PI_SUITE_KEY_'+re.sub('[^A-Z0-9]','_',provider.upper())
@@ -135,7 +112,7 @@ class Suite:
         self.byok=byok.Store(self.home,protect)
         self.settings.update(self.byok.load_or_migrate(self.settings))
         save_json(self.settings_path,self.settings)
-        self.builtin_catalog=None
+        self.builtin_catalog=None;self.credential_notices=[]
         if previous.exists():
             previous_job=read_json(previous)
             if previous_job.get('operation') in OPERATIONS: self.job=previous_job
@@ -184,13 +161,29 @@ class Suite:
         for name in list(env):
             if name.startswith('PI_SUITE_KEY_') or name.endswith(('_API_KEY','_API_TOKEN')):
                 env.pop(name,None)
+        origins={};self.credential_notices=[]
         for p in current['providers']:
             if used and p['id'] not in used:continue
-            if self.byok.has_key(p) or p['auth']['type']=='none':env[key_env(p['id'])]=self.byok.secret(p)
+            allowed=self.credential_origins(p['id']) if p['auth']['type']=='secret' and self.byok.has_key(p) else []
+            if allowed:
+                # L'ambiente arriva anche ai comandi shell del modello: Pi riceve un segnaposto e
+                # byok-network.mjs inserisce la chiave solo nelle richieste verso l'origine della connessione.
+                env[key_env(p['id'])]=byok.CREDENTIAL_PREFIX+key_env(p['id']);origins[key_env(p['id'])]=allowed
+            elif self.byok.has_key(p) or p['auth']['type']=='none':
+                if p['auth']['type']=='secret':self.credential_notices.append('Connessione '+p['id']+': endpoint non determinabile dal catalogo, la chiave resta nell’ambiente della chat. Indica un baseUrl per proteggerla.')
+                env[key_env(p['id'])]=self.byok.secret(p)
             elif used:raise ValueError('Credenziale assente per la connessione '+p['id'])
-        env.update(PI_OFFLINE='1',PI_TELEMETRY='0')
+        python=Path(sys.executable).with_name('python.exe') if os.name=='nt' else Path(sys.executable)
+        env.update(PI_OFFLINE='1',PI_TELEMETRY='0',PI_SUITE_HOME=str(self.home),PI_SUITE_CREDENTIAL_ORIGINS=json.dumps(origins))
+        env.setdefault('PI_SUITE_PYTHON',str(python))
         env['NODE_OPTIONS']=(env.get('NODE_OPTIONS','')+' --import='+(ROOT/'byok-network.mjs').as_uri()).strip()
         return env
+
+    def credential_origins(self,provider):
+        # Origini ricavate dal catalogo Pi, che conosce anche gli endpoint dei provider nativi.
+        try:catalog=self.models()
+        except (ValueError,OSError,subprocess.SubprocessError):return []
+        return sorted({byok.url_origin(m['baseUrl']) for m in catalog if m['provider']==provider and m.get('baseUrl')})
 
     def redact(self,text):
         for source in self.sources.connections():

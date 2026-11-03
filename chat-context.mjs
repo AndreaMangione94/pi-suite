@@ -7,8 +7,21 @@ Il progetto selezionato è l'ambito delle modifiche richieste al progetto. Le fo
 Usa queste fonti per analisi, risposte, generazione di output richiesti dall'utente e come supporto alle modifiche del progetto. Una richiesta di correggere, adattare o aggiornare un documento esterno va soddisfatta creando una nuova copia rielaborata, mantenendo intatto l'originale. Salva i nuovi output nella cartella del progetto o nel dossier di output attivo; usa una destinazione esterna soltanto se indicata dall'utente e distinta dalle fonti originali. Senza progetto, usa la cartella della chat o il dossier di output attivo. Non trasformare la cartella di una fonte esterna nella cartella di lavoro o di consegna.
 Un dossier aperto appositamente per produrre l'output è una destinazione di lavoro; gli altri dossier selezionati come riferimenti restano fonti in sola lettura. Gli aggiornamenti gestiti dalla suite a cache, indici e grafi derivati non autorizzano modifiche agli originali o agli artefatti esterni di riferimento. Trasmetti questa regola e la destinazione dell'output in ogni incarico ai subagenti; verifica le proposte prima di integrarle e distingui sempre fonte originale, nuova copia e file del progetto modificati.`;
 
+// Il contesto indicato dal launcher è affidabile; un CONTESTO.json trovato nella cartella vale solo nei dossier e nelle sessioni dell'area dati.
+export function suiteContextFile(file,home=process.env.PI_SUITE_HOME){
+  if(!home)return false;
+  try{
+    const real=fs.realpathSync(file),base=fs.realpathSync(home);
+    if(!fs.statSync(real).isFile())return false;
+    return ['documentation','sessions'].some(folder=>{
+      const relative=path.relative(path.join(base,folder),real);
+      return relative&&!relative.startsWith('..')&&!path.isAbsolute(relative);
+    });
+  }catch{return false;}
+}
 export function chatContext(project) {
   const file=process.env.PI_SUITE_CONTEXT||path.join(project,'CONTESTO.json');
+  if(!process.env.PI_SUITE_CONTEXT&&!suiteContextFile(file))return null;
   return fs.existsSync(file)?upgradeDocumentationContext(JSON.parse(fs.readFileSync(file,'utf8'))):null;
 }
 

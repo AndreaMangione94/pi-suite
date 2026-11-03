@@ -11,7 +11,7 @@ const runtime = await ModelRuntime.create({authPath:path.join(dir,'auth.json'), 
 if(runtime.getError())throw Error('Configurazione modelli Pi non valida');
 if(job.validate){console.log(JSON.stringify({valid:true}));process.exit(0);}
 if (job.list) {
-  console.log(JSON.stringify(runtime.getModels().map(m=>({provider:m.provider,model:m.id,name:m.name,reasoning:m.reasoning,input:m.input,api:m.api,contextWindow:m.contextWindow,maxTokens:m.maxTokens,
+  console.log(JSON.stringify(runtime.getModels().map(m=>({provider:m.provider,model:m.id,name:m.name,reasoning:m.reasoning,input:m.input,api:m.api,baseUrl:m.baseUrl,contextWindow:m.contextWindow,maxTokens:m.maxTokens,
     ...(job.builtin?{definition:Object.fromEntries(['id','name','api','baseUrl','reasoning','input','contextWindow','maxTokens','cost','compat','thinkingLevelMap'].filter(k=>m[k]!==undefined).map(k=>[k,m[k]]))}:{})})),null,2));
   process.exit(0);
 }
