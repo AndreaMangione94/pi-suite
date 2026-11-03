@@ -331,7 +331,8 @@ class Suite:
             self.settings={**self.settings,'enabledSkills':[s for s in data.get('enabledSkills',[]) if s in available],
                 'maxCalls':max(4,min(int(data.get('maxCalls',24)),100)),
                 'maxParallelWorkers':max(1,min(int(data.get('maxParallelWorkers',2)),4)),
-                'delegationPolicy':'always' if data.get('delegationPolicy')=='always' else 'auto'}
+                'delegationPolicy':'always' if data.get('delegationPolicy')=='always' else 'auto',
+                'resultMode':'text' if data.get('resultMode')=='text' else 'structured'}
             try:return self._commit_byok(config,providers)
             except Exception:
                 self.settings=previous;raise
@@ -379,7 +380,7 @@ class Suite:
         directory=self.model_dir(self.home/'sessions'/uuid.uuid4().hex if snapshot else self.home/'pi-shell')
         profile=self.settings['roles'].get('worker')
         config={'worker':profile,'byokRevision':self.byok.revision(),'projects':self.settings['projects'],'maxCalls':self.settings['maxCalls'],
-                'maxParallelWorkers':self.settings['maxParallelWorkers'],'delegationPolicy':self.settings.get('delegationPolicy','auto'),
+                'maxParallelWorkers':self.settings['maxParallelWorkers'],'delegationPolicy':self.settings.get('delegationPolicy','auto'),'resultMode':self.settings.get('resultMode','structured'),
                 'skills':[s for s in skills(self.home/'skills') if s['name'] in self.settings['enabledSkills'] and not s.get('parentOnly')]}
         if context is not None:
             config['skills']=[s for s in config['skills'] if s['name'] not in ('graph-explorer','lettura-documentazione-tecnico-funzionale')]

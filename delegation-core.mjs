@@ -353,3 +353,14 @@ export async function resolveRefs(project,refs=[],bundle=[]){
   const markdown=blocks.length?'\n\n## Estratti già letti dal genitore\nTesto inserito dal runtime: usalo direttamente senza rileggerlo. Leggi altre parti solo se servono.\n\n'+blocks.join('\n\n')+(notes.length?'\n\nNote: '+notes.join('; '):''):'';
   return {markdown,reads};
 }
+
+// --- Risultato strutturato del figlio ---
+const short=max=>({type:'string',maxLength:max});
+export const RESULT_SCHEMA={type:'object',additionalProperties:false,required:['status','answer'],properties:{
+  status:{type:'string',enum:['done','partial','blocked']},
+  answer:short(4000),
+  findings:{type:'array',maxItems:20,items:{type:'object',additionalProperties:false,required:['claim'],properties:{claim:short(400),refs:{type:'array',maxItems:6,items:short(200)}}}},
+  proposals:{type:'array',maxItems:50,items:{type:'object',additionalProperties:false,required:['path','summary'],properties:{path:short(240),summary:short(300)}}},
+  gaps:{type:'array',maxItems:15,items:short(300)},
+  questions:{type:'array',maxItems:10,items:short(300)},
+  nextTasks:{type:'array',maxItems:10,items:short(300)}}};

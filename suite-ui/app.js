@@ -191,7 +191,7 @@ async function loadDelegations(){
   for(const batch of batches){
     const card=el('div',undefined,'card');card.append(el('h2','Delega dalla chat · '+batch.state),el('p',batch.plan));
     for(const task of batch.tasks){
-      const detail=el('details');detail.append(el('summary',task.title+' · '+task.state),el('pre',task.assignment),el('p','Artefatti: '+task.directory),el('pre',task.result?.result?.text||task.result?.error||task.error||'In attesa del risultato.'));
+      const detail=el('details');detail.append(el('summary',task.title+' · '+task.state),el('pre',task.assignment),el('p','Artefatti: '+task.directory),el('pre',task.result?.result?.text||(task.result?.result?.value?JSON.stringify(task.result.result.value,null,2):'')||task.result?.error||task.error||'In attesa del risultato.'));
       const reading=task.evidenceReading;
       if(reading&&(reading.scope||reading.readCalls)){
         const coverage=el('div',undefined,'card');coverage.append(el('h3','Copertura delle evidenze'));
@@ -291,9 +291,9 @@ function renderRoles(){
     provider.onchange=()=>{model.value='';updateList();};model.oninput=updateEffort;updateList();
     card.append(intro,field('Connessione',provider),field('Modello',model),field('Ragionamento',effort),btn('Verifica',async()=>{captureRoles();await save();await action('probe',{role});}));if(role==='worker')card.append(btn('Nessun subagente',()=>{delete settings.roles.worker;renderRoles();notice('Modalità solo orchestratore selezionata. Premi Salva squadra e apri una nuova chat.');},'secondary clear-worker'));card.append(list);host.append(card);
   }
-  $('max-calls').value=settings.maxCalls;$('parallel').value=settings.maxParallelWorkers;$('delegation-policy').value=settings.delegationPolicy||'auto';
+  $('max-calls').value=settings.maxCalls;$('parallel').value=settings.maxParallelWorkers;$('delegation-policy').value=settings.delegationPolicy||'auto';$('result-mode').value=settings.resultMode||'structured';
 }
-function captureRoles(){for(const role of Object.keys(roleNames)){const provider=$('provider-'+role).value,model=$('model-'+role).value.trim();if(provider&&model)settings.roles[role]={provider,model,effort:$('effort-'+role).value};else delete settings.roles[role];}settings.maxCalls=Number($('max-calls').value);settings.maxParallelWorkers=Number($('parallel').value);settings.delegationPolicy=$('delegation-policy').value;}
+function captureRoles(){for(const role of Object.keys(roleNames)){const provider=$('provider-'+role).value,model=$('model-'+role).value.trim();if(provider&&model)settings.roles[role]={provider,model,effort:$('effort-'+role).value};else delete settings.roles[role];}settings.maxCalls=Number($('max-calls').value);settings.maxParallelWorkers=Number($('parallel').value);settings.delegationPolicy=$('delegation-policy').value;settings.resultMode=$('result-mode').value;}
 bind('save-roles',async()=>{captureRoles();await save();});bind('copy-role',()=>{captureRoles();if(!settings.roles.orchestrator)throw Error('Scegli prima il modello dell’orchestratore.');const main=settings.roles.orchestrator,effort=settings.roles.worker?.effort||'off';const m=catalog.find(m=>m.provider===main.provider&&m.model===main.model);settings.roles.worker={...main,effort:m?.reasoning&&m.reasoningLevels?.includes(effort)?effort:'off'};renderRoles();});
 function renderSkills(){const host=$('skill-list');host.replaceChildren();for(const s of settings.skills){const card=el('div',undefined,'card skill-item'),check=input('','checkbox');check.checked=settings.enabledSkills.includes(s.name);check.onchange=()=>{settings.enabledSkills=settings.enabledSkills.filter(n=>n!==s.name);if(check.checked)settings.enabledSkills.push(s.name);};const description=el('label',s.name);description.append(el('p',s.description));check.id='skill-'+s.name;description.htmlFor=check.id;card.append(check,description);host.append(card);}}
 bind('save-skills',save);

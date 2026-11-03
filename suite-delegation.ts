@@ -8,7 +8,7 @@ import {registerSubagentCapabilityCeiling} from 'pi-subagents/capability-ceiling
 import {registerRequiredChildExtensions} from 'pi-subagents/required-child-extensions';
 import {SUBAGENT_DELEGATION_REQUEST_EVENT as REQUEST,SUBAGENT_DELEGATION_RESPONSE_EVENT as RESPONSE,SUBAGENT_DELEGATION_UPDATE_EVENT as UPDATE,SUBAGENT_DELEGATION_CANCEL_EVENT as CANCEL} from 'pi-subagents/delegation';
 import {chatContext} from './chat-context.mjs';
-import {prepareBatch,taskDigest,applyProposals,TASK_KINDS} from './delegation-core.mjs';
+import {prepareBatch,taskDigest,applyProposals,TASK_KINDS,RESULT_SCHEMA} from './delegation-core.mjs';
 import {isDocumentationDossier} from './documentation-workflow.mjs';
 import {evidenceScopeSchema,evidenceReadingSummary} from './evidence-reading.mjs';
 import {recordUsage,usageEntry} from './suite-metrics.mjs';
@@ -84,9 +84,9 @@ export default function registerDelegation(pi:ExtensionAPI,root:string,home:stri
         if(signal?.aborted){item.state='cancelled';persist();continue;}
         item.state='running';persist();
         const request={requestId:crypto.randomUUID(),ownerRunId:batch.id,nodeId:String(index+1),agent:'suite-executor',
-          task:'Esegui l’unico INCARICO.md fornito nel contesto di sistema. Restituisci la consegna richiesta e segnala eventuali punti bloccanti.',
+          task:cfg.resultMode==='text'?'Esegui l’unico INCARICO.md fornito nel contesto di sistema. Restituisci la consegna richiesta e segnala eventuali punti bloccanti.':'Esegui l’unico INCARICO.md fornito nel contesto di sistema. Alla fine consegna con structured_output: status (done/partial/blocked), answer breve, findings con refs, proposals (file proposti e sintesi), gaps, questions, nextTasks.',
           context:'fresh',cwd:item.directory,model:cfg.worker.provider+'/'+cfg.worker.model,thinking:cfg.worker.effort,
-          timeoutMs:600000,toolBudget:{soft:40,hard:64},skill:false,artifacts:true,result:{kind:'text'}};
+          timeoutMs:600000,toolBudget:{soft:40,hard:64},skill:false,artifacts:true,result:cfg.resultMode==='text'?{kind:'text'}:{kind:'structured',schema:RESULT_SCHEMA}};
         try {
           const result:any=await new Promise((resolve,reject)=>{
             let timer:any;const finish=(value:any)=>{clearTimeout(timer);offResponse();offUpdate();signal?.removeEventListener('abort',cancel);resolve(value);};
