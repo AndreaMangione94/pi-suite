@@ -39,9 +39,10 @@ def refresh(app, folder, context_path=None, baseline=False):
     if not graphs:return []
     state_path=app.home/'graphs'/pid/('refresh-state-'+(digest(str(context_path).encode())[:16] if context_path else 'default')+'.json')
     previous=read_json(state_path) if state_path.exists() else {}
+    # Uno stato già salvato è la baseline: il refresh dopo il turno rileva anche le modifiche fatte fuori dalla chat.
+    if baseline and previous.get('projectLight'):return []
     signature=light_signature(root);changed=previous.get('projectLight')!=signature;updated=[]
     if baseline:
-        if previous.get('projectLight'):return []
         previous={'projectLight':signature,**{g['id']:digest((Path(g['workspace'])/'DOCUMENTAZIONE-TECNICO-FUNZIONALE.md').read_bytes()) for g in graphs if g.get('workspace') and (Path(g['workspace'])/'DOCUMENTAZIONE-TECNICO-FUNZIONALE.md').is_file()}}
         save_json(state_path,previous);return []
     local=project_source_id(app,root);synced={}
