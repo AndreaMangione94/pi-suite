@@ -8,7 +8,7 @@ import {registerSubagentCapabilityCeiling} from 'pi-subagents/capability-ceiling
 import {registerRequiredChildExtensions} from 'pi-subagents/required-child-extensions';
 import {SUBAGENT_DELEGATION_REQUEST_EVENT as REQUEST,SUBAGENT_DELEGATION_RESPONSE_EVENT as RESPONSE,SUBAGENT_DELEGATION_UPDATE_EVENT as UPDATE,SUBAGENT_DELEGATION_CANCEL_EVENT as CANCEL} from 'pi-subagents/delegation';
 import {chatContext} from './chat-context.mjs';
-import {prepareBatch} from './delegation-core.mjs';
+import {prepareBatch,taskDigest} from './delegation-core.mjs';
 import {evidenceScopeSchema,evidenceReadingSummary} from './evidence-reading.mjs';
 import {recordUsage,usageEntry} from './suite-metrics.mjs';
 
@@ -100,7 +100,8 @@ export default function registerDelegation(pi:ExtensionAPI,root:string,home:stri
       await Promise.all(Array.from({length:Math.min(cfg.maxParallelWorkers,args.tasks.length)},work));
       batch.state=batch.tasks.every((t:any)=>t.state==='completed')?'completed':'needs_attention';persist();
       delegated ||= batch.tasks.some((t:any)=>t.state==='completed');
-      return {content:[{type:'text',text:JSON.stringify({batch:batch.id,state:batch.state,project:batch.project,tasks:batch.tasks.map((t:any)=>({title:t.title,state:t.state,assignment:path.join(t.directory,'INCARICO.md'),result:t.result,error:t.error,proposals:path.join(t.directory,'proposals'),writeFiles:t.writeFiles,evidenceReading:t.evidenceReading})),next:'Verifica risultati, citazioni e copertura effettiva delle letture. Controlla reportMissing, declarationStale, parti non lette e richieste di ampliamento. Integra le proposte corrette ed esegui le verifiche necessarie.'})}],details:{batch:batch.id}};
+      // Al genitore torna solo un digest compatto; i dettagli completi restano in batch.json/result.json.
+      return {content:[{type:'text',text:JSON.stringify({batch:batch.id,state:batch.state,tasks:batch.tasks.map(taskDigest),next:'Verifica i risultati. Applica le proposte approvate con apply_proposal(batch, task); per correzioni delega un incarico mirato con i difetti osservati. Dettagli completi nei file indicati.'})}],details:{batch:batch.id}};
     }
   });
 }

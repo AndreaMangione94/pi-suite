@@ -224,3 +224,23 @@ export function scopedTools(directory) {
       const s=contract.skills.find(s=>s.name===args.name);if(!s)throw Error('Skill non disponibile');return response(s.content);}}
   ];
 }
+
+// --- Digest compatto per il genitore ---
+export function proposedFiles(directory){
+  const found=[];
+  const visit=(dir,prefix)=>{if(!fs.existsSync(dir))return;for(const e of fs.readdirSync(dir,{withFileTypes:true})){if(e.isSymbolicLink())continue;const rel=prefix?prefix+'/'+e.name:e.name;if(e.isDirectory())visit(path.join(dir,e.name),rel);else if(e.isFile())found.push(rel);}};
+  visit(path.join(directory,'proposals'),'');return found.sort();
+}
+const clip=(value,max)=>typeof value==='string'&&value.length>max?value.slice(0,max)+' … [troncato: testo completo in result.json]':value;
+export function taskDigest(task,index){
+  const r=task.result||{},reading=task.evidenceReading,decl=reading?.declaration,structured=r.result?.kind==='structured'?r.result.value:undefined;
+  const digest={task:index+1,title:task.title,state:task.state,answer:structured===undefined?clip(r.result?.text,6000):undefined,result:structured,
+    error:task.error||r.error,proposals:proposedFiles(task.directory),
+    usage:r.usage?{input:r.usage.input,output:r.usage.output,cacheRead:r.usage.cacheRead,cacheWrite:r.usage.cacheWrite,cost:r.usage.cost,toolCalls:r.usage.toolCalls,seconds:r.usage.durationMs===undefined?undefined:Math.round(r.usage.durationMs/1000)}:undefined,
+    files:{assignment:path.join(task.directory,'INCARICO.md'),result:path.join(task.directory,'result.json')}};
+  if(reading&&(reading.readCalls||reading.scope))digest.evidence={documentsRead:reading.readDocumentCount,complete:reading.completeAvailableTextDocuments,partial:reading.partialDocuments,
+    unreadInitial:reading.unreadInitialDocuments.slice(0,10).map(d=>d.path),summary:clip(decl?.summary,1500),citations:decl?.citations?.length||0,
+    unverifiedCitations:decl?.citations?.filter(c=>c.verified===false).length||0,warnings:decl?.warnings?.slice(0,5),uncertainties:decl?.uncertainties?.slice(0,5),
+    scopeExpansionRequests:decl?.scopeExpansionRequests?.slice(0,5),reportMissing:reading.reportMissing||undefined,declarationStale:reading.declarationStale||undefined,file:reading.path};
+  return digest;
+}
