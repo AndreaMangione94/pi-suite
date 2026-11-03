@@ -45,7 +45,7 @@ try {
     $files = @('suite_byok.py','byok-format.mjs','byok-network.mjs','models.schema.json','models.config.example.json','models.config.example.yaml','models.custom.example.json','GUIDA-BYOK.md','LICENSE','THIRD-PARTY-NOTICES.md','suite_evidence.py','suite_evidence_cli.py','evidence-tools.mjs','GUIDA-CONOSCENZA-E-GRAFI.md','adapter.mjs','suite.py','suite_documentation.py','suite_sources.py','suite_graph.py','suite_cli.py','suite-extension.ts','suite-delegation.ts','suite-child.ts','delegation-core.mjs','connected-sources.mjs','GUIDA-FONTI-DOCUMENTAZIONE-TECNICO-FUNZIONALE.md','package.json','package-lock.json','requirements-ast.txt','README-SUITE.md','RESOCONTO-E-PRIMO-AVVIO.md','VERIFICA-SUITE.md','MEMORY.md','Start-Suite.ps1')
     $files += @('suite_workspace.py','suite_benchmarks.py','suite_inspect.py','benchmark-catalog.json','requirements-inspect.txt','Install-Inspect.ps1','GUIDA-BENCHMARK.md')
     $files += @('suite_folder_picker.py','suite_document_graph.py','document-graph-tools.mjs','evidence-reading.mjs')
-    $files += @('chat-context.mjs','suite_refresh_graphs.py','suite_documentation_migration.py','documentation-compat.json','documentation-compat.mjs','documentation-workflow.mjs')
+    $files += @('chat-context.mjs','suite_refresh_graphs.py','suite_documentation_migration.py','documentation-compat.json','documentation-compat.mjs','documentation-workflow.mjs','suite-metrics.mjs')
     foreach ($name in $files) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination (Join-Path $appRoot $name) -Force }
     foreach ($name in @('skills','suite-ui')) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $appRoot -Recurse -Force }
     Push-Location $appRoot
@@ -60,6 +60,7 @@ try {
         Run-Checked 'node.exe' @('--check','adapter.mjs')
         Run-Checked 'node.exe' @('--check','document-graph-tools.mjs')
         Run-Checked 'node.exe' @('--check','evidence-reading.mjs')
+        Run-Checked 'node.exe' @('--check','suite-metrics.mjs')
     } finally { Pop-Location }
     # The user-level command only points at this installation; no existing Pi files are changed.
     $launcher = '@echo off' + "`r`n" + 'setlocal' + "`r`n" + 'set "PI_SUITE_HOME=%~dp0..\data"' + "`r`n" + '"%~dp0..\app\.venv\Scripts\python.exe" "%~dp0..\app\suite_cli.py" %*' + "`r`n" + 'exit /b %errorlevel%' + "`r`n"

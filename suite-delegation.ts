@@ -10,6 +10,7 @@ import {SUBAGENT_DELEGATION_REQUEST_EVENT as REQUEST,SUBAGENT_DELEGATION_RESPONS
 import {chatContext} from './chat-context.mjs';
 import {prepareBatch} from './delegation-core.mjs';
 import {evidenceScopeSchema,evidenceReadingSummary} from './evidence-reading.mjs';
+import {recordUsage,usageEntry} from './suite-metrics.mjs';
 
 export default function registerDelegation(pi:ExtensionAPI,root:string,home:string,contextSources?:(ctx:any)=>any[],workspace?:(ctx:any)=>string) {
   let registrations:any[]=[],ready=false,used=0;
@@ -90,6 +91,7 @@ export default function registerDelegation(pi:ExtensionAPI,root:string,home:stri
             try{pi.events.emit(REQUEST,request);}catch(e){clearTimeout(timer);offResponse();offUpdate();signal?.removeEventListener('abort',cancel);reject(e);}
           });
           item.state=result.status;item.result=result;fs.writeFileSync(path.join(item.directory,'result.json'),JSON.stringify(result,null,2));
+          try{recordUsage(home,ctx.sessionManager.getSessionId(),usageEntry('child',result.model||cfg.worker.provider+'/'+cfg.worker.model,result.usage,{batch:batch.id,task:index+1,state:result.status,turns:result.usage?.turns,durationMs:result.usage?.durationMs}));}catch{}
           const contract=JSON.parse(fs.readFileSync(path.join(item.directory,'contract.json'),'utf8'));
           item.evidenceReading=evidenceReadingSummary(item.directory,contract);
         }catch(e:any){item.state='failed';item.error=e.message;}

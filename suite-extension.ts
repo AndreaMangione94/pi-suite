@@ -11,6 +11,7 @@ import {sourceBundle,connectedTools,isCleanWorkspace} from './connected-sources.
 import {knowledgeTools,invokeEvidence} from './evidence-tools.mjs';
 import {chatContext,contextTools,externalSourcesInstructions} from './chat-context.mjs';
 import {documentationInstructions} from './documentation-workflow.mjs';
+import {recordUsage,usageEntry,summarizeUsage} from './suite-metrics.mjs';
 
 export default function(pi: ExtensionAPI) {
   const root=path.dirname(fileURLToPath(import.meta.url));
@@ -29,6 +30,18 @@ export default function(pi: ExtensionAPI) {
     return bundle;
   };
   registerDelegation(pi,root,home,currentBundle,activeWorkspace);
+  // Consumi dell'orchestratore: una riga per ogni risposta del modello.
+  pi.on('message_end',async(event:any,ctx:any)=>{
+    const message=event.message;
+    if(message?.role!=='assistant')return;
+    try{recordUsage(home,ctx.sessionManager.getSessionId(),usageEntry('parent',message.provider+'/'+message.model,message.usage,{state:message.stopReason}));}catch{}
+  });
+  pi.registerCommand('consumi',{description:'Mostra token e costo di questa chat, separati fra orchestratore e subagenti.',handler:async(_args,ctx)=>{
+    const totals:any=summarizeUsage(home,ctx.sessionManager.getSessionId());
+    const value=(t:any,key:string)=>t.missing?.[key]?(t.missing[key]===t.calls?'n/d':t[key]+' (parziale)'):key==='cost'?t[key].toFixed(4):t[key];
+    const line=(name:string,t:any)=>t?name+': '+t.calls+' registrazioni · input '+value(t,'input')+' · output '+value(t,'output')+' · cache letta '+value(t,'cacheRead')+' · cache scritta '+value(t,'cacheWrite')+' · costo '+value(t,'cost'):name+': nessun dato';
+    ctx.ui.notify(line('Orchestratore',totals.parent)+'\n'+line('Subagenti',totals.child),'info');
+  }});
   const refreshGraphs=async(ctx:any,baseline=false)=>{
     const python=process.env.PI_SUITE_PYTHON||path.join(root,'.venv','Scripts','python.exe');
     await new Promise<void>((resolve,reject)=>{
