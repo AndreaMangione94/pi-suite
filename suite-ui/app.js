@@ -82,7 +82,7 @@ async function startDocumentation(){
   await refreshWorkspaceFiles();
   queueDocumentationReferences();await flushDocumentationReferences();return action(operation,{project:project.id,graphs:[...chosenGraphs],sources:project.workspace?.documentation?.sources||[],name:$('documentation-name').value.trim(),objective,openChat:true});
 }
-const roleNames={orchestrator:['Orchestratore','Definisce piano e criteri, delega ai figli configurati e verifica; senza figli svolge direttamente il lavoro'],worker:['Subagenti','Facoltativi: se selezioni un modello, ricevono sempre il lavoro operativo. Modello e ragionamento indipendenti']};
+const roleNames={orchestrator:['Orchestratore','Definisce piano e criteri, delega ai figli configurati e verifica; senza figli svolge direttamente il lavoro'],worker:['Subagenti','Facoltativi: se selezioni un modello, ricevono il lavoro operativo secondo la politica di delega. Modello e ragionamento indipendenti'],documentation:['Estrazione documentale','Facoltativo: modello per i grafi semantici dei documenti. Se vuoto usa Subagenti, poi Orchestratore. Conviene un modello economico con contesto ampio']};
 function el(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;}
 function notice(text,error=false){for(const host of [$('notice'),...document.querySelectorAll('dialog[open] [data-modal-notice]')]){host.textContent=text;host.classList.toggle('error',error);host.hidden=false;}}
 async function api(path,data){const res=await fetch('/api/'+path,{method:data?'POST':'GET',headers:{'X-Suite-Token':token,...(data?{'Content-Type':'application/json'}:{})},body:data?JSON.stringify(data):undefined});const result=await res.json();if(!res.ok)throw Error(result.error||'Richiesta non riuscita');return result;}
@@ -282,7 +282,7 @@ function renderRoles(){
   const host=$('role-list');host.replaceChildren();
   for(const [role,[name,description]] of Object.entries(roleNames)){
     const card=el('div',undefined,'card role-card');card.dataset.role=role;const intro=el('div');intro.append(el('h3',name),el('p',description));
-    const provider=el('select');provider.id='provider-'+role;options(provider,[['',role==='worker'?'Nessuno · solo orchestratore':'Scegli connessione'],...settings.providers.map(p=>[p.id,p.name||p.id])],settings.roles[role]?.provider||'');
+    const provider=el('select');provider.id='provider-'+role;options(provider,[['',role==='worker'?'Nessuno · solo orchestratore':role==='documentation'?'Predefinito · modello Subagenti':'Scegli connessione'],...settings.providers.map(p=>[p.id,p.name||p.id])],settings.roles[role]?.provider||'');
     const model=input(settings.roles[role]?.model||'');model.id='model-'+role;model.setAttribute('list','models-'+role);model.placeholder='Cerca o seleziona un modello';
     const list=el('datalist');list.id='models-'+role;const effort=el('select');effort.id='effort-'+role;
     let effortIdentity=null;

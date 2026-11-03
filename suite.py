@@ -574,8 +574,10 @@ class Suite:
         return {'project':pid,'graph':identifier,'kind':kind,'stats':graph['stats']}
 
     def document_graph_profile(self):
-        profile=self.settings['roles'].get('orchestrator')
-        if not profile:raise ValueError('Configura il modello Orchestratore per costruire il grafo documentale semantico.')
+        # Estrazione massiva: modello dedicato, poi Subagenti, poi Orchestratore.
+        roles=self.settings['roles']
+        profile=roles.get('documentation') or roles.get('worker') or roles.get('orchestrator')
+        if not profile:raise ValueError('Configura il modello Estrazione documentale, Subagenti o Orchestratore per costruire il grafo documentale semantico.')
         model=next((m for m in self.models() if m['provider']==profile['provider'] and m['model']==profile['model']),None)
         if not model or model.get('toolCalling') is False:raise ValueError('Il grafo documentale richiede un modello disponibile con strumenti.')
         context=int(model.get('contextWindow') or 32000)
@@ -754,6 +756,7 @@ class Suite:
             elif operation=='probe':
                 profile=({'provider':data['provider'],'model':data['model'],'effort':data.get('effort','off'),'transport':'auto','keyEnv':key_env(data['provider'])}
                     if data.get('provider') and data.get('model') else self.settings['roles'].get(data.get('role')))
+                if not profile and data.get('role')=='documentation':profile=self.document_graph_profile()
                 if not profile: raise ValueError('Salva prima il modello per questo ruolo.')
                 if not any(m['provider']==profile['provider'] and m['model']==profile['model'] for m in self.models()):raise ValueError('Modello non disponibile')
                 env=self.secret_environment({**self.settings,'roles':{'probe':profile}})
