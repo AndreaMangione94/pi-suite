@@ -10,7 +10,7 @@ import registerDelegation from './suite-delegation.ts';
 import {sourceBundle,connectedTools,isCleanWorkspace} from './connected-sources.mjs';
 import {knowledgeTools,invokeEvidence} from './evidence-tools.mjs';
 import {chatContext,contextTools,externalSourcesInstructions} from './chat-context.mjs';
-import {documentationInstructions} from './documentation-workflow.mjs';
+import {documentationInstructions,assembleDocumentation} from './documentation-workflow.mjs';
 import {recordUsage,usageEntry,summarizeUsage} from './suite-metrics.mjs';
 
 export default function(pi: ExtensionAPI) {
@@ -156,6 +156,12 @@ export default function(pi: ExtensionAPI) {
       return {content:[{type:'text' as const,text:JSON.stringify(results.length===1?results[0]:{graphs:results})}],details:{}};
     }
   });
+  pi.registerTool({name:'assemble_documentation',label:'Assembla la documentazione',
+    description:'Solo nel dossier: compone DOCUMENTAZIONE-TECNICO-FUNZIONALE.md unendo, nell’ordine del piano, moduli/<ID>.md già applicati. Alza di un livello i titoli dei moduli, aggiunge ancore e trasforma [[ID]] in link. Scrivi tu solo introduzione e sezioni trasversali (intro, closing). Non riscrivere i moduli.',
+    parameters:Type.Object({order:Type.Array(Type.String(),{minItems:1,maxItems:500}),intro:Type.Optional(Type.String()),closing:Type.Optional(Type.Array(Type.String(),{maxItems:20})),title:Type.Optional(Type.String({maxLength:200}))}),
+    async execute(_id,args,_signal,_update,ctx){
+      return {content:[{type:'text' as const,text:JSON.stringify(assembleDocumentation(activeWorkspace(ctx),args))}],details:{}};
+    }});
   pi.registerCommand('suite', {
     description: 'Apri Pi Suite: provider, squadra, task e grafo locale',
     handler: async (_args, ctx) => {
