@@ -172,9 +172,10 @@ export function prepareBatch(home,project,tasks,settings,plan) {
   for(let i=0;i<tasks.length;i++) {
     const task=tasks[i],directory=path.join(root,String(i+1));fs.mkdirSync(path.join(directory,'proposals'),{recursive:true});
     fs.writeFileSync(path.join(directory,'INCARICO.md'),assignments[i]);
-    const contract={version:1,project:context?.project?.path||source,context,documentation:isDocumentationDossier(source),evidenceHome:fs.realpathSync(home),writeFiles:task.writeFiles,graph:graph&&fs.existsSync(graph)?graph:null,skills:settings.skills||[],connectedSources,evidenceScope:evidenceScopes[i]};
+    const contract={version:1,project:context?.project?.path||source,outputProject:source,context,documentation:isDocumentationDossier(source),evidenceHome:fs.realpathSync(home),writeFiles:task.writeFiles,graph:graph&&fs.existsSync(graph)?graph:null,skills:settings.skills||[],connectedSources,evidenceScope:evidenceScopes[i]};
     fs.writeFileSync(path.join(directory,'contract.json'),JSON.stringify(contract,null,2));
     batch.tasks.push({title:task.title,directory,state:'queued',writeFiles:task.writeFiles});
+    batch.tasks.at(-1).baseHashes=Object.fromEntries(task.writeFiles.map(rel=>[rel,fileHash(safePath(source,rel,false))]));
   }
   fs.writeFileSync(path.join(root,'batch.json'),JSON.stringify(batch,null,2));
   return {root,batch};
@@ -207,7 +208,7 @@ export function scopedTools(directory) {
       return response({proposed:args.path,applied:false});}},
     {name:'propose_edit',label:'Proponi modifiche puntuali',description:'Modifica un file assegnato sostituendo blocchi di testo: ogni old deve comparire una sola volta. Parte dalla tua proposta precedente o dal file originale. Preferiscilo a propose_file per file esistenti.',parameters:{type:'object',properties:{path:{type:'string'},edits:{type:'array',minItems:1,maxItems:50,items:{type:'object',properties:{old:{type:'string'},new:{type:'string'}},required:['old','new'],additionalProperties:false}}},required:['path','edits'],additionalProperties:false},execute:async(_id,args)=>{
       if(!allowed.has(args.path)) throw Error('Modifica fuori incarico: '+args.path);
-      const target=safePath(out,args.path,false),original=safePath(project,args.path,false);
+      const target=safePath(out,args.path,false),original=safePath(contract.outputProject||project,args.path,false);
       if(!fs.existsSync(target)&&!fs.existsSync(original))throw Error('Il file non esiste: per crearlo usa propose_file');
       const content=applyTextEdits(readText(fs.existsSync(target)?target:original,LARGE_FILE),args.edits);
       if(Buffer.byteLength(content)>LARGE_FILE)throw Error('Proposta oltre 2 MB');
@@ -243,4 +244,46 @@ export function taskDigest(task,index){
     unverifiedCitations:decl?.citations?.filter(c=>c.verified===false).length||0,warnings:decl?.warnings?.slice(0,5),uncertainties:decl?.uncertainties?.slice(0,5),
     scopeExpansionRequests:decl?.scopeExpansionRequests?.slice(0,5),reportMissing:reading.reportMissing||undefined,declarationStale:reading.declarationStale||undefined,file:reading.path};
   return digest;
+}
+
+// --- Applicazione deterministica delle proposte ---
+const fileHash=file=>fs.existsSync(file)?crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex'):null;
+export function applyProposals(home,args,workspace){
+  if(typeof args.batch!=='string'||!/^[0-9a-f-]{36}$/.test(args.batch))throw Error('batch non valido');
+  if(!Number.isInteger(args.task)||args.task<1||args.task>4)throw Error('Task inesistente nel batch');
+  const batchFile=safePath(home,'delegations/'+args.batch+'/batch.json'),batchRoot=path.dirname(batchFile);
+  const batch=JSON.parse(fs.readFileSync(batchFile,'utf8')),item=batch.tasks[args.task-1];
+  if(!item)throw Error('Task inesistente nel batch');
+  const project=fs.realpathSync(batch.project);
+  const samePath=(a,b)=>process.platform==='win32'?a.toLowerCase()===b.toLowerCase():a===b;
+  if(workspace&&!samePath(project,fs.realpathSync(workspace)))throw Error('Batch di un altro progetto o dossier');
+  const directory=safePath(batchRoot,String(args.task)),proposals=safePath(directory,'proposals'),available=proposedFiles(directory);
+  const files=args.files===undefined?available:args.files;
+  if(!Array.isArray(files)||files.length>50||new Set(files).size!==files.length)throw Error('Elenco file non valido');
+  if(!files.length)throw Error('Il task non ha proposte da applicare');
+  const planned=[];
+  for(const rel of files){
+    if(!item.writeFiles.includes(rel))throw Error('File non assegnato al task: '+rel);
+    if(!available.includes(rel))throw Error('Nessuna proposta per '+rel);
+    let content=readText(safePath(proposals,rel),LARGE_FILE);
+    const target=safePath(project,rel,false),before=fs.existsSync(target)?readText(target,LARGE_FILE):null;
+    if(!Object.hasOwn(item.baseHashes||{},rel))throw Error('Batch senza versione di base: verifica manualmente e crea un nuovo incarico');
+    const expected=Object.hasOwn(item.appliedHashes||{},rel)?item.appliedHashes[rel]:item.baseHashes[rel];
+    if(fileHash(target)!==expected)throw Error('File cambiato dopo la delega o l’applicazione: '+rel+'. Crea una correzione sulla versione corrente.');
+    if(before?.includes('\r\n')&&!content.includes('\r\n'))content=content.replace(/\n/g,'\r\n');
+    planned.push({rel,content,before,expected});
+  }
+  const applied=[];
+  for(const {rel,content,before,expected} of planned){
+    const target=safePath(project,rel,false);
+    if(fileHash(target)!==expected)throw Error('File cambiato durante l’applicazione: '+rel);
+    fs.mkdirSync(path.dirname(target),{recursive:true});
+    const temporary=target+'.'+crypto.randomUUID()+'.tmp';
+    try{fs.writeFileSync(temporary,content,{encoding:'utf8',flag:'wx'});fs.renameSync(temporary,target);}finally{if(fs.existsSync(temporary))fs.unlinkSync(temporary);}
+    applied.push({path:rel,created:before===null,linesBefore:before===null?0:before.split('\n').length,linesAfter:content.split('\n').length});
+    item.applied=[...new Set([...(item.applied||[]),rel])];
+    item.appliedHashes??={};item.appliedHashes[rel]=fileHash(target);
+    fs.writeFileSync(batchFile,JSON.stringify(batch,null,2));
+  }
+  return {batch:batch.id,task:args.task,applied};
 }

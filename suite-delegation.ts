@@ -8,7 +8,7 @@ import {registerSubagentCapabilityCeiling} from 'pi-subagents/capability-ceiling
 import {registerRequiredChildExtensions} from 'pi-subagents/required-child-extensions';
 import {SUBAGENT_DELEGATION_REQUEST_EVENT as REQUEST,SUBAGENT_DELEGATION_RESPONSE_EVENT as RESPONSE,SUBAGENT_DELEGATION_UPDATE_EVENT as UPDATE,SUBAGENT_DELEGATION_CANCEL_EVENT as CANCEL} from 'pi-subagents/delegation';
 import {chatContext} from './chat-context.mjs';
-import {prepareBatch,taskDigest} from './delegation-core.mjs';
+import {prepareBatch,taskDigest,applyProposals} from './delegation-core.mjs';
 import {evidenceScopeSchema,evidenceReadingSummary} from './evidence-reading.mjs';
 import {recordUsage,usageEntry} from './suite-metrics.mjs';
 
@@ -104,4 +104,7 @@ export default function registerDelegation(pi:ExtensionAPI,root:string,home:stri
       return {content:[{type:'text',text:JSON.stringify({batch:batch.id,state:batch.state,tasks:batch.tasks.map(taskDigest),next:'Verifica i risultati. Applica le proposte approvate con apply_proposal(batch, task); per correzioni delega un incarico mirato con i difetti osservati. Dettagli completi nei file indicati.'})}],details:{batch:batch.id}};
     }
   });
+  pi.registerTool({name:'apply_proposal',label:'Applica proposte dei subagenti',description:'Copia nel progetto o nel dossier i file proposti da un task, dopo averli verificati: evita di riscriverne il contenuto. Senza files applica tutte le proposte del task. Restituisce righe prima/dopo per ogni file.',
+    parameters:Type.Object({batch:Type.String(),task:Type.Integer({minimum:1,maximum:4}),files:Type.Optional(Type.Array(Type.String(),{maxItems:50}))}),
+    async execute(_id,args,_signal,_update,ctx){return {content:[{type:'text',text:JSON.stringify(applyProposals(home,args,workspace?workspace(ctx):ctx.cwd))}],details:{}};}});
 }
