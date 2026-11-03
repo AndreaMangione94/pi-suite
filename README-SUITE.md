@@ -2,7 +2,7 @@
 
 Documentazione della distribuzione Windows 0.6.6, aggiornata il 28 ottobre 2026.
 
-Il punto di ingresso è la chat Pi: scrivi al modello orchestratore, che, quando è selezionato un modello Subagenti, affida sempre almeno un incarico a un figlio, controlla il risultato e risponde. Se è selezionato soltanto il modello Orchestratore, svolge direttamente il lavoro senza figli. Anche per una richiesta semplice basta un solo figlio. Ogni subagente riceve un INCARICO.md preciso. La suite integra Pi 1.0.0, pi-subagents 0.79.0, skill e grafo Graphify locale persistente.
+Il punto di ingresso è la chat Pi: scrivi al modello orchestratore, che risponde direttamente alle richieste semplici e, quando è selezionato un modello Subagenti, affida ai figli letture estese, stesure ampie e lavori parallelizzabili, poi controlla e applica i risultati. Se è selezionato soltanto il modello Orchestratore, svolge direttamente il lavoro senza figli. Ogni subagente riceve un INCARICO.md preciso. La suite integra Pi 1.0.0, pi-subagents 0.79.0, skill e grafo Graphify locale persistente.
 
 ## Temi dell’interfaccia
 
@@ -61,21 +61,21 @@ Nella chat Pi usa `/documentazione-tecnico-funzionale [obiettivo]`: riusa le fon
 1. Estrai lo ZIP ed esegui Install.cmd. Servono Internet, Node >=22.19, Python 3.13 e Git. L’installer prepara le dipendenze e il collegamento desktop.
 2. Apri Pi Suite dal collegamento desktop creato dall’installer.
 3. In Connessioni e modelli configura un server locale senza autenticazione oppure un provider cloud con la sua chiave, quindi salva. Puoi anche importare gli esempi JSON/YAML inclusi, sostituendo gli ID dimostrativi.
-4. In Orchestratore e subagenti scegli il modello Orchestratore e, per attivare la delega obbligatoria, anche il modello Subagenti (anche di provider diverso). Puoi usare lo stesso modello. Salva squadra e prova Verifica: la prova usa il provider reale e può avere un costo.
+4. In Orchestratore e subagenti scegli il modello Orchestratore e, per attivare la delega, anche il modello Subagenti (anche di provider diverso). Puoi usare lo stesso modello. Salva squadra e prova Verifica: la prova usa il provider reale e può avere un costo.
 5. In Il tuo workspace premi Apri chat Pi. Il progetto è facoltativo: senza selezionarlo si apre una nuova chat con contesto pulito e le configurazioni salvate; selezionandolo si usano la sua cartella e i suoi riferimenti. Si apre il terminale Pi con il modello principale, se salvato; altrimenti Pi gestisce la scelta del modello. Sono supportate anche cartelle senza Git.
-6. Scrivi il risultato desiderato. Con Subagenti configurati, l’orchestratore delega sempre almeno un incarico tramite delegate_tasks e integra la consegna del figlio. Senza modello Subagenti lavora direttamente.
+6. Scrivi il risultato desiderato. Con Subagenti configurati e politica automatica, l’orchestratore delega con delegate_tasks solo il lavoro esteso e applica le proposte con apply_proposal; con politica «Sempre» delega almeno un incarico per richiesta. Senza modello Subagenti lavora direttamente.
 
 Leggi [Resoconto e primo avvio](RESOCONTO-E-PRIMO-AVVIO.md) per un esempio completo e [Verifiche](VERIFICA-SUITE.md) per il collaudo.
 
 ## Orchestrazione e costo
 
-La selezione del modello Subagenti attiva la delega obbligatoria; lasciare quel profilo senza modello è l’unico modo per usare la chat senza figli. Puoi premere Nessun subagente, poi Salva squadra e aprire una nuova chat. Un errore del provider o il budget esaurito non attivano automaticamente la modalità singola.
+La selezione del modello Subagenti attiva la delega (automatica o sempre, secondo la politica scelta nel pannello Squadra); lasciare quel profilo senza modello è l’unico modo per usare la chat senza figli. Puoi premere Nessun subagente, poi Salva squadra e aprire una nuova chat. Un errore del provider o il budget esaurito non attivano automaticamente la modalità singola.
 
 Con la delega attiva, il modello principale prepara gli incarichi e verifica i risultati; i figli eseguono il lavoro operativo. Scegli un orchestratore più capace e un modello dei subagenti meno costoso, oppure lo stesso modello con ragionamento inferiore, nei livelli supportati. La suite mantiene separate le due impostazioni. Il pulsante Copia modello orchestratore conserva il ragionamento dei figli se compatibile e altrimenti usa off. Non sceglie prezzi, modelli o escalation al posto tuo.
 
 Un compito semplice usa un figlio; più figli servono per attività distinte. L’orchestratore trasmette contesto pertinente, istruzioni, vincoli e criteri verificabili, controlla evidenze e proposte, poi richiede correzioni mirate se necessario. L’obiettivo è ridurre il lavoro del modello forte, evitando che rifaccia integralmente quello dei figli. Qualità e risparmio vanno misurati: contano anche assegnazione, verifica e tentativi aggiuntivi.
 
-Con il profilo Subagenti configurato, se il modello tenta di concludere senza delegare, il runtime chiede una sola correzione automatica per richiesta. Se manca ancora una consegna valida, o la configurazione/il budget non consentono la delega, mostra un avviso di flusso incompleto. Errori e cancellazioni non avviano tentativi automatici. Il controllo non certifica la qualità semantica della consegna.
+Con la politica «Sempre» (e nei dossier di documentazione tecnico funzionale), se il modello tenta di concludere senza delegare, il runtime chiede una sola correzione automatica per richiesta. Con la politica automatica non c’è obbligo. Il comando /consumi mostra token e costo separati fra orchestratore e subagenti. Se manca ancora una consegna valida, o la configurazione/il budget non consentono la delega, mostra un avviso di flusso incompleto. Errori e cancellazioni non avviano tentativi automatici. Il controllo non certifica la qualità semantica della consegna.
 
 ## Comandi
 
@@ -97,11 +97,11 @@ L’orchestratore specifica titolo, obiettivo, contesto/fonti iniziali, istruzio
 
 È l’unico Markdown necessario per quel figlio: non devi creare un profilo `.pi/agents/nome.md`. Modello e strumenti sono configurati internamente. Se esiste `AGENTS.md` nella cartella del progetto aperta in chat, la suite ne include una copia nell’incarico; aggiunge anche quelli nelle sottocartelle dei file assegnati, indicando l’ambito di ciascuno. Le regole comuni sono opzionali. L’incarico viene caricato una sola volta nel contesto di sistema, senza duplicarne il testo nel messaggio iniziale. Le regole non ampliano il perimetro tecnico; conflitti e necessità ulteriori vanno riferiti al genitore. I file di regole inclusi non possono superare complessivamente 100 KB.
 
-I subagenti possono esplorare e leggere l’intero progetto, anche file fuori dalla lista modificabile. Dispongono di list_sources, read_source, graph_query, read_skill e propose_file. Le scritture producono proposte separate, solo per i percorsi assegnati. Non hanno shell, accesso diretto di scrittura al progetto, delega ricorsiva o rete propria. L’orchestratore usa gli strumenti standard di Pi per integrare le proposte e fare le verifiche. Questi controlli limitano gli strumenti dei figli; non sono una sandbox del sistema operativo e non restringono gli strumenti del genitore.
+I subagenti possono esplorare e leggere l’intero progetto, anche file fuori dalla lista modificabile. Dispongono di search_project, list_sources, read_source (a intervalli), graph_query, read_skill, propose_edit e propose_file. Le scritture producono proposte separate, solo per i percorsi assegnati. Non hanno shell, accesso diretto di scrittura al progetto, delega ricorsiva o rete propria. L’orchestratore usa gli strumenti standard di Pi per integrare le proposte e fare le verifiche. Questi controlli limitano gli strumenti dei figli; non sono una sandbox del sistema operativo e non restringono gli strumenti del genitore.
 
 Sono disponibili anche knowledge_search, knowledge_trace, read_evidence e propose_relation. Gli strumenti di conoscenza sono opzionali e le interpretazioni restano separate dalle evidenze strutturali. La lettura estesa riguarda gli snapshot; read_source mantiene il limite di 200 KB.
 
-Sono ammessi fino a 4 incarichi per chiamata, con parallelismo configurabile e percorsi di scrittura non sovrapposti. Con il modello Subagenti selezionato, il flusso chat avvia almeno un figlio per richiesta; questo aumenta i tempi e le chiamate modello anche per richieste semplici. Il limite impostato nel pannello conta i subagenti avviati nell’apertura corrente della chat. Ogni figlio ha scadenza di 600 secondi e budget di 64 chiamate a strumenti. Non è un tetto monetario e non comprende le richieste del modello principale.
+Sono ammessi fino a 4 incarichi per chiamata, con parallelismo configurabile e percorsi di scrittura non sovrapposti. Con la politica «Sempre» il flusso chat avvia almeno un figlio per richiesta; questo aumenta i tempi e le chiamate modello anche per richieste semplici. Il limite impostato nel pannello conta i subagenti avviati nell’apertura corrente della chat. Ogni figlio ha scadenza di 600 secondi e budget di 64 chiamate a strumenti; dopo 40 viene invitato a concludere. Non è un tetto monetario e non comprende le richieste del modello principale.
 
 In Attività e risultati sono consultabili gli incarichi e i risultati. Su disco: data/delegations/<batch>/<numero>/INCARICO.md, result.json e proposals/. Il modello principale mantiene il contesto della conversazione; i figli ricevono contesto fresco con l’incarico. Lo storico dei file resta sul disco, ma non viene iniettato integralmente nei task futuri.
 
