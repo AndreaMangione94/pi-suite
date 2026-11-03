@@ -15,7 +15,7 @@ import {recordUsage,usageEntry} from './suite-metrics.mjs';
 export default function registerDelegation(pi:ExtensionAPI,root:string,home:string,contextSources?:(ctx:any)=>any[],workspace?:(ctx:any)=>string) {
   let registrations:any[]=[],ready=false,used=0;
   let delegated=false,attempted=false,reminded=false;
-  const toolNames=['read_source','list_sources','propose_file','graph_query','read_skill','read_documentation','connected_sources','read_connected_source','connected_graph','document_graph','knowledge_search','knowledge_trace','read_evidence','report_evidence_reading','propose_relation'];
+  const toolNames=['read_source','search_project','list_sources','propose_file','propose_edit','graph_query','read_skill','read_documentation','connected_sources','read_connected_source','connected_graph','document_graph','knowledge_search','knowledge_trace','read_evidence','report_evidence_reading','propose_relation'];
   const launchPath=path.join(process.env.PI_CODING_AGENT_DIR||path.join(home,'pi-shell'),'suite-launch.json');
   let sessionConfig:any;
   const config=()=>structuredClone(sessionConfig);
@@ -26,7 +26,7 @@ export default function registerDelegation(pi:ExtensionAPI,root:string,home:stri
     sessionConfig=JSON.parse(fs.readFileSync(launchPath,'utf8'));
     registrations.push(registerAgentViaEvents({pi,name:'suite-executor',definition:{
       description:'Subagente generale: esegue l’incarico Markdown del genitore, esplora liberamente il progetto e produce una risposta o proposte di file.',
-      systemPrompt:'Segui l’incarico Markdown ricevuto. Puoi esplorare il progetto con list_sources/read_source. Usa propose_file solo per i percorsi autorizzati. Se mancano informazioni o serve ampliare il compito, riferiscilo nel risultato. Non hai shell o rete. Non inventare test eseguiti.',
+      systemPrompt:'Esegui l’incarico Markdown ricevuto. Cerca con search_project prima di aprire file e leggi con read_source a intervalli. Per file esistenti usa propose_edit (sostituzioni puntuali); usa propose_file solo per file nuovi. Scrivi solo nei percorsi autorizzati. Se un passo fallisce 3 volte, fermati e consegna lo stato raggiunto come parziale con la domanda per il genitore. Se mancano informazioni o serve ampliare il compito, riferiscilo. Non hai shell o rete: non dichiarare test eseguiti. Consegna breve: risultato, proposte, dubbi.',
       tools:toolNames,extensions:[path.join(root,'suite-child.ts')],inheritSkills:false,inheritProjectContext:false,inheritGlobalContext:false,
       allowNestedSubagents:false,defaultContext:'fresh',defaultAsync:false}}));
     registrations.push(registerSubagentCapabilityCeiling({sessionId:ctx.sessionManager.getSessionId(),source:'pi-suite',ceiling:{allowedAgents:['suite-executor'],allowedTools:toolNames}}));
@@ -79,7 +79,7 @@ export default function registerDelegation(pi:ExtensionAPI,root:string,home:stri
         const request={requestId:crypto.randomUUID(),ownerRunId:batch.id,nodeId:String(index+1),agent:'suite-executor',
           task:'Esegui l’unico INCARICO.md fornito nel contesto di sistema. Restituisci la consegna richiesta e segnala eventuali punti bloccanti.',
           context:'fresh',cwd:item.directory,model:cfg.worker.provider+'/'+cfg.worker.model,thinking:cfg.worker.effort,
-          timeoutMs:600000,toolBudget:{hard:64},skill:false,artifacts:true,result:{kind:'text'}};
+          timeoutMs:600000,toolBudget:{soft:40,hard:64},skill:false,artifacts:true,result:{kind:'text'}};
         try {
           const result:any=await new Promise((resolve,reject)=>{
             let timer:any;const finish=(value:any)=>{clearTimeout(timer);offResponse();offUpdate();signal?.removeEventListener('abort',cancel);resolve(value);};

@@ -25,11 +25,93 @@ export function safePath(root,relative,existing=true) {
   if(existing&&!fs.existsSync(current)) throw Error('File non trovato: '+relative);
   return current;
 }
-export function readText(file) {
-  if(!fs.statSync(file).isFile()||fs.statSync(file).size>200000) throw Error('Sono supportati file testuali fino a 200 KB');
+export function readText(file,maxBytes=200000) {
+  const stat=fs.statSync(file);
+  if(!stat.isFile()||stat.size>maxBytes) throw Error('Sono supportati file testuali fino a '+Math.round(maxBytes/1000)+' KB');
   const bytes=fs.readFileSync(file);
   if(bytes.includes(0)) throw Error('File binario non supportato');
   return new TextDecoder('utf-8',{fatal:true}).decode(bytes);
+}
+// --- Strumenti di lettura e ricerca per i subagenti ---
+const READ_MAX_CHARS=40000,READ_DEFAULT_LINES=300,READ_MAX_LINES=1000,LARGE_FILE=2000000;
+export function readSourceRange(project,args){
+  const text=readText(safePath(project,args.path),LARGE_FILE).replace(/\r\n/g,'\n'),all=text.split('\n');
+  const ranged=args.startLine!==undefined||args.lines!==undefined||args.startColumn!==undefined;
+  if(!ranged&&text.length<=READ_MAX_CHARS)return '['+args.path+'] righe 1-'+all.length+' di '+all.length+' · file completo\n'+text;
+  const start=Math.max(1,args.startLine||1);
+  if(start>all.length)throw Error('startLine oltre la fine del file ('+all.length+' righe)');
+  const limit=Math.min(all.length,start+Math.max(1,Math.min(READ_MAX_LINES,args.lines||READ_DEFAULT_LINES))-1);
+  const column=args.startColumn||0;
+  if(!Number.isInteger(column)||column<0||column>all[start-1].length)throw Error('startColumn oltre la fine della riga');
+  const chunk=[];let size=0,end=start-1;
+  while(end<limit){
+    const begin=end===start-1?column:0,line=all[end].slice(begin);
+    if(!chunk.length&&line.length>READ_MAX_CHARS){
+      return '['+args.path+'] riga '+(end+1)+' parziale · continua con startLine='+(end+1)+' e startColumn='+(begin+READ_MAX_CHARS)+'\n'+line.slice(0,READ_MAX_CHARS);
+    }
+    if(chunk.length&&size+line.length+1>READ_MAX_CHARS)break;
+    chunk.push(line);size+=line.length+1;end++;
+  }
+  const next=end<all.length?end+1:null;
+  return '['+args.path+'] righe '+start+'-'+end+' di '+all.length+(next?' · continua con startLine='+next:' · fine del file')+'\n'+chunk.join('\n');
+}
+const SEARCH_SKIP=new Set(['.git','.venv','node_modules','__pycache__','runtime','suite-data','dist','build','bin','obj','target','coverage']);
+export function globRegExp(glob){
+  let out='';
+  for(let i=0;i<glob.length;i++){
+    const c=glob[i];
+    if(c==='*'){if(glob[i+1]==='*'){i++;if(glob[i+1]==='/'){out+='(?:.*/)?';i++;}else out+='.*';}else out+='[^/]*';}
+    else if(c==='?')out+='[^/]';
+    else out+=c.replace(/[.+^${}()|[\]\\]/g,'\\$&');
+  }
+  return new RegExp('^'+out+'$','i');
+}
+export function searchProject(project,args){
+  if(typeof args.pattern!=='string'||!args.pattern||args.pattern.length>500)throw Error('Specifica pattern (massimo 500 caratteri)');
+  const max=Math.max(1,Math.min(200,args.maxResults||50)),perFile=Math.max(1,Math.min(50,args.perFile||10));
+  let regex;
+  try{regex=new RegExp(args.literal?args.pattern.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'):args.pattern,args.caseSensitive?'':'i');}
+  catch(error){throw Error('Espressione regolare non valida: '+error.message+'. Usa literal=true per cercare il testo esatto.');}
+  const glob=args.glob?globRegExp(args.glob):null,basenameOnly=!!args.glob&&!args.glob.includes('/');
+  const root=fs.realpathSync(project),base=args.directory?safePath(root,args.directory):root;
+  const results=[];let files=0,skipped=0,stop=false,truncated=false;
+  const visit=dir=>{
+    let entries;try{entries=fs.readdirSync(dir,{withFileTypes:true});}catch{return;}
+    for(const entry of entries.sort((a,b)=>a.name.localeCompare(b.name))){
+      if(stop)return;
+      if(entry.name.startsWith('.')||entry.isSymbolicLink())continue;
+      const full=path.join(dir,entry.name),rel=path.relative(root,full).split(path.sep).join('/');
+      if(entry.isDirectory()){if(!SEARCH_SKIP.has(entry.name))visit(full);continue;}
+      if(!entry.isFile()||glob&&!glob.test(basenameOnly?entry.name:rel))continue;
+      if(++files>20000){truncated=stop=true;return;}
+      let bytes;try{if(fs.statSync(full).size>1000000){skipped++;continue;}bytes=fs.readFileSync(full);}catch{continue;}
+      if(bytes.subarray(0,8000).includes(0))continue;
+      const lines=bytes.toString('utf8').split('\n');let inFile=0;
+      for(let i=0;i<lines.length&&inFile<perFile;i++){
+        if(!regex.test(lines[i]))continue;
+        const line=lines[i].replace(/\r$/,'').trim();
+        results.push(rel+':'+(i+1)+': '+(line.length>200?line.slice(0,200)+'…':line));inFile++;
+        if(results.length>=max){truncated=stop=true;return;}
+      }
+    }
+  };
+  visit(base);
+  if(!results.length)return 'Nessuna corrispondenza per '+JSON.stringify(args.pattern)+(skipped?' ('+skipped+' file oltre 1 MB esclusi)':'')+'. Prova un pattern più ampio, literal=true o un altro glob.';
+  return results.length+' corrispondenze'+(truncated?' (elenco troncato: restringi pattern, glob o directory)':'')+(skipped?' · '+skipped+' file oltre 1 MB esclusi':'')+'\n'+results.join('\n');
+}
+export function applyTextEdits(content,edits){
+  if(!Array.isArray(edits)||!edits.length||edits.length>50)throw Error('Specifica da 1 a 50 modifiche');
+  const crlf=content.includes('\r\n');let text=crlf?content.replace(/\r\n/g,'\n'):content;
+  edits.forEach((edit,i)=>{
+    if(typeof edit?.old!=='string'||typeof edit?.new!=='string'||edit.new.includes('\0'))throw Error('Modifica non testuale: '+(i+1));
+    const oldText=String(edit.old??'').replace(/\r\n/g,'\n'),newText=String(edit.new??'').replace(/\r\n/g,'\n');
+    if(!oldText)throw Error('Modifica '+(i+1)+': old vuoto. Per un file nuovo usa propose_file.');
+    const first=text.indexOf(oldText);
+    if(first<0)throw Error('Modifica '+(i+1)+': testo old non trovato. Rileggi il punto con read_source e copia il testo esatto.');
+    if(text.indexOf(oldText,first+1)>=0)throw Error('Modifica '+(i+1)+': testo old presente più volte. Includi più righe di contesto.');
+    text=text.slice(0,first)+newText+text.slice(first+oldText.length);
+  });
+  return crlf?text.replace(/\n/g,'\r\n'):text;
 }
 export function projectRules(project,writeFiles) {
   const sources=new Set(['AGENTS.md']);
@@ -112,7 +194,8 @@ export function scopedTools(directory) {
     }};
   });
   return [...evidenceTools,...contextTools(contract.context),evidenceReadingTool(directory,contract),
-    {name:'read_source',label:'Leggi il progetto',description:'Legge un file UTF-8 del progetto originale, fino a 200 KB. Lettura libera, indipendente dai file modificabili. Percorso relativo con /.',parameters:{type:'object',properties:{path:{type:'string'}},required:['path'],additionalProperties:false},execute:async(_id,args)=>response(readText(safePath(project,args.path)))},
+    {name:'read_source',label:'Leggi il progetto',description:'Legge un file di testo del progetto (fino a 2 MB). File piccoli: interi. File grandi: 300 righe per volta; continua con startLine indicato nell\'intestazione.',parameters:{type:'object',properties:{path:{type:'string'},startLine:{type:'integer',minimum:1},startColumn:{type:'integer',minimum:0},lines:{type:'integer',minimum:1,maximum:1000}},required:['path'],additionalProperties:false},execute:async(_id,args)=>response(readSourceRange(project,args))},
+    {name:'search_project',label:'Cerca nel progetto',description:'Cerca testo o regex in tutti i file del progetto. Restituisce percorso:riga: estratto. Usalo PRIMA di aprire file. glob filtra i file (es. *.ts o src/**/*.py).',parameters:{type:'object',properties:{pattern:{type:'string'},glob:{type:'string'},directory:{type:'string'},literal:{type:'boolean'},caseSensitive:{type:'boolean'},maxResults:{type:'integer',minimum:1,maximum:200},perFile:{type:'integer',minimum:1,maximum:50}},required:['pattern'],additionalProperties:false},execute:async(_id,args)=>response(searchProject(project,args))},
     {name:'list_sources',label:'Esplora il progetto',description:'Elenca una directory del progetto (massimo 500 elementi). directory vuota indica la radice. Puoi esplorare oltre le fonti iniziali dell’incarico.',parameters:{type:'object',properties:{directory:{type:'string'}},additionalProperties:false},execute:async(_id,args)=>{
       const folder=args.directory?safePath(project,args.directory):project;
       const entries=fs.readdirSync(folder,{withFileTypes:true}).filter(e=>e.name!=='.git');
@@ -122,6 +205,14 @@ export function scopedTools(directory) {
       if(typeof args.content!=='string'||Buffer.byteLength(args.content)>200000||args.content.includes('\0')) throw Error('Proposta non testuale o superiore a 200 KB');
       const target=safePath(out,args.path,false);fs.mkdirSync(path.dirname(target),{recursive:true});fs.writeFileSync(target,args.content,'utf8');
       return response({proposed:args.path,applied:false});}},
+    {name:'propose_edit',label:'Proponi modifiche puntuali',description:'Modifica un file assegnato sostituendo blocchi di testo: ogni old deve comparire una sola volta. Parte dalla tua proposta precedente o dal file originale. Preferiscilo a propose_file per file esistenti.',parameters:{type:'object',properties:{path:{type:'string'},edits:{type:'array',minItems:1,maxItems:50,items:{type:'object',properties:{old:{type:'string'},new:{type:'string'}},required:['old','new'],additionalProperties:false}}},required:['path','edits'],additionalProperties:false},execute:async(_id,args)=>{
+      if(!allowed.has(args.path)) throw Error('Modifica fuori incarico: '+args.path);
+      const target=safePath(out,args.path,false),original=safePath(project,args.path,false);
+      if(!fs.existsSync(target)&&!fs.existsSync(original))throw Error('Il file non esiste: per crearlo usa propose_file');
+      const content=applyTextEdits(readText(fs.existsSync(target)?target:original,LARGE_FILE),args.edits);
+      if(Buffer.byteLength(content)>LARGE_FILE)throw Error('Proposta oltre 2 MB');
+      fs.mkdirSync(path.dirname(target),{recursive:true});fs.writeFileSync(target,content,'utf8');
+      return response({proposed:args.path,applied:false,edits:args.edits.length});}},
     {name:'graph_query',label:'Consulta Graphify',description:'Cerca nel grafo locale dell’intero progetto. Può essere precedente alle modifiche correnti: verifica i sorgenti. Non limita la lettura ai file modificabili.',parameters:{type:'object',properties:{query:{type:'string'}},additionalProperties:false},execute:async(_id,args)=>{
       const selected=contract.context?.graphs?.filter(g=>g.kind==='project')||[];
       if(!selected.length)return response({available:false,message:'Nessun grafo selezionato; usa list_sources e read_source.'});
