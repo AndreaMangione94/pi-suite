@@ -42,10 +42,10 @@ export default function(pi: ExtensionAPI) {
     const line=(name:string,t:any)=>t?name+': '+t.calls+' registrazioni · input '+value(t,'input')+' · output '+value(t,'output')+' · cache letta '+value(t,'cacheRead')+' · cache scritta '+value(t,'cacheWrite')+' · costo '+value(t,'cost'):name+': nessun dato';
     ctx.ui.notify(line('Orchestratore',totals.parent)+'\n'+line('Subagenti',totals.child),'info');
   }});
-  const refreshGraphs=async(ctx:any,baseline=false)=>{
+  const refreshGraphs=async(ctx:any,baseline=false,workspace=activeWorkspace(ctx))=>{
     const python=process.env.PI_SUITE_PYTHON||path.join(root,'.venv','Scripts','python.exe');
     await new Promise<void>((resolve,reject)=>{
-      const child=spawn(python,[path.join(root,'suite_refresh_graphs.py'),'--home',home,'--workspace',activeWorkspace(ctx),...(baseline?['--baseline']:[])],{cwd:root,env:{...process.env,PYTHONUTF8:'1'},windowsHide:true});
+      const child=spawn(python,[path.join(root,'suite_refresh_graphs.py'),'--home',home,'--workspace',workspace,...(baseline?['--baseline']:[])],{cwd:root,env:{...process.env,PYTHONUTF8:'1'},windowsHide:true});
       let error='';const timer=setTimeout(()=>{child.kill();reject(Error('Aggiornamento grafi scaduto'));},1800000);
       child.stderr.on('data',chunk=>error=(error+chunk).slice(-3000));child.stdout.resume();
       child.on('error',e=>{clearTimeout(timer);reject(e);});child.on('close',code=>{clearTimeout(timer);code===0?resolve():reject(Error(error||'Rigenerazione grafi non riuscita'));});
@@ -53,18 +53,21 @@ export default function(pi: ExtensionAPI) {
   };
   for(const tool of contextTools(null))pi.registerTool({...tool,parameters:tool.parameters as any,
     async execute(id,args,_signal,_update,ctx){return contextTools(chatContext(activeWorkspace(ctx))).find(t=>t.name===tool.name)!.execute(id,args);}});
+  // L'aggiornamento dei grafi dopo un turno gira in background; il turno successivo lo attende prima della baseline.
+  let pendingRefresh:Promise<void>=Promise.resolve();
   pi.on('before_agent_start',async(event,ctx)=>{
     finalizationReminders.delete(activeWorkspace(ctx));
+    await pendingRefresh;
     try{await refreshGraphs(ctx,true);}catch(error:any){ctx.ui.notify(error.message,'error');}
     const context=chatContext(activeWorkspace(ctx));
     const instructions=[...(context?.graphs?.length?['graph-explorer']:[]),...(context?.documentation?.length?['lettura-documentazione-tecnico-funzionale']:[])].map(name=>fs.readFileSync(path.join(root,'skills',name,'SKILL.md'),'utf8')).join('\n')+'\n'+documentationInstructions(activeWorkspace(ctx));
     return {systemPrompt:event.systemPrompt+'\nArtefatti selezionati e consultabili: '+JSON.stringify({project:context?.project?.path,graphs:context?.graphs?.map((g:any)=>({id:g.id,name:g.name,kind:g.kind})),documentation:context?.documentation?.map((d:any)=>({id:d.id,name:d.name}))})+'. Usa read_documentation per i documenti selezionati; i grafi sono opzionali e disponibili solo se selezionati.\n'+instructions+'\n\n'+externalSourcesInstructions};
   });
   pi.on('agent_end',async(_event,ctx)=>{
-    try{
-      await refreshGraphs(ctx);
-      pi.appendEntry('suite-evidence-corpus',{workspace:activeWorkspace(ctx),bundle:sourceBundle(home,activeWorkspace(ctx))});
-    }catch(error:any){ctx.ui.notify('Aggiornamento grafi: '+error.message,'error');}
+    const workspace=activeWorkspace(ctx),session=ctx.sessionManager.getSessionId();
+    pendingRefresh=pendingRefresh.then(()=>refreshGraphs(ctx,false,workspace))
+      .then(()=>{if(ctx.sessionManager.getSessionId()===session&&activeWorkspace(ctx)===workspace)pi.appendEntry('suite-evidence-corpus',{workspace,bundle:sourceBundle(home,workspace)});})
+      .catch((error:any)=>ctx.ui.notify('Aggiornamento grafi: '+error.message,'error'));
   });
   const finalizationReminders=new Set<string>();
   pi.on('agent_before_settle',async(event,ctx)=>{
