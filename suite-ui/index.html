@@ -473,12 +473,14 @@
                     type="url"
                     placeholder="https://dev.azure.com/organizzazione/progetto/_git/repository"
                 /></label>
-                <div id="source-graph" hidden>
+                <details id="source-graph" hidden>
+                  <summary>Drive ID e Folder Item ID (facoltativi)</summary>
+                  <p class="muted">Servono solo se il link non basta: normalmente la suite li ricava dal link.</p>
                   <div class="row">
                     <label class="grow">Drive ID<input id="source-drive" /></label
                     ><label class="grow">Folder Item ID<input id="source-folder" /></label>
                   </div>
-                </div>
+                </details>
                 <div id="source-branch-row">
                   <label>Branch<input id="source-branch" value="main" /></label>
                 </div>

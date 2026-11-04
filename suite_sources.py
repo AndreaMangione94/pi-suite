@@ -8,6 +8,7 @@ import json
 import os
 import re
 import subprocess
+import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
@@ -141,6 +142,37 @@ def download(url, headers=None, graph=False):
     return raw
 
 
+def graph_share_id(url):
+    """Identificativo /shares di Microsoft Graph per il link di una cartella SharePoint."""
+    parts = urllib.parse.urlsplit(url)
+    folder = urllib.parse.parse_qs(parts.query).get('id')
+    # L'indirizzo copiato dal browser (…/Forms/AllItems.aspx?id=/sites/…/Cartella) indica la cartella nel parametro id.
+    if parts.path.lower().endswith('.aspx') and folder:
+        url = urllib.parse.urlunsplit((parts.scheme, parts.netloc, urllib.parse.quote(folder[0]), '', ''))
+    return 'u!' + base64.urlsafe_b64encode(url.encode('utf-8')).decode('ascii').rstrip('=')
+
+
+def resolve_graph_folder(url, token):
+    """Ricava Drive ID e Folder Item ID dal solo link della cartella, con il token dell'utente."""
+    request = f'https://graph.microsoft.com/v1.0/shares/{graph_share_id(url)}/driveItem?$select=id,name,folder,parentReference'
+    headers = {'Authorization': 'Bearer ' + token, 'Prefer': 'redeemSharingLinkIfNecessary'}
+    try:
+        item = json.loads(download(request, headers, graph=True))
+    except urllib.error.HTTPError as error:
+        reasons = {
+            401: 'token non valido o scaduto',
+            403: 'il token non ha accesso in lettura alla cartella',
+            404: 'cartella non trovata: controlla il link',
+        }
+        raise ValueError(
+            'SharePoint: ' + reasons.get(error.code, 'risposta Microsoft Graph ' + str(error.code))
+        ) from None
+    drive = (item.get('parentReference') or {}).get('driveId')
+    if 'folder' not in item or not drive or not item.get('id'):
+        raise ValueError('SharePoint: il link non indica una cartella')
+    return {'driveId': drive, 'folderId': item['id']}
+
+
 def extract(name, raw):
     if Path(name).suffix.lower() not in TEXT | {'.pdf', '.docx'} and Path(name).name.lower() not in (
         'dockerfile',
@@ -209,11 +241,22 @@ class Sources:
         if kind == 'sharepoint-graph':
             if data.get('url'):
                 s['url'] = https_url(data['url'], ('sharepoint.com',))
-            for key in ('driveId', 'folderId'):
-                value = str(data.get(key, '')).strip()
-                if not value or len(value) > 300 or '/' in value:
-                    raise ValueError('Drive ID e Folder Item ID sono richiesti')
-                s[key] = value
+            ids = {key: str(data.get(key, '')).strip() for key in ('driveId', 'folderId')}
+            if any(ids.values()):
+                for value in ids.values():
+                    if not value or len(value) > 300 or '/' in value:
+                        raise ValueError('Indica sia Drive ID sia Folder Item ID, oppure lasciali vuoti e usa il link')
+                s.update(ids)
+            else:
+                # Bastano link della cartella e token: gli identificativi si ricavano da Microsoft Graph.
+                if not s.get('url'):
+                    raise ValueError('Inserisci il link della cartella SharePoint')
+                token = str(data.get('token') or '').strip() or (
+                    self.protect(old['secret'], True) if old.get('secret') and old.get('kind') == kind else ''
+                )
+                if not token:
+                    raise ValueError('Inserisci un access token Microsoft Graph')
+                s.update(resolve_graph_folder(s['url'], token))
         if kind.startswith('azure') or kind == 'git-remote':
             branch = str(data.get('branch', 'main'))
             if not re.fullmatch('[A-Za-z0-9_][A-Za-z0-9_./-]{0,199}', branch) or '..' in branch:

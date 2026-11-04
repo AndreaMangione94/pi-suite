@@ -48,7 +48,7 @@ La delega delle letture usa `evidenceScope`: obiettivo documentale, domande, fon
 
 ## Fonti OneDrive, SharePoint, Azure e dossier di documentazione tecnico funzionale
 
-Le fonti si aggiungono dal menu **documentazione tecnico funzionale → Aggiungi**. Le cartelle OneDrive o SharePoint sincronizzate si leggono come cartelle locali; Microsoft Graph richiede Drive ID, Folder Item ID e token. I repository remoti possono usare Git HTTPS o Azure DevOps.
+Le fonti si aggiungono dal menu **documentazione tecnico funzionale → Aggiungi**. Le cartelle OneDrive o SharePoint sincronizzate si leggono come cartelle locali; con Microsoft Graph bastano il link della cartella e il token, perché Drive ID e Folder Item ID vengono ricavati dal link. I repository remoti possono usare Git HTTPS o Azure DevOps.
 
 **genera .md e grafo** apre la chat del dossier AS-IS tecnico-funzionale: l’orchestratore salva un piano iniziale e assegna un task distinto per ogni micro modulo o funzionalità terminale. I figli restano nel proprio ambito e lasciano riferimenti alle altre unità; il genitore integra le consegne e crea nuovi task per le lacune. Questo flusso richiede il profilo Subagenti e produce un documento DOCUMENTAZIONE-TECNICO-FUNZIONALE.md dettagliato e autosufficiente. `register_documentation` valida le citazioni e genera il grafo semantico di quel Markdown, che compare nel menu Grafi ed è selezionato automaticamente. [Guida fonti e documentazione tecnico funzionale](GUIDA-FONTI-DOCUMENTAZIONE-TECNICO-FUNZIONALE.md).
 

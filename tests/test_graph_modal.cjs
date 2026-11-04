@@ -136,6 +136,12 @@ const { chromium } = require('playwright-core');
       await page.locator('#source-kind').selectOption('git-remote');
       assert.equal(await page.locator('#source-branch-row').isVisible(), true);
       await page.locator('#source-kind').selectOption('sharepoint-graph');
+      // Con SharePoint bastano link e token: gli ID sono facoltativi, in una sezione chiusa.
+      assert.equal(await page.locator('#source-token').isVisible(), true);
+      assert.equal(await page.locator('#source-token').evaluate(e => e.required), true);
+      assert.equal(await page.locator('#source-drive').isVisible(), false);
+      assert.equal(await page.locator('#source-drive').evaluate(e => e.required), false);
+      await page.locator('#source-graph summary').click();
       assert.equal(await page.locator('#source-drive').isVisible(), true);
       await page.locator('[name=graph-location][value=local]').check();
       await page.locator('#generate-graph').click();

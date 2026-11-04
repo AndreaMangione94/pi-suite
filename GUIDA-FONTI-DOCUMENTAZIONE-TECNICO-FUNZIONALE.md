@@ -49,11 +49,12 @@ Questo percorso non richiede una nuova applicazione Entra. La data registrata è
 
 ## SharePoint: Microsoft Graph
 
-Scegli **SharePoint · Microsoft Graph** e compila:
+Scegli **SharePoint · Microsoft Graph** e compila soltanto:
 
-- Drive ID della raccolta documenti.
-- Folder Item ID della cartella, anche `root` per la radice del drive.
-- Access token Microsoft Graph valido per leggere quella cartella.
+- **URL**: il link della cartella. Va bene un link di condivisione (`https://azienda.sharepoint.com/:f:/s/progetto/…`), l’indirizzo diretto della cartella o quello copiato dal browser mentre la cartella è aperta (`…/Forms/AllItems.aspx?id=…`).
+- **Access token**: token Microsoft Graph valido per leggere quella cartella.
+
+Al salvataggio la suite ricava Drive ID e Folder Item ID dal link con l’API [`/shares`](https://learn.microsoft.com/en-us/graph/api/shares-get?view=graph-rest-1.0) di Microsoft Graph. Se il token è scaduto, non ha accesso o il link non indica una cartella, il salvataggio viene rifiutato con il motivo. In **Drive ID e Folder Item ID (facoltativi)** puoi ancora indicarli a mano, per esempio `root` per la radice del drive.
 
 Il token viene cifrato con Windows DPAPI e non viene passato agli agenti. La suite legge ricorsivamente la cartella e gestisce le pagine di risultati. Registra webUrl, eTag e lastModifiedDateTime quando restituiti da Graph. Scarica i contenuti tramite gli URL temporanei restituiti da Microsoft senza inoltrare loro il bearer token Graph.
 

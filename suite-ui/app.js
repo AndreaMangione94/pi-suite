@@ -1426,15 +1426,15 @@ function sourceMode() {
   const sharepoint = remote && kind === 'sharepoint-graph';
   $('source-graph').hidden = !sharepoint;
   $('source-branch-row').hidden = !['azure-remote', 'git-remote'].includes(kind);
-  for (const id of ['source-drive', 'source-folder', 'source-token']) $(id).required = sharepoint;
+  $('source-token').required = sharepoint;
   $('source-url').placeholder =
     kind === 'sharepoint-graph'
-      ? 'https://azienda.sharepoint.com/sites/progetto/Documenti'
+      ? 'Link della cartella: https://azienda.sharepoint.com/:f:/s/progetto/… oppure l’indirizzo dal browser'
       : kind === 'git-remote'
         ? 'https://github.com/organizzazione/repository.git'
         : 'https://dev.azure.com/organizzazione/progetto/_git/repository';
   $('source-token-help').textContent = sharepoint
-    ? 'Token Microsoft Graph con accesso in lettura alla cartella.'
+    ? 'Token Microsoft Graph con accesso in lettura alla cartella: con il link basta questo, Drive ID e cartella vengono ricavati.'
     : kind === 'git-remote'
       ? 'Token facoltativo, oppure usa le credenziali Git configurate.'
       : 'PAT con permesso Code Read, oppure lascia vuoto per usare le credenziali Git configurate.';
