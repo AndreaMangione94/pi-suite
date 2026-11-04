@@ -14,6 +14,7 @@ import {
 } from 'pi-subagents/delegation';
 import { chatContext } from './chat-context.mjs';
 import { prompt } from './prompts.mjs';
+import { CHILD_TOOL_NAMES } from './child-tools.mjs';
 import { prepareBatch, taskDigest, applyProposals, TASK_KINDS, RESULT_SCHEMA } from './delegation-core.mjs';
 import { isDocumentationDossier } from './documentation-workflow.mjs';
 import { evidenceScopeSchema, evidenceReadingSummary } from './evidence-reading.mjs';
@@ -32,25 +33,7 @@ export default function registerDelegation(
   let delegated = false,
     attempted = false,
     reminded = false;
-  const toolNames = [
-    'read_source',
-    'search_project',
-    'list_sources',
-    'propose_file',
-    'propose_edit',
-    'graph_query',
-    'read_skill',
-    'read_documentation',
-    'connected_sources',
-    'read_connected_source',
-    'connected_graph',
-    'document_graph',
-    'knowledge_search',
-    'knowledge_trace',
-    'read_evidence',
-    'report_evidence_reading',
-    'propose_relation'
-  ];
+  const toolNames = CHILD_TOOL_NAMES;
   const launchPath = path.join(process.env.PI_CODING_AGENT_DIR || path.join(home, 'pi-shell'), 'suite-launch.json');
   let sessionConfig: any;
   const config = () => structuredClone(sessionConfig);

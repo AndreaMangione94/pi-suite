@@ -13,6 +13,8 @@ import { chatContext, contextTools, externalSourcesInstructions } from './chat-c
 import { documentationInstructions, assembleDocumentation, isDocumentationDossier } from './documentation-workflow.mjs';
 import { recordUsage, usageEntry, summarizeUsage } from './suite-metrics.mjs';
 import { prompt } from './prompts.mjs';
+import { queryGraph } from './graph-query.mjs';
+import { runPython, pythonPath } from './python-process.mjs';
 
 export default function (pi: ExtensionAPI) {
   const root = path.dirname(fileURLToPath(import.meta.url));
@@ -92,36 +94,12 @@ export default function (pi: ExtensionAPI) {
     }
   });
   const refreshGraphs = async (ctx: any, baseline = false, workspace = activeWorkspace(ctx)) => {
-    const python = process.env.PI_SUITE_PYTHON || path.join(root, '.venv', 'Scripts', 'python.exe');
-    await new Promise<void>((resolve, reject) => {
-      const child = spawn(
-        python,
-        [
-          path.join(root, 'suite_refresh_graphs.py'),
-          '--home',
-          home,
-          '--workspace',
-          workspace,
-          ...(baseline ? ['--baseline'] : [])
-        ],
-        { cwd: root, env: { ...process.env, PYTHONUTF8: '1' }, windowsHide: true }
-      );
-      let error = '';
-      const timer = setTimeout(() => {
-        child.kill();
-        reject(Error('Aggiornamento grafi scaduto'));
-      }, 1800000);
-      child.stderr.on('data', chunk => (error = (error + chunk).slice(-3000)));
-      child.stdout.resume();
-      child.on('error', e => {
-        clearTimeout(timer);
-        reject(e);
-      });
-      child.on('close', code => {
-        clearTimeout(timer);
-        code === 0 ? resolve() : reject(Error(error || 'Rigenerazione grafi non riuscita'));
-      });
-    });
+    const result = await runPython(
+      'suite_refresh_graphs.py',
+      ['--home', home, '--workspace', workspace, ...(baseline ? ['--baseline'] : [])],
+      { timeoutMs: 1800000, timeoutMessage: 'Aggiornamento grafi scaduto', stderrTail: 3000 }
+    );
+    if (result.code !== 0) throw Error(result.stderr || 'Rigenerazione grafi non riuscita');
   };
   for (const tool of contextTools(null))
     pi.registerTool({
@@ -327,46 +305,19 @@ export default function (pi: ExtensionAPI) {
       await ctx.waitForIdle();
       ctx.ui.notify('Documentazione tecnico funzionale: aggiornamento fonti e preparazione dossier…', 'info');
       try {
-        const python = process.env.PI_SUITE_PYTHON || path.join(root, '.venv', 'Scripts', 'python.exe');
-        const result: any = await new Promise((resolve, reject) => {
-          const child = spawn(
-            python,
-            [
-              path.join(root, 'suite_documentation.py'),
-              '--home',
-              home,
-              '--project',
-              activeWorkspace(ctx),
-              '--objective',
-              args.trim()
-            ],
-            { cwd: root, env: { ...process.env, PYTHONUTF8: '1' }, windowsHide: true }
-          );
-          let stdout = '',
-            stderr = '';
-          const timer = setTimeout(() => {
-            child.kill();
-            reject(Error('Preparazione scaduta: controlla le fonti dal pannello.'));
-          }, 1800000);
-          child.stdout.on('data', chunk => (stdout += chunk.toString('utf8')));
-          child.stderr.on('data', chunk => (stderr = (stderr + chunk.toString('utf8')).slice(-6000)));
-          child.on('error', e => {
-            clearTimeout(timer);
-            reject(e);
-          });
-          child.on('close', code => {
-            clearTimeout(timer);
-            if (code !== 0) {
-              reject(Error(stderr || 'Preparazione della documentazione tecnico funzionale non completata'));
-              return;
-            }
-            try {
-              resolve(JSON.parse(stdout));
-            } catch {
-              reject(Error('Risposta di preparazione non valida'));
-            }
-          });
-        });
+        const prepared = await runPython(
+          'suite_documentation.py',
+          ['--home', home, '--project', activeWorkspace(ctx), '--objective', args.trim()],
+          { timeoutMs: 1800000, timeoutMessage: 'Preparazione scaduta: controlla le fonti dal pannello.' }
+        );
+        if (prepared.code !== 0)
+          throw Error(prepared.stderr || 'Preparazione della documentazione tecnico funzionale non completata');
+        let result: any;
+        try {
+          result = JSON.parse(prepared.stdout);
+        } catch {
+          throw Error('Risposta di preparazione non valida');
+        }
         pi.appendEntry('suite-documentation-dossier', { workspace: result.workspace, id: result.id });
         ctx.ui.notify('Fonti aggiornate. Dossier: ' + result.workspace, 'info');
         pi.sendUserMessage(
@@ -423,27 +374,15 @@ export default function (pi: ExtensionAPI) {
       const selected = chatContext(activeWorkspace(ctx))?.graphs?.filter((g: any) => g.kind === 'project') || [];
       if (!selected.length) throw Error('Nessun grafo del codice selezionato nel contesto.');
       const results = selected.map((item: any) => {
-        const graph = JSON.parse(fs.readFileSync(item.path, 'utf8'));
-        const matches = graph.nodes.filter((n: any) =>
-          args.nodeId
-            ? n.id === args.nodeId
-            : JSON.stringify(n)
-                .toLowerCase()
-                .includes((args.query || '').toLowerCase())
-        );
-        const nodes = matches.slice(0, Math.max(1, Math.min(50, args.limit || 20))),
-          ids = new Set(nodes.map((n: any) => n.id));
-        const edges = graph.edges.filter((e: any) => ids.has(e.source) || ids.has(e.target));
+        const { id, ...found } = queryGraph(item, {
+          query: args.query,
+          nodeId: args.nodeId,
+          maxNodes: Math.max(1, Math.min(50, args.limit || 20))
+        });
         return {
-          id: item.id,
+          id,
           project: project.path,
-          base: graph.base,
-          createdAt: graph.createdAt,
-          nodes,
-          edges: edges.slice(0, 100),
-          totalMatches: matches.length,
-          truncated: matches.length > nodes.length || edges.length > 100,
-          limits: graph.limits,
+          ...found,
           ...(item.stale ? { stale: item.staleReason || 'Grafo da aggiornare: rigeneralo dal pannello.' } : {}),
           ...(refreshing
             ? {
@@ -482,7 +421,7 @@ export default function (pi: ExtensionAPI) {
   pi.registerCommand('suite', {
     description: 'Apri Pi Suite: provider, squadra, task e grafo locale',
     handler: async (_args, ctx) => {
-      const python = process.env.PI_SUITE_PYTHON || path.join(root, '.venv', 'Scripts', 'pythonw.exe');
+      const python = pythonPath('pythonw.exe');
       if (!fs.existsSync(python)) {
         ctx.ui.notify('Esegui prima Install.cmd nella cartella Pi Suite.', 'error');
         return;

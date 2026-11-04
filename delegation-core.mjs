@@ -2,6 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { Worker } from 'node:worker_threads';
+import { CHILD_TOOLS } from './child-tools.mjs';
+import { queryGraph } from './graph-query.mjs';
 import { sourceBundle, connectedTools } from './connected-sources.mjs';
 import { knowledgeTools } from './evidence-tools.mjs';
 import { chatContext, contextTools, externalSourcesInstructions } from './chat-context.mjs';
@@ -551,49 +553,17 @@ export function scopedTools(directory) {
     evidenceReadingTool(directory, contract),
     {
       name: 'read_source',
-      label: 'Leggi il progetto',
-      description:
-        "Legge un file di testo del progetto (fino a 2 MB). File piccoli: interi. File grandi: 300 righe per volta; continua con startLine indicato nell'intestazione.",
-      parameters: {
-        type: 'object',
-        properties: {
-          path: { type: 'string' },
-          startLine: { type: 'integer', minimum: 1 },
-          startColumn: { type: 'integer', minimum: 0 },
-          lines: { type: 'integer', minimum: 1, maximum: 1000 }
-        },
-        required: ['path'],
-        additionalProperties: false
-      },
+      ...CHILD_TOOLS.read_source,
       execute: async (_id, args) => response(readSourceRange(project, args))
     },
     {
       name: 'search_project',
-      label: 'Cerca nel progetto',
-      description:
-        'Cerca testo o regex in tutti i file del progetto. Restituisce percorso:riga: estratto. Usalo PRIMA di aprire file. glob filtra i file (es. *.ts o src/**/*.py).',
-      parameters: {
-        type: 'object',
-        properties: {
-          pattern: { type: 'string' },
-          glob: { type: 'string' },
-          directory: { type: 'string' },
-          literal: { type: 'boolean' },
-          caseSensitive: { type: 'boolean' },
-          maxResults: { type: 'integer', minimum: 1, maximum: 200 },
-          perFile: { type: 'integer', minimum: 1, maximum: 50 }
-        },
-        required: ['pattern'],
-        additionalProperties: false
-      },
+      ...CHILD_TOOLS.search_project,
       execute: async (_id, args) => response(await searchProjectGuarded(project, args))
     },
     {
       name: 'list_sources',
-      label: 'Esplora il progetto',
-      description:
-        'Elenca una directory del progetto (massimo 500 elementi). directory vuota indica la radice. Puoi esplorare oltre le fonti iniziali dell’incarico.',
-      parameters: { type: 'object', properties: { directory: { type: 'string' } }, additionalProperties: false },
+      ...CHILD_TOOLS.list_sources,
       execute: async (_id, args) => {
         const folder = args.directory ? safePath(project, args.directory) : project;
         const entries = fs.readdirSync(folder, { withFileTypes: true }).filter(e => e.name !== '.git');
@@ -607,15 +577,7 @@ export function scopedTools(directory) {
     },
     {
       name: 'propose_file',
-      label: 'Proponi un file',
-      description:
-        'Salva il contenuto completo di un file autorizzato come proposta separata. Non modifica il progetto originale. Ripetere sovrascrive soltanto la propria proposta.',
-      parameters: {
-        type: 'object',
-        properties: { path: { type: 'string' }, content: { type: 'string' } },
-        required: ['path', 'content'],
-        additionalProperties: false
-      },
+      ...CHILD_TOOLS.propose_file,
       execute: async (_id, args) => {
         if (!allowed.has(args.path)) throw Error('Modifica fuori incarico: ' + args.path);
         if (typeof args.content !== 'string' || Buffer.byteLength(args.content) > 200000 || args.content.includes('\0'))
@@ -628,28 +590,7 @@ export function scopedTools(directory) {
     },
     {
       name: 'propose_edit',
-      label: 'Proponi modifiche puntuali',
-      description:
-        'Modifica un file assegnato sostituendo blocchi di testo: ogni old deve comparire una sola volta. Parte dalla tua proposta precedente o dal file originale. Preferiscilo a propose_file per file esistenti.',
-      parameters: {
-        type: 'object',
-        properties: {
-          path: { type: 'string' },
-          edits: {
-            type: 'array',
-            minItems: 1,
-            maxItems: 50,
-            items: {
-              type: 'object',
-              properties: { old: { type: 'string' }, new: { type: 'string' } },
-              required: ['old', 'new'],
-              additionalProperties: false
-            }
-          }
-        },
-        required: ['path', 'edits'],
-        additionalProperties: false
-      },
+      ...CHILD_TOOLS.propose_edit,
       execute: async (_id, args) => {
         if (!allowed.has(args.path)) throw Error('Modifica fuori incarico: ' + args.path);
         const target = safePath(out, args.path, false),
@@ -665,46 +606,18 @@ export function scopedTools(directory) {
     },
     {
       name: 'graph_query',
-      label: 'Consulta Graphify',
-      description:
-        'Cerca nel grafo locale dell’intero progetto. Può essere precedente alle modifiche correnti: verifica i sorgenti. Non limita la lettura ai file modificabili.',
-      parameters: { type: 'object', properties: { query: { type: 'string' } }, additionalProperties: false },
+      ...CHILD_TOOLS.graph_query,
       execute: async (_id, args) => {
         const selected = contract.context?.graphs?.filter(g => g.kind === 'project') || [];
         if (!selected.length)
           return response({ available: false, message: 'Nessun grafo selezionato; usa list_sources e read_source.' });
-        const graphs = selected.map(item => {
-          const g = JSON.parse(fs.readFileSync(item.path, 'utf8')),
-            matches = g.nodes.filter(n =>
-              JSON.stringify(n)
-                .toLowerCase()
-                .includes((args.query || '').toLowerCase())
-            ),
-            nodes = matches.slice(0, 40),
-            ids = new Set(nodes.map(n => n.id));
-          return {
-            id: item.id,
-            base: g.base,
-            createdAt: g.createdAt,
-            nodes,
-            edges: g.edges.filter(e => ids.has(e.source) || ids.has(e.target)).slice(0, 100),
-            truncated: matches.length > 40,
-            limits: g.limits
-          };
-        });
+        const graphs = selected.map(item => queryGraph(item, { query: args.query, maxNodes: 40 }));
         return response(graphs.length === 1 ? graphs[0] : { graphs });
       }
     },
     {
       name: 'read_skill',
-      label: 'Leggi skill',
-      description: 'Carica una skill abilitata dalla suite. Le skill non ampliano strumenti o perimetro dell’incarico.',
-      parameters: {
-        type: 'object',
-        properties: { name: { type: 'string' } },
-        required: ['name'],
-        additionalProperties: false
-      },
+      ...CHILD_TOOLS.read_skill,
       execute: async (_id, args) => {
         const s = contract.skills.find(s => s.name === args.name);
         if (!s) throw Error('Skill non disponibile');

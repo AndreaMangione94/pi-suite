@@ -6,6 +6,7 @@ import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { stripTypeScriptTypes } from 'node:module';
 import { prompt } from '../prompts.mjs';
+import { queryGraph } from '../graph-query.mjs';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { legacyDocumentation } from '../documentation-compat.mjs';
 import { sourceBundle, connectedTools, isCleanWorkspace } from '../connected-sources.mjs';
@@ -40,6 +41,15 @@ const spawn = (_cmd, args) => {
   }, delay);
   return child;
 };
+// Come spawn, ma con l'interfaccia di python-process.mjs usata dall'estensione.
+const runPython = (script, args) => {
+  spawns.push([script, ...args]);
+  const code = exitCode,
+    wait = delay;
+  return new Promise(resolve =>
+    setTimeout(() => resolve({ code, stdout: '', stderr: code ? 'errore finto' : '' }), wait)
+  );
+};
 const Type = new Proxy(
   {},
   {
@@ -50,6 +60,9 @@ const Type = new Proxy(
 );
 const params = {
   prompt,
+  queryGraph,
+  runPython,
+  pythonPath: () => 'python',
   legacyDocumentation,
   spawn,
   path,

@@ -1,7 +1,6 @@
-import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { spawn } from 'node:child_process';
+import { runPython } from './python-process.mjs';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const string = { type: 'string' },
@@ -90,61 +89,22 @@ const descriptions = {
 
 export async function invokeEvidence(action, args, bundle, options = {}) {
   const home = options.home || process.env.PI_SUITE_HOME || path.join(root, 'suite-data');
-  const python = process.env.PI_SUITE_PYTHON || path.join(root, '.venv', 'Scripts', 'python.exe');
-  if (!fs.existsSync(python)) throw Error('Runtime Python assente. Esegui Install.cmd.');
-  return await new Promise((resolve, reject) => {
-    const child = spawn(python, [path.join(root, 'suite_evidence_cli.py')], {
-      cwd: root,
-      windowsHide: true,
-      env: { ...process.env, PYTHONUTF8: '1' }
-    });
-    let out = '',
-      err = '',
-      settled = false;
-    const finish = (error, value) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      options.signal?.removeEventListener('abort', abort);
-      error ? reject(error) : resolve(value);
-    };
-    const abort = () => {
-      child.kill();
-      finish(Error('Consultazione interrotta'));
-    };
-    const timer = setTimeout(
-      () => {
-        child.kill();
-        finish(Error('Operazione evidenze scaduta'));
-      },
-      ['prepare_documentation', 'register_documentation'].includes(action) ? 1800000 : 180000
-    );
-    if (options.signal?.aborted) {
-      abort();
-      return;
-    }
-    options.signal?.addEventListener('abort', abort, { once: true });
-    child.stdout.on('data', chunk => {
-      out += chunk.toString('utf8');
-      if (out.length > 16000000) {
-        child.kill();
-        finish(Error('Risultato troppo grande: restringi la richiesta'));
-      }
-    });
-    child.stderr.on('data', chunk => (err = (err + chunk.toString('utf8')).slice(-4000)));
-    child.on('error', error => finish(error));
-    child.stdin.on('error', () => {});
-    child.on('close', code => {
-      try {
-        const value = JSON.parse(out);
-        if (code || value.error) finish(Error(value.error || err || 'Operazione fallita'));
-        else finish(null, value);
-      } catch {
-        finish(Error(err || 'Risposta evidenze non valida'));
-      }
-    });
-    child.stdin.end(JSON.stringify({ action, args, bundle, home, workspace: options.workspace }));
+  const result = await runPython('suite_evidence_cli.py', [], {
+    input: JSON.stringify({ action, args, bundle, home, workspace: options.workspace }),
+    timeoutMs: ['prepare_documentation', 'register_documentation'].includes(action) ? 1800000 : 180000,
+    timeoutMessage: 'Operazione evidenze scaduta',
+    abortMessage: 'Consultazione interrotta',
+    signal: options.signal,
+    stderrTail: 4000
   });
+  let value;
+  try {
+    value = JSON.parse(result.stdout);
+  } catch {
+    throw Error(result.stderr || 'Risposta evidenze non valida');
+  }
+  if (result.code || value.error) throw Error(value.error || result.stderr || 'Operazione fallita');
+  return value;
 }
 
 export function knowledgeTools(bundle, options = {}) {

@@ -4,6 +4,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { stripTypeScriptTypes } from 'node:module';
 import { prompt } from '../prompts.mjs';
+import { CHILD_TOOL_NAMES } from '../child-tools.mjs';
 import * as core from '../delegation-core.mjs';
 import * as metrics from '../suite-metrics.mjs';
 import { chatContext } from '../chat-context.mjs';
@@ -21,6 +22,7 @@ const Type = new Proxy(
 );
 const params = {
   prompt,
+  CHILD_TOOL_NAMES,
   fs,
   path,
   crypto,
