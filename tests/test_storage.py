@@ -99,6 +99,36 @@ class SharedFilesTests(unittest.TestCase):
         self.assertEqual([p.wait(timeout=120) for p in processes], [0] * 4)
         self.assertEqual(json.loads(path.read_text(encoding='utf-8'))['n'], 200)
 
+    def test_references_held_by_jobs_survive_saves(self):
+        panel = suite.Suite(self.home)
+        panel.settings['projects'] = [{'id': 'p' * 16, 'name': 'Demo', 'path': str(self.home)}]
+        panel.save_settings_file()
+        project = workspace.project_record(panel, 'p' * 16)  # come generate_graph all'inizio del job
+        other = suite.Suite(self.home)
+        other.settings['maxCalls'] = 50
+        other.save_settings_file()
+        panel.settings['delegationPolicy'] = 'always'
+        panel.save_settings_file()  # salvataggio di un'altra richiesta durante il job
+        project.setdefault('workspace', {})['graph'] = {'sources': ['s1']}
+        panel.save_settings_file()
+        disk = suite.read_json(self.home / 'settings.json')
+        self.assertEqual(disk['projects'][0]['workspace'], {'graph': {'sources': ['s1']}})
+        self.assertEqual((disk['maxCalls'], disk['delegationPolicy']), (50, 'always'))
+
+    def test_configuration_is_accepted_while_a_job_runs(self):
+        app = suite.Suite(self.home)
+        folder = self.home / 'progetto'
+        folder.mkdir(parents=True)
+        app.busy = True  # un job lungo in corso
+        project = app.add_project(str(folder), 'Progetto')
+        app.save_project_references(project['id'], 'documentation', {'objective': 'Durante il job'})
+        app.sources.save({'name': 'Fonte', 'kind': 'sharepoint-local', 'path': str(folder)})
+        self.assertEqual(len(app.sources.connections()), 1)
+        with self.assertRaisesRegex(ValueError, 'già in corso'):
+            app.start('graph', {'project': project['id']})
+        disk = suite.read_json(self.home / 'settings.json')
+        self.assertEqual(disk['projects'][0]['workspace']['documentation']['objective'], 'Durante il job')
+
 
 if __name__ == '__main__':
     unittest.main()

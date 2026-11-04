@@ -112,7 +112,6 @@ function renderContextMenus() {
           },
           'context-remove'
         );
-        remove.disabled = !!state?.busy;
         remove.setAttribute('aria-label', 'Elimina ' + item.name);
         tile.append(remove);
       }
@@ -122,7 +121,6 @@ function renderContextMenus() {
   $('documentation-source-summary').textContent =
     (project?.workspace?.documentation?.sources?.length || 0) + ' fonti aggiunte · progetto incluso';
   $('quick-generate-graph').disabled = !!state?.busy;
-  $('add-documentation-source').disabled = !!state?.busy;
   documentationAvailability();
 }
 async function toggleContextMenu(kind) {
@@ -444,7 +442,7 @@ function queueDocumentationReferences() {
 async function flushDocumentationReferences() {
   if (documentationSaving) return documentationSaving;
   documentationSaving = (async () => {
-    while (pendingDocumentationSaves.size && !state?.busy) {
+    while (pendingDocumentationSaves.size) {
       const [pid, references] = pendingDocumentationSaves.entries().next().value;
       pendingDocumentationSaves.delete(pid);
       try {
@@ -497,6 +495,8 @@ bind('add-documentation-source', async () => {
   $('generate-graph').textContent = 'Aggiungi';
   document.querySelector('#graph-create-form > p:last-child')?.setAttribute('hidden', '');
   sourceMode();
+  // Aggiungere una fonte è configurazione: si può fare anche mentre un job è in corso.
+  $('generate-graph').disabled = false;
 });
 document.querySelectorAll('[data-page]').forEach(b => (b.onclick = () => page(b.dataset.page)));
 function setup() {
@@ -630,10 +630,13 @@ async function refresh(initial = false) {
     }
     if (state.job.state === 'failed') notice(state.job.error, true);
   }
-  if (!state.busy) await flushDocumentationReferences();
+  await flushDocumentationReferences();
   if ($('documentation-dialog').open || !$('graph-menu').hidden || !$('documentation-menu').hidden)
     await refreshWorkspaceFiles();
-  document.querySelectorAll('[data-job-button]').forEach(b => (b.disabled = state.busy));
+  // Durante un job restano bloccati solo i comandi che ne avviano un altro; aggiungere una fonte è configurazione.
+  document
+    .querySelectorAll('[data-job-button]')
+    .forEach(b => (b.disabled = state.busy && !(b.id === 'generate-graph' && addingDocumentationSource)));
   documentationAvailability();
 }
 bind('open-chat', async () => {
@@ -1489,7 +1492,7 @@ async function selectGraph(id, scroll = false) {
 $('graph-explorer').onchange = () => selectGraph($('graph-explorer').value).catch(e => notice(e.message, true));
 $('graph-create-form').onsubmit = event => {
   event.preventDefault();
-  if (choosingFolder || state?.busy) return;
+  if (choosingFolder || (state?.busy && !addingDocumentationSource)) return;
   const button = $('generate-graph');
   button.disabled = true;
   const remote = graphLocation() === 'remote',
@@ -1522,7 +1525,7 @@ $('graph-create-form').onsubmit = event => {
         notice('Fonte aggiunta alla documentazione tecnico funzionale.');
       })
       .catch(e => notice(e.message, true))
-      .finally(() => (button.disabled = !!state?.busy));
+      .finally(() => (button.disabled = false));
     return;
   }
   action('generate-graph', {

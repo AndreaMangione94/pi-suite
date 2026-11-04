@@ -191,8 +191,7 @@ class Suite:
             merged = storage.merge_changes(self._settings_base, self.settings, disk)
             if merged != disk:
                 save_json(self.settings_path, merged)
-            self.settings.clear()
-            self.settings.update(merged)
+            storage.assign(self.settings, merged)
             self._settings_base = copy.deepcopy(merged)
 
     def reload_settings(self):
@@ -202,9 +201,7 @@ class Suite:
                 return
             disk = read_json(self.settings_path)
             if disk != self._settings_base:
-                merged = storage.merge_changes(self._settings_base, self.settings, disk)
-                self.settings.clear()
-                self.settings.update(merged)
+                storage.assign(self.settings, storage.merge_changes(self._settings_base, self.settings, disk))
                 self._settings_base = disk
 
     def public_settings(self):
@@ -229,8 +226,6 @@ class Suite:
 
     def import_skill(self, content):
         with self.guard:
-            if self.busy:
-                raise ValueError('Attendi la fine del task prima di importare una skill.')
             if not isinstance(content, str) or len(content) > 50000 or not content.startswith('---'):
                 raise ValueError('Carica un SKILL.md con frontmatter name e description, massimo 50.000 caratteri.')
             name = re.search(r'^name:\s*([a-z][a-z0-9-]{0,63})\s*$', content, re.M)
@@ -422,8 +417,6 @@ class Suite:
 
     def import_byok(self, data, apply=False):
         with self.guard:
-            if self.busy:
-                raise ValueError('Attendi il completamento del lavoro in corso')
             preview = self.byok.preview(data['content'], data.get('format', 'json'), data.get('includeProfiles', False))
             if not apply:
                 return preview
@@ -441,8 +434,6 @@ class Suite:
 
     def save_secret(self, data):
         with self.guard:
-            if self.busy:
-                raise ValueError('Attendi il completamento del lavoro in corso')
             config = self.byok.config()
             c = next((c for c in config['connections'] if c['id'] == data['connectionId']), None)
             if c is None:
@@ -458,8 +449,6 @@ class Suite:
 
     def save_connection(self, data):
         with self.guard:
-            if self.busy:
-                raise ValueError('Attendi il completamento del lavoro in corso')
             current = self.byok.config()
             if data.get('revision') != self.byok.revision():
                 raise ValueError('Configurazione cambiata: selezionala di nuovo prima di salvare')
@@ -500,8 +489,6 @@ class Suite:
 
     def save_settings(self, data):
         with self.guard:
-            if self.busy:
-                raise ValueError('Attendi il completamento dell’operazione in corso.')
             old = {p['id']: p for p in self.settings['providers']}
             providers = []
             for raw in data.get('providers', []):
@@ -730,8 +717,6 @@ class Suite:
 
     def add_project(self, path='', name=''):
         with self.guard:
-            if self.busy:
-                raise ValueError('Attendi l’operazione in corso.')
             if not isinstance(path, str):
                 raise ValueError('Cartella progetto non valida.')
             name = project_name(name) if name else ''
@@ -793,8 +778,6 @@ class Suite:
 
     def save_project_references(self, pid, section, data):
         with self.guard:
-            if self.busy:
-                raise ValueError('Attendi l’operazione in corso.')
             checked_id(pid)
             project = next((p for p in self.settings['projects'] if p['id'] == pid), None)
             if not project:
@@ -1114,8 +1097,6 @@ class Suite:
 
     def remove_graph(self, pid, identifier):
         with self.guard:
-            if self.busy:
-                raise ValueError('È già in corso un’operazione.')
             item = workspace.graph_entry(self, pid, identifier)
             project = workspace.project_record(self, pid)
             prefs = project.setdefault('workspace', {})
@@ -1497,10 +1478,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             elif route == '/api/sources' and not post:
                 result = app.sources.public()
             elif route == '/api/sources' and post:
-                with app.guard:
-                    if app.busy:
-                        raise ValueError('Attendi il completamento dell’operazione in corso.')
-                    result = app.sources.save(data)
+                result = app.sources.save(data)
             elif route == '/api/documentazione-tecnico-funzionale-registry' and not post:
                 result = app.sources.documentation_registry()
             elif route == '/api/evidence' and post:

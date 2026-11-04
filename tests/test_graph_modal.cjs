@@ -129,10 +129,18 @@ const { chromium } = require('playwright-core');
       await page.screenshot({ path: path.join(work, `context-${viewport.width}.png`), fullPage: true });
       await page.keyboard.press('Escape');
       assert.equal(await page.locator('#graph-menu').isVisible(), false);
+      // Durante un job resta bloccata solo la generazione: fonti e grafi si configurano lo stesso.
+      busy = true;
+      await page.evaluate(() => refresh());
       await page.locator('#open-documentation').click();
       await page.locator('#add-documentation-source').click();
       const dialog = page.locator('#graph-dialog');
       await dialog.waitFor({ state: 'visible' });
+      assert.equal(
+        await page.locator('#generate-graph').isDisabled(),
+        false,
+        'aggiunta della fonte consentita durante un job'
+      );
       await page.locator('#source-name').fill('Fonti ordini');
       await page.locator('#browse-source').click();
       await page.waitForFunction(() => document.querySelector('#source-path').value === 'C:\\Scelta');
@@ -151,6 +159,8 @@ const { chromium } = require('playwright-core');
       await page.locator('#generate-graph').click();
       await page.waitForFunction(() => !document.querySelector('#graph-dialog').open);
       assert.deepEqual(project.workspace.documentation.sources, ['source:new']);
+      busy = false;
+      await page.evaluate(() => refresh());
       await page.locator('#open-graph').click();
       await page.locator('#graph-context-list .context-remove').click();
       await page.waitForFunction(() => document.querySelectorAll('#graph-context-list .context-choice').length === 0);

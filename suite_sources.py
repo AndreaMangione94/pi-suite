@@ -2,6 +2,7 @@
 
 from suite_documentation_migration import is_documentation
 from suite_prompts import prompt
+from suite_storage import update_json
 import base64
 import hashlib
 import io
@@ -273,8 +274,8 @@ class Sources:
             s['secret'] = self.protect(data['token'].strip())
         elif not data.get('clearSecret') and old.get('secret') and old.get('kind') == kind:
             s['secret'] = old['secret']
-        sources = [x for x in sources if x['id'] != sid] + [s]
-        write(self.path, sources)
+        # Il pannello e i job (generazione grafi, sincronizzazioni) aggiornano le fonti in parallelo: si scrive sotto lock.
+        update_json(self.path, lambda current: [x for x in current if x['id'] != sid] + [s], [])
         return self.public()
 
     def _git(self, args, env=None):

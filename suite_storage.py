@@ -92,6 +92,33 @@ def merge_changes(base, mine, theirs):
     return copy.deepcopy(mine)
 
 
+def assign(target, source):
+    """Porta target al contenuto di source riusando dizionari e oggetti con id esistenti.
+
+    Chi tiene un riferimento (per esempio a un progetto durante un job lungo) continua a vedere i valori aggiornati e
+    le sue modifiche successive restano nelle impostazioni.
+    """
+    for key in [key for key in target if key not in source]:
+        del target[key]
+    for key, value in source.items():
+        current = target.get(key, _MISSING)
+        old, new = _by_id(current), _by_id(value)
+        if isinstance(current, dict) and isinstance(value, dict):
+            assign(current, value)
+        elif old is not None and new is not None:
+            items = []
+            for item in value:
+                existing = old.get(item['id'])
+                if existing is None:
+                    items.append(copy.deepcopy(item))
+                else:
+                    assign(existing, item)
+                    items.append(existing)
+            current[:] = items
+        else:
+            target[key] = copy.deepcopy(value)
+
+
 def _by_id(value):
     if not isinstance(value, list) or not all(isinstance(i, dict) and isinstance(i.get('id'), str) for i in value):
         return None
