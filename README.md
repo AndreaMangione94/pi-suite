@@ -116,6 +116,11 @@ e Ruff (Python, da `requirements-dev.txt`): `npm run format` lo applica,
 (`.github/workflows/test.yml`). I controlli della pubblicazione restano negli
 strumenti locali di sviluppo.
 
+Prima di aggiornare `@earendil-works/pi-coding-agent` o `pi-subagents` esegui `npm test`:
+`tests/pi-contract.test.mjs` verifica gli export, gli eventi e i percorsi interni usati dalla suite
+(raccolti per pi-subagents in `pi-bridge.mjs`) e `tests/e2e-chat.test.py` avvia una chat completa
+con un provider simulato.
+
 Prima di ogni push, controlla i file selezionati con `git diff --cached`.
 Configurazioni reali,
 dati dell'app, cache, sessioni, backup e pacchetti sono esclusi da `.gitignore`.

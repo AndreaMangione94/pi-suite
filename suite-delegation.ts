@@ -3,15 +3,15 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { Type } from '@earendil-works/pi-ai';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
-import { registerAgentViaEvents } from 'pi-subagents/agents';
-import { registerSubagentCapabilityCeiling } from 'pi-subagents/capability-ceiling';
-import { registerRequiredChildExtensions } from 'pi-subagents/required-child-extensions';
 import {
+  registerAgentViaEvents,
+  registerSubagentCapabilityCeiling,
+  registerRequiredChildExtensions,
   SUBAGENT_DELEGATION_REQUEST_EVENT as REQUEST,
   SUBAGENT_DELEGATION_RESPONSE_EVENT as RESPONSE,
   SUBAGENT_DELEGATION_UPDATE_EVENT as UPDATE,
   SUBAGENT_DELEGATION_CANCEL_EVENT as CANCEL
-} from 'pi-subagents/delegation';
+} from './pi-bridge.mjs';
 import { chatContext } from './chat-context.mjs';
 import { prompt } from './prompts.mjs';
 import { CHILD_TOOL_NAMES } from './child-tools.mjs';
