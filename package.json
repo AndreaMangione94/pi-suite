@@ -15,7 +15,9 @@
     ]
   },
   "scripts": {
-    "test": "node tests/run.mjs"
+    "test": "node tests/run.mjs",
+    "format": "prettier --write . && python -m ruff format .",
+    "format:check": "prettier --check . && python -m ruff format --check ."
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "1.0.0",
@@ -23,7 +25,8 @@
     "yaml": "2.8.3"
   },
   "devDependencies": {
-    "playwright-core": "1.62.1"
+    "playwright-core": "1.62.1",
+    "prettier": "3.6.2"
   },
   "license": "MIT"
 }

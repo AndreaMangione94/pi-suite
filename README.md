@@ -110,7 +110,9 @@ npm test
 
 `npm test` esegue il controllo sintattico TypeScript, i test Python e Node e i
 test dell'interfaccia con Microsoft Edge; `node tests/run.mjs <filtro>` ne
-esegue solo una parte. La stessa sequenza gira in GitHub Actions a ogni push
+esegue solo una parte. Il codice è formattato con Prettier (JS, TS, CSS, HTML)
+e Ruff (Python, da `requirements-dev.txt`): `npm run format` lo applica,
+`npm run format:check` lo verifica. La stessa sequenza gira in GitHub Actions a ogni push
 (`.github/workflows/test.yml`). I controlli della pubblicazione restano negli
 strumenti locali di sviluppo.
 

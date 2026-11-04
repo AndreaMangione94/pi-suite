@@ -18,7 +18,10 @@ class ProjectlessChatTests(unittest.TestCase):
         self.app = suite.Suite(Path(self.temp.name) / 'data')
 
     def test_clean_launches_have_empty_distinct_folders_and_clear_project(self):
-        with patch.dict(os.environ, {'PI_SUITE_PROJECT': 'old', 'PI_SUITE_CLEAN_WORKSPACE': 'old'}), patch('suite.subprocess.Popen') as launch:
+        with (
+            patch.dict(os.environ, {'PI_SUITE_PROJECT': 'old', 'PI_SUITE_CLEAN_WORKSPACE': 'old'}),
+            patch('suite.subprocess.Popen') as launch,
+        ):
             first = self.app.open_chat()
             second = self.app.open_chat()
         self.assertIsNone(first['project'])
@@ -35,7 +38,8 @@ class ProjectlessChatTests(unittest.TestCase):
     def test_project_and_dossier_launches_keep_their_context(self):
         project = Path(self.temp.name) / 'project'
         dossier = Path(self.temp.name) / 'dossier'
-        project.mkdir(); dossier.mkdir()
+        project.mkdir()
+        dossier.mkdir()
         self.app.settings['projects'] = [{'id': 'demo', 'path': str(project)}]
         with patch.dict(os.environ, {'PI_SUITE_CLEAN_WORKSPACE': 'old'}), patch('suite.subprocess.Popen') as launch:
             result = self.app.open_chat(project_id='demo')
@@ -55,9 +59,24 @@ class ProjectlessChatTests(unittest.TestCase):
     def test_cli_keeps_configuration_and_disables_inherited_instructions_only_for_clean_chat(self):
         folder = self.app.home / 'chats' / 'example'
         folder.mkdir(parents=True)
-        for roles in ({}, {'orchestrator': {'provider': 'local', 'model': 'test', 'effort': 'off'}, 'worker': {'provider': 'local', 'model': 'worker', 'effort': 'off'}}):
+        for roles in (
+            {},
+            {
+                'orchestrator': {'provider': 'local', 'model': 'test', 'effort': 'off'},
+                'worker': {'provider': 'local', 'model': 'worker', 'effort': 'off'},
+            },
+        ):
             self.app.settings['roles'] = roles
-            with patch.dict(os.environ, {'PI_SUITE_CLEAN_WORKSPACE': str(folder)}), patch('suite_cli.Suite', return_value=self.app), patch.object(self.app, 'validate_profiles'), patch.object(self.app, 'secret_environment', side_effect=lambda: os.environ.copy()), patch('suite_cli.sys.argv', ['pi']), patch('suite_cli.Path.cwd', return_value=folder), patch('suite_cli.subprocess.call', return_value=0) as launch, self.assertRaises(SystemExit):
+            with (
+                patch.dict(os.environ, {'PI_SUITE_CLEAN_WORKSPACE': str(folder)}),
+                patch('suite_cli.Suite', return_value=self.app),
+                patch.object(self.app, 'validate_profiles'),
+                patch.object(self.app, 'secret_environment', side_effect=lambda: os.environ.copy()),
+                patch('suite_cli.sys.argv', ['pi']),
+                patch('suite_cli.Path.cwd', return_value=folder),
+                patch('suite_cli.subprocess.call', return_value=0) as launch,
+                self.assertRaises(SystemExit),
+            ):
                 suite_cli.main()
             command = launch.call_args.args[0]
             self.assertIn('--no-context-files', command)
@@ -72,7 +91,15 @@ class ProjectlessChatTests(unittest.TestCase):
             self.assertEqual(config['worker'], roles.get('worker'))
             self.assertTrue(config['skills'])
             self.assertTrue((session / 'models.json').exists())
-        with patch.dict(os.environ, {'PI_SUITE_CLEAN_WORKSPACE': str(folder)}), patch('suite_cli.Suite', return_value=self.app), patch.object(self.app, 'validate_profiles'), patch.object(self.app, 'secret_environment', side_effect=lambda: os.environ.copy()), patch('suite_cli.sys.argv', ['pi']), patch('suite_cli.subprocess.call', return_value=0) as launch, self.assertRaises(SystemExit):
+        with (
+            patch.dict(os.environ, {'PI_SUITE_CLEAN_WORKSPACE': str(folder)}),
+            patch('suite_cli.Suite', return_value=self.app),
+            patch.object(self.app, 'validate_profiles'),
+            patch.object(self.app, 'secret_environment', side_effect=lambda: os.environ.copy()),
+            patch('suite_cli.sys.argv', ['pi']),
+            patch('suite_cli.subprocess.call', return_value=0) as launch,
+            self.assertRaises(SystemExit),
+        ):
             suite_cli.main()
         self.assertNotIn('--no-context-files', launch.call_args.args[0])
 

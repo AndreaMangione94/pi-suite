@@ -1,0 +1,9 @@
+node_modules/
+.venv/
+tests/tmp/
+.work/
+.test-suite/
+*.md
+*.json
+*.yaml
+*.yml

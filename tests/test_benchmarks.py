@@ -23,7 +23,12 @@ class MinimalCaseTests(unittest.TestCase):
 
     def run_for(self, case):
         trial = self.ledger.trial({'caseId': case['id']})
-        template = json.loads(self.ledger.case_packet(case['id'])['content'].split('Modello da compilare:')[1].split('```json\n')[1].split('```')[0])
+        template = json.loads(
+            self.ledger.case_packet(case['id'])['content']
+            .split('Modello da compilare:')[1]
+            .split('```json\n')[1]
+            .split('```')[0]
+        )
         template.update(trialId=trial['id'], architectureId=trial['architectures'][0]['id'], answer='25')
         return trial, self.ledger.run(template)
 
@@ -99,8 +104,8 @@ class MinimalCaseTests(unittest.TestCase):
         self.assertIn(packet['case']['id'], packet['content'])
         self.assertIn(payload['prompt'], packet['content'])
         reopened = Benchmarks(self.temp.name)
-        self.assertEqual(reopened.case_packet(packet['case']['id'])['content'],packet['content'])
-        self.assertIn(packet['case']['id'],{c['id'] for c in reopened.state()['tests']})
+        self.assertEqual(reopened.case_packet(packet['case']['id'])['content'], packet['content'])
+        self.assertIn(packet['case']['id'], {c['id'] for c in reopened.state()['tests']})
         saved = self.ledger.compose_case({**payload, 'saveToCatalog': True})
         self.assertTrue(saved['savedToCatalog'])
         self.assertEqual(len(self.ledger.all('case')), count + 1)
@@ -135,63 +140,77 @@ class MinimalCaseTests(unittest.TestCase):
             self.ledger.trial({'caseId': 'altro', 'caseSnapshot': case})
 
     def configuration_run(self, case, config, tokens=100):
-        context = self.ledger.execution_context({'caseId':case['id'], 'caseSnapshot':case, 'architectureId':config['id']})
-        report = json.loads(self.ledger._case_packet(case)['content'].split('Modello da compilare:')[1].split('```json\n')[1].split('```')[0])
+        context = self.ledger.execution_context(
+            {'caseId': case['id'], 'caseSnapshot': case, 'architectureId': config['id']}
+        )
+        report = json.loads(
+            self.ledger._case_packet(case)['content']
+            .split('Modello da compilare:')[1]
+            .split('```json\n')[1]
+            .split('```')[0]
+        )
         report.update(trialId=context['id'], architectureId=config['id'], answer='25')
-        report['dimensions']['tokens'].update(status='measured', value=tokens, method='counter-v1', evidence='Trace usage', note='Intera esecuzione')
+        report['dimensions']['tokens'].update(
+            status='measured', value=tokens, method='counter-v1', evidence='Trace usage', note='Intera esecuzione'
+        )
         return context, self.ledger.run(report)
 
     def test_configuration_test_relation_supports_many_configurations_and_many_tests(self):
         cases = [self.create(title='Prima prova'), self.create(title='Seconda prova')]
-        configs = [self.ledger.architecture({'name':f'Configurazione {n}'}) for n in range(3)]
+        configs = [self.ledger.architecture({'name': f'Configurazione {n}'}) for n in range(3)]
         runs = []
         for case in cases:
             for index, config in enumerate(configs):
-                context, run = self.configuration_run(case, config, index+100)
+                context, run = self.configuration_run(case, config, index + 100)
                 self.assertEqual(context['format'], 'configuration-test-v1')
                 self.assertEqual(len(context['architectures']), 1)
-                self.assertEqual(self.ledger.execution_context({'caseId':case['id'], 'architectureId':config['id']})['id'], context['id'])
+                self.assertEqual(
+                    self.ledger.execution_context({'caseId': case['id'], 'architectureId': config['id']})['id'],
+                    context['id'],
+                )
                 runs.append(run)
         state = self.ledger.state()
         self.assertEqual(len(state['configurations']), 3)
         for config in configs:
-            self.assertEqual(len({r['caseId'] for r in state['runs'] if r['architectureId']==config['id']}), 2)
-        result = self.ledger.compare_many({'caseId':cases[0]['id'], 'runIds':[r['id'] for r in runs[:3]]})
+            self.assertEqual(len({r['caseId'] for r in state['runs'] if r['architectureId'] == config['id']}), 2)
+        result = self.ledger.compare_many({'caseId': cases[0]['id'], 'runIds': [r['id'] for r in runs[:3]]})
         self.assertEqual(len(result['runs']), 3)
-        tokens = next(row for row in result['rows'] if row['id']=='tokens')
+        tokens = next(row for row in result['rows'] if row['id'] == 'tokens')
         self.assertTrue(tokens['comparable'])
-        self.assertEqual([m['value'] for m in tokens['values']], [100,101,102])
+        self.assertEqual([m['value'] for m in tokens['values']], [100, 101, 102])
         with self.assertRaises(ValueError):
-            self.ledger.compare_many({'caseId':cases[0]['id'], 'runIds':[runs[0]['id'], runs[4]['id']]})
+            self.ledger.compare_many({'caseId': cases[0]['id'], 'runIds': [runs[0]['id'], runs[4]['id']]})
         _, revision = self.configuration_run(cases[0], configs[0], 999)
         with self.assertRaises(ValueError):
-            self.ledger.compare_many({'caseId':cases[0]['id'], 'runIds':[runs[0]['id'], revision['id']]})
+            self.ledger.compare_many({'caseId': cases[0]['id'], 'runIds': [runs[0]['id'], revision['id']]})
 
     def test_saved_multi_comparison_freezes_selected_runs_and_reports_incomparable_values(self):
         case = self.create()
-        configs = [self.ledger.architecture({'name':f'Modello {i}'}) for i in range(3)]
-        runs = [self.configuration_run(case, config, i+10)[1] for i, config in enumerate(configs)]
-        changed = copy.deepcopy(runs[-1]);changed.pop('id');changed.pop('savedAt')
+        configs = [self.ledger.architecture({'name': f'Modello {i}'}) for i in range(3)]
+        runs = [self.configuration_run(case, config, i + 10)[1] for i, config in enumerate(configs)]
+        changed = copy.deepcopy(runs[-1])
+        changed.pop('id')
+        changed.pop('savedAt')
         changed['dimensions']['tokens']['method'] = 'counter-v2'
         runs[-1] = self.ledger.run(changed)
-        saved = self.ledger.save_comparison({'caseId':case['id'], 'runIds':[r['id'] for r in runs]})
+        saved = self.ledger.save_comparison({'caseId': case['id'], 'runIds': [r['id'] for r in runs]})
         self.configuration_run(case, configs[0], 777)
         result = self.ledger.saved_comparison(saved['id'])
         self.assertEqual([r['id'] for r in result['runs']], [r['id'] for r in runs])
-        self.assertFalse(next(row for row in result['rows'] if row['id']=='tokens')['comparable'])
-        self.assertEqual(next(row for row in result['rows'] if row['id']=='tokens')['values'][0]['value'],10)
-        self.assertEqual(self.ledger.state()['comparisons'][0]['format'],'multi-configuration-v1')
+        self.assertFalse(next(row for row in result['rows'] if row['id'] == 'tokens')['comparable'])
+        self.assertEqual(next(row for row in result['rows'] if row['id'] == 'tokens')['values'][0]['value'], 10)
+        self.assertEqual(self.ledger.state()['comparisons'][0]['format'], 'multi-configuration-v1')
 
     def test_configuration_edits_keep_historical_result_snapshots(self):
         case = self.create()
-        config = self.ledger.architecture({'name':'Configurazione', 'model':'prima'})
+        config = self.ledger.architecture({'name': 'Configurazione', 'model': 'prima'})
         first_context, run = self.configuration_run(case, config)
-        config = self.ledger.architecture({**config, 'model':'seconda'})
+        config = self.ledger.architecture({**config, 'model': 'seconda'})
         second_context, second_run = self.configuration_run(case, config)
-        self.assertNotEqual(first_context['id'],second_context['id'])
-        self.assertEqual(self.ledger.get('run',run['id'])['architecture']['model'],'prima')
-        self.assertEqual(second_run['architecture']['model'],'seconda')
-        self.assertTrue(self.ledger.judge_export_status(second_run,second_context)['available'])
+        self.assertNotEqual(first_context['id'], second_context['id'])
+        self.assertEqual(self.ledger.get('run', run['id'])['architecture']['model'], 'prima')
+        self.assertEqual(second_run['architecture']['model'], 'seconda')
+        self.assertTrue(self.ledger.judge_export_status(second_run, second_context)['available'])
 
     def test_legacy_trials_remain_visible_without_rewriting_records(self):
         case = self.create()
@@ -199,18 +218,30 @@ class MinimalCaseTests(unittest.TestCase):
         before = copy.deepcopy(trial)
         state = self.ledger.state()
         self.assertIn(run['architectureId'], {c['id'] for c in state['configurations']})
-        self.assertEqual(next(r for r in state['runs'] if r['id']==run['id'])['caseId'],case['id'])
-        self.assertEqual(self.ledger.get('trial',trial['id']),before)
+        self.assertEqual(next(r for r in state['runs'] if r['id'] == run['id'])['caseId'], case['id'])
+        self.assertEqual(self.ledger.get('trial', trial['id']), before)
 
 
 class FilePipelineTests(unittest.TestCase):
     setUp = MinimalCaseTests.setUp
     create = MinimalCaseTests.create
+
     def file_upload(self, case, config, report, raw=None, filename='risultato.json'):
         raw = raw if raw is not None else json.dumps(report, ensure_ascii=False, indent=2).encode('utf-8')
-        importer = self.ledger.import_evaluation_file if report.get('reportType')=='pi-judge-v1' else self.ledger.import_result_file
-        return importer({'caseId':case['id'], 'caseSnapshot':case,
-            'architectureId':config['id'], 'filename':filename, 'base64':base64.b64encode(raw).decode()})
+        importer = (
+            self.ledger.import_evaluation_file
+            if report.get('reportType') == 'pi-judge-v1'
+            else self.ledger.import_result_file
+        )
+        return importer(
+            {
+                'caseId': case['id'],
+                'caseSnapshot': case,
+                'architectureId': config['id'],
+                'filename': filename,
+                'base64': base64.b64encode(raw).decode(),
+            }
+        )
 
     def initial_file(self, case, answer='25'):
         content = self.ledger._case_packet(case)['content']
@@ -220,90 +251,112 @@ class FilePipelineTests(unittest.TestCase):
 
     def evaluated_file(self, source):
         _, report = self.ledger.evaluation_file_template(source['id'])
-        report['evaluator'] = {'model':'Giudice di test', 'notes':'Test'}
+        report['evaluator'] = {'model': 'Giudice di test', 'notes': 'Test'}
         report['notes'] = 'Risposta valutata rispetto al compito.'
         for key in report['dimensions']:
             report['dimensions'][key]['note'] = 'Evidenze insufficienti per questa dimensione.'
-        report['dimensions']['relevance'].update(status='measured', value=0.75,
-            evidence='Risposta originale, primo campo', note='Tre requisiti su quattro.')
+        report['dimensions']['relevance'].update(
+            status='measured', value=0.75, evidence='Risposta originale, primo campo', note='Tre requisiti su quattro.'
+        )
         return report
 
     def test_complete_file_roundtrip_preserves_original_and_applies_deterministic_checks(self):
-        case = next(c for c in self.ledger.all('case') if c['key']=='math-001')
-        config = self.ledger.architecture({'name':'Configurazione file'})
+        case = next(c for c in self.ledger.all('case') if c['key'] == 'math-001')
+        config = self.ledger.architecture({'name': 'Configurazione file'})
         report = self.initial_file(case)
-        raw = b'\xef\xbb\xbf' + json.dumps(report, ensure_ascii=False, indent=4).replace('\n','\r\n').encode('utf-8')
+        raw = b'\xef\xbb\xbf' + json.dumps(report, ensure_ascii=False, indent=4).replace('\n', '\r\n').encode('utf-8')
         first = self.file_upload(case, config, report, raw=raw)
-        self.assertEqual(base64.b64decode(first['sourceFile']['base64']),raw)
-        self.assertTrue(all(first['dimensions'][key]['value']==1 for key in ('task_success','correctness','constraints')))
+        self.assertEqual(base64.b64decode(first['sourceFile']['base64']), raw)
+        self.assertTrue(
+            all(first['dimensions'][key]['value'] == 1 for key in ('task_success', 'correctness', 'constraints'))
+        )
         request = self.ledger.evaluation_request(first['id'])
-        self.assertIn(raw.decode('utf-8'),request['content'])
-        self.assertIn('un solo file JSON',request['content'])
-        self.assertNotIn('tre file',request['content'])
-        self.assertIn('Misure e controlli già registrati',request['content'])
-        self.assertIn('"correctness": {',request['content'])
+        self.assertIn(raw.decode('utf-8'), request['content'])
+        self.assertIn('un solo file JSON', request['content'])
+        self.assertNotIn('tre file', request['content'])
+        self.assertIn('Misure e controlli già registrati', request['content'])
+        self.assertIn('"correctness": {', request['content'])
         evaluated = self.evaluated_file(first)
-        self.assertNotIn('answer',evaluated)
-        self.assertNotIn('correctness',evaluated['dimensions'])
-        self.assertNotIn('tokens',evaluated['dimensions'])
-        second = self.file_upload(case,config,evaluated,filename='valutato.json')
-        self.assertEqual(second['sourceRunId'],first['id'])
-        self.assertEqual(second['answer'],first['answer'])
-        self.assertEqual(second['dimensions']['relevance']['value'],0.75)
-        self.assertEqual(second['sourceFile'],first['sourceFile'])
-        self.assertEqual(json.loads(base64.b64decode(second['evaluationFile']['base64'])),evaluated)
-        for key in ('task_success','correctness','constraints','tokens','performance','cost'):
-            self.assertEqual(second['dimensions'][key],first['dimensions'][key])
+        self.assertNotIn('answer', evaluated)
+        self.assertNotIn('correctness', evaluated['dimensions'])
+        self.assertNotIn('tokens', evaluated['dimensions'])
+        second = self.file_upload(case, config, evaluated, filename='valutato.json')
+        self.assertEqual(second['sourceRunId'], first['id'])
+        self.assertEqual(second['answer'], first['answer'])
+        self.assertEqual(second['dimensions']['relevance']['value'], 0.75)
+        self.assertEqual(second['sourceFile'], first['sourceFile'])
+        self.assertEqual(json.loads(base64.b64decode(second['evaluationFile']['base64'])), evaluated)
+        for key in ('task_success', 'correctness', 'constraints', 'tokens', 'performance', 'cost'):
+            self.assertEqual(second['dimensions'][key], first['dimensions'][key])
 
     def test_rejects_manual_text_incomplete_reports_and_wrong_associations_without_saving(self):
         case = self.create()
-        config = self.ledger.architecture({'name':'File only'})
+        config = self.ledger.architecture({'name': 'File only'})
         report = self.initial_file(case)
-        before = (len(self.ledger.all('trial')),len(self.ledger.all('run')))
-        for changed in ({**report, 'caseVersion':'errata'}, {**report, 'dimensions':{}}, {**report, 'reportType':'altro'}):
+        before = (len(self.ledger.all('trial')), len(self.ledger.all('run')))
+        for changed in (
+            {**report, 'caseVersion': 'errata'},
+            {**report, 'dimensions': {}},
+            {**report, 'reportType': 'altro'},
+        ):
             with self.assertRaises(ValueError):
-                self.file_upload(case,config,changed)
+                self.file_upload(case, config, changed)
         with self.assertRaises(ValueError):
-            self.file_upload(case,config,report,filename='messaggio.md')
+            self.file_upload(case, config, report, filename='messaggio.md')
         with self.assertRaises(ValueError):
-            self.file_upload(case,config,report,raw=b'```json\n{}\n```')
+            self.file_upload(case, config, report, raw=b'```json\n{}\n```')
         with self.assertRaises(ValueError):
-            self.file_upload(case,config,report,raw=b'{"answer":"a", "answer":"b"}')
-        self.assertEqual((len(self.ledger.all('trial')),len(self.ledger.all('run'))),before)
+            self.file_upload(case, config, report, raw=b'{"answer":"a", "answer":"b"}')
+        self.assertEqual((len(self.ledger.all('trial')), len(self.ledger.all('run'))), before)
 
     def test_evaluated_file_cannot_rewrite_answer_metrics_or_source_hash(self):
-        case = next(c for c in self.ledger.all('case') if c['key']=='math-001')
-        config = self.ledger.architecture({'name':'Protetta'})
-        first = self.file_upload(case,config,self.initial_file(case))
+        case = next(c for c in self.ledger.all('case') if c['key'] == 'math-001')
+        config = self.ledger.architecture({'name': 'Protetta'})
+        first = self.file_upload(case, config, self.initial_file(case))
         evaluated = self.evaluated_file(first)
         changes = []
-        wrong = copy.deepcopy(evaluated);wrong['answer']='26';changes.append(wrong)
-        wrong = copy.deepcopy(evaluated);wrong['dimensions']['correctness']=first['dimensions']['correctness'];changes.append(wrong)
-        wrong = copy.deepcopy(evaluated);wrong['dimensions']['tokens']=first['dimensions']['tokens'];changes.append(wrong)
-        wrong = copy.deepcopy(evaluated);wrong['answerSha256']='altro';changes.append(wrong)
+        wrong = copy.deepcopy(evaluated)
+        wrong['answer'] = '26'
+        changes.append(wrong)
+        wrong = copy.deepcopy(evaluated)
+        wrong['dimensions']['correctness'] = first['dimensions']['correctness']
+        changes.append(wrong)
+        wrong = copy.deepcopy(evaluated)
+        wrong['dimensions']['tokens'] = first['dimensions']['tokens']
+        changes.append(wrong)
+        wrong = copy.deepcopy(evaluated)
+        wrong['answerSha256'] = 'altro'
+        changes.append(wrong)
         for changed in changes:
             with self.assertRaises(ValueError):
-                self.file_upload(case,config,changed)
-        other = self.ledger.architecture({'name':'Altra configurazione'})
+                self.file_upload(case, config, changed)
+        other = self.ledger.architecture({'name': 'Altra configurazione'})
         with self.assertRaises(ValueError):
-            self.file_upload(case,other,evaluated)
-        self.assertEqual(len(self.ledger.all('run')),1)
-        data={'caseId':case['id'],'caseSnapshot':case,'architectureId':config['id'],'filename':'giudizio.json','base64':base64.b64encode(json.dumps(evaluated).encode()).decode()}
+            self.file_upload(case, other, evaluated)
+        self.assertEqual(len(self.ledger.all('run')), 1)
+        data = {
+            'caseId': case['id'],
+            'caseSnapshot': case,
+            'architectureId': config['id'],
+            'filename': 'giudizio.json',
+            'base64': base64.b64encode(json.dumps(evaluated).encode()).decode(),
+        }
         with self.assertRaises(ValueError):
             self.ledger.import_result_file(data)
-        data['base64']=base64.b64encode(json.dumps(self.initial_file(case)).encode()).decode()
+        data['base64'] = base64.b64encode(json.dumps(self.initial_file(case)).encode()).decode()
         with self.assertRaises(ValueError):
             self.ledger.import_evaluation_file(data)
 
     def test_custom_case_leaves_quality_to_judge_and_failure_report_still_exports(self):
         case = self.create()
-        config = self.ledger.architecture({'name':'Personalizzata'})
-        source = self.file_upload(case,config,self.initial_file(case))
-        for key in ('task_success','correctness','constraints'):
-            self.assertEqual(source['dimensions'][key]['status'],'unavailable')
-        self.assertIn('task_success',self.ledger.evaluation_file_template(source['id'])[1]['dimensions'])
-        failed = self.initial_file(case,answer='');failed.update(outcome='failed',notes='Risorsa non accessibile.')
-        result = self.file_upload(case,config,failed)
+        config = self.ledger.architecture({'name': 'Personalizzata'})
+        source = self.file_upload(case, config, self.initial_file(case))
+        for key in ('task_success', 'correctness', 'constraints'):
+            self.assertEqual(source['dimensions'][key]['status'], 'unavailable')
+        self.assertIn('task_success', self.ledger.evaluation_file_template(source['id'])[1]['dimensions'])
+        failed = self.initial_file(case, answer='')
+        failed.update(outcome='failed', notes='Risorsa non accessibile.')
+        result = self.file_upload(case, config, failed)
         self.assertTrue(self.ledger.evaluation_request(result['id'])['content'])
 
 

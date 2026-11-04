@@ -1,4 +1,5 @@
 """Pi Suite: authenticated loopback control panel and Pi chat launcher."""
+
 from __future__ import annotations
 import argparse
 import hmac
@@ -29,14 +30,27 @@ from suite_evidence import ensure_index, local_path
 from suite_folder_picker import choose_folder
 
 ROOT = Path(__file__).resolve().parent
-APIS = ('openai-completions','openai-responses','anthropic-messages','google-generative-ai')
-OPERATIONS = ('generate-graph','graph','probe','sync-source','document-graphs','prepare-documentation','auto-documentation','index-sources','register-documentation')
+APIS = ('openai-completions', 'openai-responses', 'anthropic-messages', 'google-generative-ai')
+OPERATIONS = (
+    'generate-graph',
+    'graph',
+    'probe',
+    'sync-source',
+    'document-graphs',
+    'prepare-documentation',
+    'auto-documentation',
+    'index-sources',
+    'register-documentation',
+)
+
 
 def read_json(path):
     return json.loads(Path(path).read_text(encoding='utf-8-sig'))
 
+
 def save_json(path, value):
-    path = Path(path); path.parent.mkdir(parents=True, exist_ok=True)
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name('.' + uuid.uuid4().hex[:8] + '.tmp')
     temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding='utf-8')
     for attempt in range(5):
@@ -44,886 +58,1519 @@ def save_json(path, value):
             temporary.replace(path)
             break
         except PermissionError:
-            if attempt == 4: raise
-            time.sleep(.05 * (attempt + 1))
+            if attempt == 4:
+                raise
+            time.sleep(0.05 * (attempt + 1))
+
 
 def checked_relative(value):
     path = Path(value)
-    if not value or path.anchor or ':' in value or '\\' in value or any(part in ('.', '..') or part.startswith('.') for part in path.parts):
+    if (
+        not value
+        or path.anchor
+        or ':' in value
+        or '\\' in value
+        or any(part in ('.', '..') or part.startswith('.') for part in path.parts)
+    ):
         raise ValueError('Percorso fuori perimetro: ' + value)
     return path
 
-protect=byok.protect
+
+protect = byok.protect
+
 
 def key_env(provider):
-    return 'PI_SUITE_KEY_'+re.sub('[^A-Z0-9]','_',provider.upper())
+    return 'PI_SUITE_KEY_' + re.sub('[^A-Z0-9]', '_', provider.upper())
+
 
 def checked_id(value):
-    if not isinstance(value,str) or not re.fullmatch('[a-zA-Z0-9_-]{1,100}',value):
+    if not isinstance(value, str) or not re.fullmatch('[a-zA-Z0-9_-]{1,100}', value):
         raise ValueError('Identificatore non valido')
     return value
 
+
 def project_name(value):
-    if not isinstance(value,str): raise ValueError('Inserisci un nome progetto valido.')
-    name=value.strip()
-    if not name or len(name)>150 or name in ('.','..') or name.endswith('.') or re.search(r'[<>:"/\\|?*\x00-\x1f]',name):
+    if not isinstance(value, str):
+        raise ValueError('Inserisci un nome progetto valido.')
+    name = value.strip()
+    if (
+        not name
+        or len(name) > 150
+        or name in ('.', '..')
+        or name.endswith('.')
+        or re.search(r'[<>:"/\\|?*\x00-\x1f]', name)
+    ):
         raise ValueError('Inserisci un nome progetto senza caratteri riservati ai percorsi.')
-    if re.fullmatch(r'(CON|PRN|AUX|NUL|COM[1-9¹²³]|LPT[1-9¹²³])(?:\..*)?',name,re.I):
+    if re.fullmatch(r'(CON|PRN|AUX|NUL|COM[1-9¹²³]|LPT[1-9¹²³])(?:\..*)?', name, re.I):
         raise ValueError('Questo nome è riservato da Windows.')
     return name
 
+
 def skills(extra=None):
-    result=[]
-    paths=list((ROOT/'skills').glob('*/SKILL.md'))
-    if extra: paths+=list(Path(extra).glob('*/SKILL.md'))
+    result = []
+    paths = list((ROOT / 'skills').glob('*/SKILL.md'))
+    if extra:
+        paths += list(Path(extra).glob('*/SKILL.md'))
     for p in sorted(paths):
-        if p.parent.name in SKILL_RENAMES:continue
-        content=p.read_text(encoding='utf-8')
-        description=re.search(r'^description: (.+)$',content,re.M)
-        result.append({'name':p.parent.name,'description':description.group(1) if description else p.parent.name,'content':content})
-    upstream=ROOT/'node_modules'/'pi-subagents'/'skills'/'pi-subagents'/'SKILL.md'
+        if p.parent.name in SKILL_RENAMES:
+            continue
+        content = p.read_text(encoding='utf-8')
+        description = re.search(r'^description: (.+)$', content, re.M)
+        result.append(
+            {
+                'name': p.parent.name,
+                'description': description.group(1) if description else p.parent.name,
+                'content': content,
+            }
+        )
+    upstream = ROOT / 'node_modules' / 'pi-subagents' / 'skills' / 'pi-subagents' / 'SKILL.md'
     if upstream.exists():
-        result.append({'name':'pi-subagents','description':'Guida ufficiale alla delega dalla chat Pi; la suite applica gli incarichi Markdown tramite delegate_tasks.',
-                       'content':upstream.read_text(encoding='utf-8'),'parentOnly':True})
+        result.append(
+            {
+                'name': 'pi-subagents',
+                'description': 'Guida ufficiale alla delega dalla chat Pi; la suite applica gli incarichi Markdown tramite delegate_tasks.',
+                'content': upstream.read_text(encoding='utf-8'),
+                'parentOnly': True,
+            }
+        )
     return result
 
+
 class Suite:
-    def __init__(self,home):
-        self.home=Path(home).resolve(); self.home.mkdir(parents=True,exist_ok=True)
-        self.cache=self.home/'graphs'/'cache.sqlite'
-        self.settings_path=self.home/'settings.json'
-        self.sources=Sources(self.home,protect)
-        self.benchmarks=Benchmarks(self.home)
-        self.guard=threading.RLock(); self.picker_guard=threading.Lock(); self.busy=False; self.catalog=None
-        self.job={'state':'idle'}
-        self.settings=read_json(self.settings_path) if self.settings_path.exists() else {
-            'providers':[],'roles':{},'enabledSkills':[s['name'] for s in skills()],
-            'maxCalls':24,'maxParallelWorkers':2,'delegationPolicy':'auto','projects':[]}
-        migrate_home(self.home,self.settings,save_json)
+    def __init__(self, home):
+        self.home = Path(home).resolve()
+        self.home.mkdir(parents=True, exist_ok=True)
+        self.cache = self.home / 'graphs' / 'cache.sqlite'
+        self.settings_path = self.home / 'settings.json'
+        self.sources = Sources(self.home, protect)
+        self.benchmarks = Benchmarks(self.home)
+        self.guard = threading.RLock()
+        self.picker_guard = threading.Lock()
+        self.busy = False
+        self.catalog = None
+        self.job = {'state': 'idle'}
+        self.settings = (
+            read_json(self.settings_path)
+            if self.settings_path.exists()
+            else {
+                'providers': [],
+                'roles': {},
+                'enabledSkills': [s['name'] for s in skills()],
+                'maxCalls': 24,
+                'maxParallelWorkers': 2,
+                'delegationPolicy': 'auto',
+                'projects': [],
+            }
+        )
+        migrate_home(self.home, self.settings, save_json)
         # Add the new bundled parent skill once, preserving later user opt-outs.
-        if self.settings.get('suiteSchema',0)<2:
+        if self.settings.get('suiteSchema', 0) < 2:
             if 'pi-subagents' not in self.settings['enabledSkills']:
                 self.settings['enabledSkills'].append('pi-subagents')
-            self.settings['suiteSchema']=2
-        previous=self.home/'last-job.json'
-        if self.settings.get('suiteSchema',0)<3:
-            if 'documentazione-tecnico-funzionale' not in self.settings['enabledSkills']:self.settings['enabledSkills'].append('documentazione-tecnico-funzionale')
-            self.settings['suiteSchema']=3
-        self.byok=byok.Store(self.home,protect)
+            self.settings['suiteSchema'] = 2
+        previous = self.home / 'last-job.json'
+        if self.settings.get('suiteSchema', 0) < 3:
+            if 'documentazione-tecnico-funzionale' not in self.settings['enabledSkills']:
+                self.settings['enabledSkills'].append('documentazione-tecnico-funzionale')
+            self.settings['suiteSchema'] = 3
+        self.byok = byok.Store(self.home, protect)
         self.settings.update(self.byok.load_or_migrate(self.settings))
-        save_json(self.settings_path,self.settings)
-        self.builtin_catalog=None;self.credential_notices=[]
+        save_json(self.settings_path, self.settings)
+        self.builtin_catalog = None
+        self.credential_notices = []
         if previous.exists():
-            previous_job=read_json(previous)
-            if previous_job.get('operation') in OPERATIONS: self.job=previous_job
-            if self.job.get('state')=='running':
-                self.job.update(state='interrupted',error='Il pannello è stato riavviato. Controlla il risultato prima di ripetere l’operazione.')
+            previous_job = read_json(previous)
+            if previous_job.get('operation') in OPERATIONS:
+                self.job = previous_job
+            if self.job.get('state') == 'running':
+                self.job.update(
+                    state='interrupted',
+                    error='Il pannello è stato riavviato. Controlla il risultato prima di ripetere l’operazione.',
+                )
 
     def public_settings(self):
         # Chat tools publish workspace selections from a separate Python process.
         if self.settings_path.exists():
-            disk={p['id']:p for p in read_json(self.settings_path).get('projects',[])}
+            disk = {p['id']: p for p in read_json(self.settings_path).get('projects', [])}
             for project in self.settings['projects']:
-                if project['id'] in disk:project['workspace']=disk[project['id']].get('workspace',{})
-        result=json.loads(json.dumps(self.settings))
+                if project['id'] in disk:
+                    project['workspace'] = disk[project['id']].get('workspace', {})
+        result = json.loads(json.dumps(self.settings))
         for p in result['providers']:
-            p.pop('encryptedKey',None)
-            p['hasKey']=self.byok.has_key(p)
-        result['byokRevision']=self.byok.revision()
-        result['dataDirectory']=str(self.home)
-        result['modelChecks']=read_json(self.home/'model-checks.json') if (self.home/'model-checks.json').exists() else {}
+            p.pop('encryptedKey', None)
+            p['hasKey'] = self.byok.has_key(p)
+        result['byokRevision'] = self.byok.revision()
+        result['dataDirectory'] = str(self.home)
+        result['modelChecks'] = (
+            read_json(self.home / 'model-checks.json') if (self.home / 'model-checks.json').exists() else {}
+        )
         for check in result['modelChecks'].values():
-            try:check['current']=check['fingerprint']==self.check_fingerprint(check['provider'],check['model'])
-            except (StopIteration,KeyError):check['current']=False
-        result['skills']=[{k:v for k,v in s.items() if k!='content'} for s in skills(self.home/'skills')]
+            try:
+                check['current'] = check['fingerprint'] == self.check_fingerprint(check['provider'], check['model'])
+            except (StopIteration, KeyError):
+                check['current'] = False
+        result['skills'] = [{k: v for k, v in s.items() if k != 'content'} for s in skills(self.home / 'skills')]
         return result
 
-    def import_skill(self,content):
+    def import_skill(self, content):
         with self.guard:
-            if self.busy: raise ValueError('Attendi la fine del task prima di importare una skill.')
-            if not isinstance(content,str) or len(content)>50000 or not content.startswith('---'):
+            if self.busy:
+                raise ValueError('Attendi la fine del task prima di importare una skill.')
+            if not isinstance(content, str) or len(content) > 50000 or not content.startswith('---'):
                 raise ValueError('Carica un SKILL.md con frontmatter name e description, massimo 50.000 caratteri.')
-            name=re.search(r'^name:\s*([a-z][a-z0-9-]{0,63})\s*$',content,re.M)
-            description=re.search(r'^description:\s*(.+)$',content,re.M)
-            if not name or not description: raise ValueError('La skill richiede name (minuscolo e trattini) e description su una riga.')
-            name=name.group(1)
-            if any(s['name']==name for s in skills(self.home/'skills')): raise ValueError('Una skill con questo nome è già presente.')
-            target=self.home/'skills'/name/'SKILL.md'; target.parent.mkdir(parents=True)
-            target.write_text(content,encoding='utf-8')
-            self.settings['enabledSkills'].append(name);save_json(self.settings_path,self.settings)
+            name = re.search(r'^name:\s*([a-z][a-z0-9-]{0,63})\s*$', content, re.M)
+            description = re.search(r'^description:\s*(.+)$', content, re.M)
+            if not name or not description:
+                raise ValueError('La skill richiede name (minuscolo e trattini) e description su una riga.')
+            name = name.group(1)
+            if any(s['name'] == name for s in skills(self.home / 'skills')):
+                raise ValueError('Una skill con questo nome è già presente.')
+            target = self.home / 'skills' / name / 'SKILL.md'
+            target.parent.mkdir(parents=True)
+            target.write_text(content, encoding='utf-8')
+            self.settings['enabledSkills'].append(name)
+            save_json(self.settings_path, self.settings)
             return self.public_settings()
 
-    def secret_environment(self,settings=None):
-        env=os.environ.copy()
-        current=settings or self.settings
-        used={p['provider'] for p in current.get('roles',{}).values()}
+    def secret_environment(self, settings=None):
+        env = os.environ.copy()
+        current = settings or self.settings
+        used = {p['provider'] for p in current.get('roles', {}).values()}
         # Remove known provider variables before passing a minimal session credential set.
         for name in list(env):
-            if name.startswith('PI_SUITE_KEY_') or name.endswith(('_API_KEY','_API_TOKEN')):
-                env.pop(name,None)
-        origins={};self.credential_notices=[]
+            if name.startswith('PI_SUITE_KEY_') or name.endswith(('_API_KEY', '_API_TOKEN')):
+                env.pop(name, None)
+        origins = {}
+        self.credential_notices = []
         for p in current['providers']:
-            if used and p['id'] not in used:continue
-            allowed=self.credential_origins(p['id']) if p['auth']['type']=='secret' and self.byok.has_key(p) else []
+            if used and p['id'] not in used:
+                continue
+            allowed = self.credential_origins(p['id']) if p['auth']['type'] == 'secret' and self.byok.has_key(p) else []
             if allowed:
                 # L'ambiente arriva anche ai comandi shell del modello: Pi riceve un segnaposto e
                 # byok-network.mjs inserisce la chiave solo nelle richieste verso l'origine della connessione.
-                env[key_env(p['id'])]=byok.CREDENTIAL_PREFIX+key_env(p['id']);origins[key_env(p['id'])]=allowed
-            elif self.byok.has_key(p) or p['auth']['type']=='none':
-                if p['auth']['type']=='secret':self.credential_notices.append('Connessione '+p['id']+': endpoint non determinabile dal catalogo, la chiave resta nell’ambiente della chat. Indica un baseUrl per proteggerla.')
-                env[key_env(p['id'])]=self.byok.secret(p)
-            elif used:raise ValueError('Credenziale assente per la connessione '+p['id'])
-        python=Path(sys.executable).with_name('python.exe') if os.name=='nt' else Path(sys.executable)
-        env.update(PI_OFFLINE='1',PI_TELEMETRY='0',PI_SUITE_HOME=str(self.home),PI_SUITE_CREDENTIAL_ORIGINS=json.dumps(origins))
-        env.setdefault('PI_SUITE_PYTHON',str(python))
-        env['NODE_OPTIONS']=(env.get('NODE_OPTIONS','')+' --import='+(ROOT/'byok-network.mjs').as_uri()).strip()
+                env[key_env(p['id'])] = byok.CREDENTIAL_PREFIX + key_env(p['id'])
+                origins[key_env(p['id'])] = allowed
+            elif self.byok.has_key(p) or p['auth']['type'] == 'none':
+                if p['auth']['type'] == 'secret':
+                    self.credential_notices.append(
+                        'Connessione '
+                        + p['id']
+                        + ': endpoint non determinabile dal catalogo, la chiave resta nell’ambiente della chat. Indica un baseUrl per proteggerla.'
+                    )
+                env[key_env(p['id'])] = self.byok.secret(p)
+            elif used:
+                raise ValueError('Credenziale assente per la connessione ' + p['id'])
+        python = Path(sys.executable).with_name('python.exe') if os.name == 'nt' else Path(sys.executable)
+        env.update(
+            PI_OFFLINE='1',
+            PI_TELEMETRY='0',
+            PI_SUITE_HOME=str(self.home),
+            PI_SUITE_CREDENTIAL_ORIGINS=json.dumps(origins),
+        )
+        env.setdefault('PI_SUITE_PYTHON', str(python))
+        env['NODE_OPTIONS'] = (
+            env.get('NODE_OPTIONS', '') + ' --import=' + (ROOT / 'byok-network.mjs').as_uri()
+        ).strip()
         return env
 
-    def credential_origins(self,provider):
+    def credential_origins(self, provider):
         # Origini ricavate dal catalogo Pi, che conosce anche gli endpoint dei provider nativi.
-        try:catalog=self.models()
-        except (ValueError,OSError,subprocess.SubprocessError):return []
-        return sorted({byok.url_origin(m['baseUrl']) for m in catalog if m['provider']==provider and m.get('baseUrl')})
+        try:
+            catalog = self.models()
+        except (ValueError, OSError, subprocess.SubprocessError):
+            return []
+        return sorted(
+            {byok.url_origin(m['baseUrl']) for m in catalog if m['provider'] == provider and m.get('baseUrl')}
+        )
 
-    def redact(self,text):
+    def redact(self, text):
         for source in self.sources.connections():
             if source.get('secret'):
-                value=protect(source['secret'],True)
-                if value:text=text.replace(value,'[REDACTED]')
+                value = protect(source['secret'], True)
+                if value:
+                    text = text.replace(value, '[REDACTED]')
         for p in self.settings['providers']:
-            try:value=self.byok.secret(p) if self.byok.has_key(p) else None
-            except (OSError,ValueError):value=None
-            if value: text=text.replace(value,'[REDACTED]')
+            try:
+                value = self.byok.secret(p) if self.byok.has_key(p) else None
+            except (OSError, ValueError):
+                value = None
+            if value:
+                text = text.replace(value, '[REDACTED]')
         return text
 
     def _builtin_models(self):
         if self.builtin_catalog is None:
-            directory=self.home/'catalog';directory.mkdir(exist_ok=True)
-            save_json(directory/'builtin.json',{'list':True,'builtin':True,'agentDir':str(directory)})
-            r=subprocess.run(['node',str(ROOT/'adapter.mjs'),str(directory/'builtin.json')],cwd=ROOT,capture_output=True,text=True,encoding='utf-8',timeout=60)
-            if r.returncode:raise ValueError('Catalogo Pi non disponibile')
-            self.builtin_catalog=json.loads(r.stdout)
+            directory = self.home / 'catalog'
+            directory.mkdir(exist_ok=True)
+            save_json(directory / 'builtin.json', {'list': True, 'builtin': True, 'agentDir': str(directory)})
+            r = subprocess.run(
+                ['node', str(ROOT / 'adapter.mjs'), str(directory / 'builtin.json')],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+                encoding='utf-8',
+                timeout=60,
+            )
+            if r.returncode:
+                raise ValueError('Catalogo Pi non disponibile')
+            self.builtin_catalog = json.loads(r.stdout)
         return self.builtin_catalog
 
-    def _runtime_providers(self,settings):
-        result={}
+    def _runtime_providers(self, settings):
+        result = {}
         for p in settings['providers']:
-            item={'apiKey':'${'+key_env(p['id'])+'}'}
-            models=p.get('models',[])
+            item = {'apiKey': '${' + key_env(p['id']) + '}'}
+            models = p.get('models', [])
             if p.get('custom'):
-                item.update(baseUrl=p['baseUrl'],api=p['api'])
-                if p['api']=='openai-completions':
-                    models=[dict(model) for model in models]
+                item.update(baseUrl=p['baseUrl'], api=p['api'])
+                if p['api'] == 'openai-completions':
+                    models = [dict(model) for model in models]
                     for model in models:
-                        levels=model.get('reasoningLevels',[])
+                        levels = model.get('reasoningLevels', [])
                         if model.get('reasoning') and levels:
-                            model['thinkingLevelMap']={level:level if level in levels else None for level in byok.EFFORTS if level!='off'}
-                            model['thinkingLevelMap']['max']=None
-                            if 'off' in levels:model['thinkingLevelMap']['off']='none'
-            elif p.get('providerType',p['id'])!=p['id'] or models:
-                base=[m for m in self._builtin_models() if m['provider']==p['providerType'] and m['api'] in APIS]
-                if not base:raise ValueError('Connessione aggiuntiva non supportata per questo provider nativo')
+                            model['thinkingLevelMap'] = {
+                                level: level if level in levels else None for level in byok.EFFORTS if level != 'off'
+                            }
+                            model['thinkingLevelMap']['max'] = None
+                            if 'off' in levels:
+                                model['thinkingLevelMap']['off'] = 'none'
+            elif p.get('providerType', p['id']) != p['id'] or models:
+                base = [m for m in self._builtin_models() if m['provider'] == p['providerType'] and m['api'] in APIS]
+                if not base:
+                    raise ValueError('Connessione aggiuntiva non supportata per questo provider nativo')
                 if models:
-                    ids={m['id'] for m in models};base=[m for m in base if m['model'] in ids]
-                    if ids!={m['model'] for m in base}:raise ValueError('Modello nativo non presente nel catalogo: usa un endpoint personalizzato')
-                models=[{**m['definition'],**next((x for x in models if x['id']==m['model']),{})} for m in base]
+                    ids = {m['id'] for m in models}
+                    base = [m for m in base if m['model'] in ids]
+                    if ids != {m['model'] for m in base}:
+                        raise ValueError('Modello nativo non presente nel catalogo: usa un endpoint personalizzato')
+                models = [{**m['definition'], **next((x for x in models if x['id'] == m['model']), {})} for m in base]
             if models:
-                item['models']=[{k:v for k,v in m.items() if k in ('id','name','api','baseUrl','reasoning','input','contextWindow','maxTokens','cost','compat','thinkingLevelMap')} for m in models]
-            a=p['auth']
-            if a.get('header') or a['type']=='none':
-                item['authHeader']=False
-                names={'authorization':'Authorization','api-key':'api-key','x-api-key':'x-api-key','x-goog-api-key':'x-goog-api-key'}
-                header=names.get(a.get('header','').lower())
-                item['headers']={v:'__PI_SUITE_OMIT_HEADER__' for v in names.values() if v!=header}
-                if header:item['headers'][header]=a.get('prefix','')+'${'+key_env(p['id'])+'}'
-            result[p['id']]=item
+                item['models'] = [
+                    {
+                        k: v
+                        for k, v in m.items()
+                        if k
+                        in (
+                            'id',
+                            'name',
+                            'api',
+                            'baseUrl',
+                            'reasoning',
+                            'input',
+                            'contextWindow',
+                            'maxTokens',
+                            'cost',
+                            'compat',
+                            'thinkingLevelMap',
+                        )
+                    }
+                    for m in models
+                ]
+            a = p['auth']
+            if a.get('header') or a['type'] == 'none':
+                item['authHeader'] = False
+                names = {
+                    'authorization': 'Authorization',
+                    'api-key': 'api-key',
+                    'x-api-key': 'x-api-key',
+                    'x-goog-api-key': 'x-goog-api-key',
+                }
+                header = names.get(a.get('header', '').lower())
+                item['headers'] = {v: '__PI_SUITE_OMIT_HEADER__' for v in names.values() if v != header}
+                if header:
+                    item['headers'][header] = a.get('prefix', '') + '${' + key_env(p['id']) + '}'
+            result[p['id']] = item
         return result
 
-    def _commit_byok(self,config,updates=()):
-        config=byok.validate(config);converted=byok.to_legacy(config)
-        directory=self.home/'catalog'/'validation';directory.mkdir(parents=True,exist_ok=True)
-        save_json(directory/'models.json',{'providers':self._runtime_providers(converted)})
-        save_json(directory/'job.json',{'validate':True,'agentDir':str(directory)})
-        r=subprocess.run(['node',str(ROOT/'adapter.mjs'),str(directory/'job.json')],cwd=ROOT,capture_output=True,text=True,encoding='utf-8',timeout=60)
-        if r.returncode:raise ValueError('Configurazione non accettata dal runtime Pi; nessuna modifica applicata')
-        self.settings.update(self.byok.save(config,updates))
-        save_json(self.settings_path,self.settings);self.catalog=None
+    def _commit_byok(self, config, updates=()):
+        config = byok.validate(config)
+        converted = byok.to_legacy(config)
+        directory = self.home / 'catalog' / 'validation'
+        directory.mkdir(parents=True, exist_ok=True)
+        save_json(directory / 'models.json', {'providers': self._runtime_providers(converted)})
+        save_json(directory / 'job.json', {'validate': True, 'agentDir': str(directory)})
+        r = subprocess.run(
+            ['node', str(ROOT / 'adapter.mjs'), str(directory / 'job.json')],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            timeout=60,
+        )
+        if r.returncode:
+            raise ValueError('Configurazione non accettata dal runtime Pi; nessuna modifica applicata')
+        self.settings.update(self.byok.save(config, updates))
+        save_json(self.settings_path, self.settings)
+        self.catalog = None
         return self.public_settings()
 
-    def import_byok(self,data,apply=False):
+    def import_byok(self, data, apply=False):
         with self.guard:
-            if self.busy:raise ValueError('Attendi il completamento del lavoro in corso')
-            preview=self.byok.preview(data['content'],data.get('format','json'),data.get('includeProfiles',False))
-            if not apply:return preview
-            if data.get('revision')!=self.byok.revision():raise ValueError('Configurazione cambiata: ripeti l’anteprima')
-            updates=[]
+            if self.busy:
+                raise ValueError('Attendi il completamento del lavoro in corso')
+            preview = self.byok.preview(data['content'], data.get('format', 'json'), data.get('includeProfiles', False))
+            if not apply:
+                return preview
+            if data.get('revision') != self.byok.revision():
+                raise ValueError('Configurazione cambiata: ripeti l’anteprima')
+            updates = []
             if data.get('apiKey'):
-                targets=[c for c in preview['changes'] if c['auth']['type']=='secret']
-                if len(targets)!=1:raise ValueError('Il campo chiave richiede una sola connessione con autenticazione secret; per più connessioni usa le singole schede')
-                updates=[{'id':targets[0]['id'],'apiKey':data['apiKey']}]
-            return self._commit_byok(preview['config'],updates)
+                targets = [c for c in preview['changes'] if c['auth']['type'] == 'secret']
+                if len(targets) != 1:
+                    raise ValueError(
+                        'Il campo chiave richiede una sola connessione con autenticazione secret; per più connessioni usa le singole schede'
+                    )
+                updates = [{'id': targets[0]['id'], 'apiKey': data['apiKey']}]
+            return self._commit_byok(preview['config'], updates)
 
-    def save_secret(self,data):
+    def save_secret(self, data):
         with self.guard:
-            if self.busy:raise ValueError('Attendi il completamento del lavoro in corso')
-            config=self.byok.config();c=next((c for c in config['connections'] if c['id']==data['connectionId']),None)
-            if c is None:raise ValueError('Salva prima la connessione')
-            c['auth']={'type':'secret','ref':'byok/'+c['id'],**{k:v for k,v in c['auth'].items() if k in ('ref','header','prefix')}}
-            return self._commit_byok(config,[{'id':c['id'],'apiKey':data.get('value',''),'clearKey':data.get('remove',False)}])
+            if self.busy:
+                raise ValueError('Attendi il completamento del lavoro in corso')
+            config = self.byok.config()
+            c = next((c for c in config['connections'] if c['id'] == data['connectionId']), None)
+            if c is None:
+                raise ValueError('Salva prima la connessione')
+            c['auth'] = {
+                'type': 'secret',
+                'ref': 'byok/' + c['id'],
+                **{k: v for k, v in c['auth'].items() if k in ('ref', 'header', 'prefix')},
+            }
+            return self._commit_byok(
+                config, [{'id': c['id'], 'apiKey': data.get('value', ''), 'clearKey': data.get('remove', False)}]
+            )
 
-    def save_connection(self,data):
+    def save_connection(self, data):
         with self.guard:
-            if self.busy:raise ValueError('Attendi il completamento del lavoro in corso')
-            current=self.byok.config()
-            if data.get('revision')!=self.byok.revision():raise ValueError('Configurazione cambiata: selezionala di nuovo prima di salvare')
-            notices=[]
-            incoming=byok.parse(data.get('content',''),'json')
-            if len(incoming['connections'])!=1:raise ValueError('Inserisci una sola connessione per configurazione')
-            connection=incoming['connections'][0]
-            selected=data.get('connectionId','')
-            previous=next((c for c in current['connections'] if c['id']==selected),None)
-            if selected and previous is None:raise ValueError('Configurazione non disponibile')
+            if self.busy:
+                raise ValueError('Attendi il completamento del lavoro in corso')
+            current = self.byok.config()
+            if data.get('revision') != self.byok.revision():
+                raise ValueError('Configurazione cambiata: selezionala di nuovo prima di salvare')
+            notices = []
+            incoming = byok.parse(data.get('content', ''), 'json')
+            if len(incoming['connections']) != 1:
+                raise ValueError('Inserisci una sola connessione per configurazione')
+            connection = incoming['connections'][0]
+            selected = data.get('connectionId', '')
+            previous = next((c for c in current['connections'] if c['id'] == selected), None)
+            if selected and previous is None:
+                raise ValueError('Configurazione non disponibile')
             if previous:
-                connection['id']=previous['id']
-                if connection['auth']['type']=='secret' and previous['auth']['type']=='secret':
-                    connection['auth']['ref']=previous['auth']['ref']
-            elif any(c['id']==connection['id'] for c in current['connections']):
+                connection['id'] = previous['id']
+                if connection['auth']['type'] == 'secret' and previous['auth']['type'] == 'secret':
+                    connection['auth']['ref'] = previous['auth']['ref']
+            elif any(c['id'] == connection['id'] for c in current['connections']):
                 raise ValueError('Configurazione gia presente: selezionala dalla lista per modificarla')
-            key=data.get('apiKey','')
-            if key and connection['auth']['type']=='none':connection['auth']={'type':'secret','ref':'byok/'+connection['id']}
-            if key and connection['auth']['type']!='secret':raise ValueError('Per inserire una chiave usa autenticazione secret nel JSON')
-            config={**current,'connections':[connection if c['id']==selected else c for c in current['connections']]}
-            if not previous:config['connections'].append(connection)
-            result=self._commit_byok(config,[{'id':connection['id'],'apiKey':key}])
-            if connection.get('baseUrl','').startswith('http://'):
-                notices.append('Endpoint HTTP: richieste e chiave API viaggiano in chiaro; usa solo una rete fidata o un tunnel cifrato.')
-            if connection['auth']['type']=='secret' and not self.byok.has_key(connection):
+            key = data.get('apiKey', '')
+            if key and connection['auth']['type'] == 'none':
+                connection['auth'] = {'type': 'secret', 'ref': 'byok/' + connection['id']}
+            if key and connection['auth']['type'] != 'secret':
+                raise ValueError('Per inserire una chiave usa autenticazione secret nel JSON')
+            config = {
+                **current,
+                'connections': [connection if c['id'] == selected else c for c in current['connections']],
+            }
+            if not previous:
+                config['connections'].append(connection)
+            result = self._commit_byok(config, [{'id': connection['id'], 'apiKey': key}])
+            if connection.get('baseUrl', '').startswith('http://'):
+                notices.append(
+                    'Endpoint HTTP: richieste e chiave API viaggiano in chiaro; usa solo una rete fidata o un tunnel cifrato.'
+                )
+            if connection['auth']['type'] == 'secret' and not self.byok.has_key(connection):
                 notices.append('Chiave API mancante: inseriscila nel campo protetto della Suite.')
-            return {**result,'connectionNotices':notices}
+            return {**result, 'connectionNotices': notices}
 
-    def save_settings(self,data):
+    def save_settings(self, data):
         with self.guard:
-            if self.busy:raise ValueError('Attendi il completamento dell’operazione in corso.')
-            old={p['id']:p for p in self.settings['providers']}
-            providers=[]
-            for raw in data.get('providers',[]):
-                p=dict(raw);previous=old.get(p['id'],{})
-                p.setdefault('auth',previous.get('auth',{'type':'secret','ref':'byok/'+p['id']}))
-                if p.get('apiKey'):p['auth']={'type':'secret','ref':'byok/'+p['id'],**{k:v for k,v in p['auth'].items() if k in ('ref','header','prefix')}}
+            if self.busy:
+                raise ValueError('Attendi il completamento dell’operazione in corso.')
+            old = {p['id']: p for p in self.settings['providers']}
+            providers = []
+            for raw in data.get('providers', []):
+                p = dict(raw)
+                previous = old.get(p['id'], {})
+                p.setdefault('auth', previous.get('auth', {'type': 'secret', 'ref': 'byok/' + p['id']}))
+                if p.get('apiKey'):
+                    p['auth'] = {
+                        'type': 'secret',
+                        'ref': 'byok/' + p['id'],
+                        **{k: v for k, v in p['auth'].items() if k in ('ref', 'header', 'prefix')},
+                    }
                 if p.get('custom') and not previous and not p.get('apiKey') and 'auth' not in raw:
-                    p['auth']={'type':'none'}
+                    p['auth'] = {'type': 'none'}
                 providers.append(p)
-            config=byok.from_legacy({'providers':providers,'roles':data.get('roles',{})})
+            config = byok.from_legacy({'providers': providers, 'roles': data.get('roles', {})})
             # Older clients adapted unsupported reasoning automatically; retain that migration behavior.
             for profile in config['profiles'].values():
-                connection=next((c for c in config['connections'] if c['id']==profile['connectionId']),None)
-                model=next((m for m in connection['models'] if m['id']==profile['modelId']),None) if connection else None
-                if model and not model['reasoning']['enabled']:profile['effort']='off'
-            previous=dict(self.settings)
-            available={s['name'] for s in skills(self.home/'skills')}
-            self.settings={**self.settings,'enabledSkills':[s for s in data.get('enabledSkills',[]) if s in available],
-                'maxCalls':max(4,min(int(data.get('maxCalls',24)),100)),
-                'maxParallelWorkers':max(1,min(int(data.get('maxParallelWorkers',2)),4)),
-                'delegationPolicy':'always' if data.get('delegationPolicy')=='always' else 'auto',
-                'resultMode':'text' if data.get('resultMode')=='text' else 'structured'}
-            try:return self._commit_byok(config,providers)
+                connection = next((c for c in config['connections'] if c['id'] == profile['connectionId']), None)
+                model = (
+                    next((m for m in connection['models'] if m['id'] == profile['modelId']), None)
+                    if connection
+                    else None
+                )
+                if model and not model['reasoning']['enabled']:
+                    profile['effort'] = 'off'
+            previous = dict(self.settings)
+            available = {s['name'] for s in skills(self.home / 'skills')}
+            self.settings = {
+                **self.settings,
+                'enabledSkills': [s for s in data.get('enabledSkills', []) if s in available],
+                'maxCalls': max(4, min(int(data.get('maxCalls', 24)), 100)),
+                'maxParallelWorkers': max(1, min(int(data.get('maxParallelWorkers', 2)), 4)),
+                'delegationPolicy': 'always' if data.get('delegationPolicy') == 'always' else 'auto',
+                'resultMode': 'text' if data.get('resultMode') == 'text' else 'structured',
+            }
+            try:
+                return self._commit_byok(config, providers)
             except Exception:
-                self.settings=previous;raise
+                self.settings = previous
+                raise
 
-    def model_dir(self,directory,settings=None):
-        directory.mkdir(parents=True,exist_ok=True)
-        save_json(directory/'models.json',{'providers':self._runtime_providers(settings or self.settings)})
+    def model_dir(self, directory, settings=None):
+        directory.mkdir(parents=True, exist_ok=True)
+        save_json(directory / 'models.json', {'providers': self._runtime_providers(settings or self.settings)})
         return directory
 
     def models(self):
         with self.guard:
-            if self.catalog is not None: return self.catalog
-            directory=self.model_dir(self.home/'catalog')
-            save_json(directory/'job.json',{'list':True,'agentDir':str(directory)})
-            result=subprocess.run(['node',str(ROOT/'adapter.mjs'),str(directory/'job.json')],cwd=ROOT,
-                capture_output=True,text=True,encoding='utf-8',timeout=60)
-            if result.returncode: raise ValueError(self.redact(result.stderr[-2000:]))
-            self.catalog=json.loads(result.stdout)
+            if self.catalog is not None:
+                return self.catalog
+            directory = self.model_dir(self.home / 'catalog')
+            save_json(directory / 'job.json', {'list': True, 'agentDir': str(directory)})
+            result = subprocess.run(
+                ['node', str(ROOT / 'adapter.mjs'), str(directory / 'job.json')],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+                encoding='utf-8',
+                timeout=60,
+            )
+            if result.returncode:
+                raise ValueError(self.redact(result.stderr[-2000:]))
+            self.catalog = json.loads(result.stdout)
             for m in self.catalog:
-                p=next((p for p in self.settings['providers'] if p['id']==m['provider']),None)
-                definition=next((x for x in (p or {}).get('models',[]) if x['id']==m['model']),{})
-                m.update(toolCalling=definition.get('toolCalling'),streaming=definition.get('streaming',True),
-                    reasoningLevels=definition.get('reasoningLevels',list(byok.EFFORTS) if m['reasoning'] else []),
-                    defaultEffort=definition.get('defaultEffort','off'))
+                p = next((p for p in self.settings['providers'] if p['id'] == m['provider']), None)
+                definition = next((x for x in (p or {}).get('models', []) if x['id'] == m['model']), {})
+                m.update(
+                    toolCalling=definition.get('toolCalling'),
+                    streaming=definition.get('streaming', True),
+                    reasoningLevels=definition.get('reasoningLevels', list(byok.EFFORTS) if m['reasoning'] else []),
+                    defaultEffort=definition.get('defaultEffort', 'off'),
+                )
             return self.catalog
 
-    def check_fingerprint(self,provider,model):
-        p=next(p for p in self.settings['providers'] if p['id']==provider)
-        return byok.digest({'connection':p,'model':model,'credential':self.byok.vault.get(p['auth'].get('ref')) if p['auth']['type']=='secret' else byok.digest(os.environ.get(p['auth'].get('name',''),''))})
+    def check_fingerprint(self, provider, model):
+        p = next(p for p in self.settings['providers'] if p['id'] == provider)
+        return byok.digest(
+            {
+                'connection': p,
+                'model': model,
+                'credential': self.byok.vault.get(p['auth'].get('ref'))
+                if p['auth']['type'] == 'secret'
+                else byok.digest(os.environ.get(p['auth'].get('name', ''), '')),
+            }
+        )
 
-    def record_check(self,provider,model,report):
-        if not any(p['id']==provider for p in self.settings['providers']):return
-        path=self.home/'model-checks.json';checks=read_json(path) if path.exists() else {}
-        checks[byok.digest([provider,model])]={'provider':provider,'model':model,'checkedAt':time.time(),
-            'fingerprint':self.check_fingerprint(provider,model),**report}
-        save_json(path,checks)
+    def record_check(self, provider, model, report):
+        if not any(p['id'] == provider for p in self.settings['providers']):
+            return
+        path = self.home / 'model-checks.json'
+        checks = read_json(path) if path.exists() else {}
+        checks[byok.digest([provider, model])] = {
+            'provider': provider,
+            'model': model,
+            'checkedAt': time.time(),
+            'fingerprint': self.check_fingerprint(provider, model),
+            **report,
+        }
+        save_json(path, checks)
 
     def validate_profiles(self):
-        if not self.settings['roles']:return
-        catalog={(m['provider'],m['model']) for m in self.models()}
+        if not self.settings['roles']:
+            return
+        catalog = {(m['provider'], m['model']) for m in self.models()}
         for profile in self.settings['roles'].values():
-            if (profile['provider'],profile['model']) not in catalog: raise ValueError('Modello non presente nel catalogo: '+profile['model'])
+            if (profile['provider'], profile['model']) not in catalog:
+                raise ValueError('Modello non presente nel catalogo: ' + profile['model'])
 
-    def prepare_shell(self,snapshot=False,context=None):
-        directory=self.model_dir(self.home/'sessions'/uuid.uuid4().hex if snapshot else self.home/'pi-shell')
-        profile=self.settings['roles'].get('worker')
-        config={'worker':profile,'byokRevision':self.byok.revision(),'projects':self.settings['projects'],'maxCalls':self.settings['maxCalls'],
-                'maxParallelWorkers':self.settings['maxParallelWorkers'],'delegationPolicy':self.settings.get('delegationPolicy','auto'),'resultMode':self.settings.get('resultMode','structured'),
-                'skills':[s for s in skills(self.home/'skills') if s['name'] in self.settings['enabledSkills'] and not s.get('parentOnly')]}
+    def prepare_shell(self, snapshot=False, context=None):
+        directory = self.model_dir(self.home / 'sessions' / uuid.uuid4().hex if snapshot else self.home / 'pi-shell')
+        profile = self.settings['roles'].get('worker')
+        config = {
+            'worker': profile,
+            'byokRevision': self.byok.revision(),
+            'projects': self.settings['projects'],
+            'maxCalls': self.settings['maxCalls'],
+            'maxParallelWorkers': self.settings['maxParallelWorkers'],
+            'delegationPolicy': self.settings.get('delegationPolicy', 'auto'),
+            'resultMode': self.settings.get('resultMode', 'structured'),
+            'skills': [
+                s
+                for s in skills(self.home / 'skills')
+                if s['name'] in self.settings['enabledSkills'] and not s.get('parentOnly')
+            ],
+        }
         if context is not None:
-            config['skills']=[s for s in config['skills'] if s['name'] not in ('graph-explorer','lettura-documentazione-tecnico-funzionale')]
-            required={'graph-explorer':bool(context.get('graphs')),'lettura-documentazione-tecnico-funzionale':bool(context.get('documentation'))}
-            config['skills'].extend(s for s in skills(self.home/'skills') if required.get(s['name']))
-        save_json(directory/'suite-launch.json',config)
-        settings_path=directory/'settings.json'
-        settings=read_json(settings_path) if settings_path.exists() else {}
+            config['skills'] = [
+                s
+                for s in config['skills']
+                if s['name'] not in ('graph-explorer', 'lettura-documentazione-tecnico-funzionale')
+            ]
+            required = {
+                'graph-explorer': bool(context.get('graphs')),
+                'lettura-documentazione-tecnico-funzionale': bool(context.get('documentation')),
+            }
+            config['skills'].extend(s for s in skills(self.home / 'skills') if required.get(s['name']))
+        save_json(directory / 'suite-launch.json', config)
+        settings_path = directory / 'settings.json'
+        settings = read_json(settings_path) if settings_path.exists() else {}
         if profile:
-            settings['subagents']={**settings.get('subagents',{}),'defaultModel':profile['provider']+'/'+profile['model'],
-                                   'defaultThinking':profile['effort']}
+            settings['subagents'] = {
+                **settings.get('subagents', {}),
+                'defaultModel': profile['provider'] + '/' + profile['model'],
+                'defaultThinking': profile['effort'],
+            }
         else:
-            settings.pop('subagents',None)
-        save_json(settings_path,settings)
+            settings.pop('subagents', None)
+        save_json(settings_path, settings)
         return directory
 
-    def open_chat(self,path='',prompt='',project_id=None):
-        selected=None
+    def open_chat(self, path='', prompt='', project_id=None):
+        selected = None
         if project_id:
             checked_id(project_id)
-            selected=next((p for p in self.settings['projects'] if p['id']==project_id),None)
-            if not selected: raise ValueError('Progetto sconosciuto')
-        if selected: path=selected['path']
-        folder=Path(path).expanduser().resolve() if path else self.home/'chats'/uuid.uuid4().hex
-        if not path: folder.mkdir(parents=True)
-        if not folder.is_dir(): raise ValueError('Scegli una cartella esistente per la chat.')
-        env=os.environ.copy();env['PI_SUITE_HOME']=str(self.home)
-        env.pop('PI_SUITE_CONTEXT',None)
+            selected = next((p for p in self.settings['projects'] if p['id'] == project_id), None)
+            if not selected:
+                raise ValueError('Progetto sconosciuto')
         if selected:
-            context_path=self.home/'sessions'/('context-'+uuid.uuid4().hex+'.json')
-            save_json(context_path,workspace.chat_context(self,selected['id']));env['PI_SUITE_CONTEXT']=str(context_path)
-        env.pop('PI_SUITE_CLEAN_WORKSPACE',None)
-        if not path: env['PI_SUITE_CLEAN_WORKSPACE']=str(folder)
-        if selected: env['PI_SUITE_PROJECT']=selected['id']
-        else: env.pop('PI_SUITE_PROJECT',None)
-        python=Path(sys.executable).with_name('python.exe') if os.name=='nt' else Path(sys.executable)
-        subprocess.Popen([str(python),str(ROOT/'suite_cli.py'),*([prompt] if prompt else [])],cwd=folder,env=env,
-                         creationflags=subprocess.CREATE_NEW_CONSOLE if os.name=='nt' else 0)
-        return {'opened':True,'folder':str(folder),'project':selected['id'] if selected else None}
+            path = selected['path']
+        folder = Path(path).expanduser().resolve() if path else self.home / 'chats' / uuid.uuid4().hex
+        if not path:
+            folder.mkdir(parents=True)
+        if not folder.is_dir():
+            raise ValueError('Scegli una cartella esistente per la chat.')
+        env = os.environ.copy()
+        env['PI_SUITE_HOME'] = str(self.home)
+        env.pop('PI_SUITE_CONTEXT', None)
+        if selected:
+            context_path = self.home / 'sessions' / ('context-' + uuid.uuid4().hex + '.json')
+            save_json(context_path, workspace.chat_context(self, selected['id']))
+            env['PI_SUITE_CONTEXT'] = str(context_path)
+        env.pop('PI_SUITE_CLEAN_WORKSPACE', None)
+        if not path:
+            env['PI_SUITE_CLEAN_WORKSPACE'] = str(folder)
+        if selected:
+            env['PI_SUITE_PROJECT'] = selected['id']
+        else:
+            env.pop('PI_SUITE_PROJECT', None)
+        python = Path(sys.executable).with_name('python.exe') if os.name == 'nt' else Path(sys.executable)
+        subprocess.Popen(
+            [str(python), str(ROOT / 'suite_cli.py'), *([prompt] if prompt else [])],
+            cwd=folder,
+            env=env,
+            creationflags=subprocess.CREATE_NEW_CONSOLE if os.name == 'nt' else 0,
+        )
+        return {'opened': True, 'folder': str(folder), 'project': selected['id'] if selected else None}
 
     def delegations(self):
-        batches=[]
-        for p in sorted((self.home/'delegations').glob('*/batch.json'),key=lambda p:p.stat().st_mtime,reverse=True)[:30]:
+        batches = []
+        for p in sorted(
+            (self.home / 'delegations').glob('*/batch.json'), key=lambda p: p.stat().st_mtime, reverse=True
+        )[:30]:
             try:
-                item=read_json(p)
+                item = read_json(p)
                 for task in item['tasks']:
-                    assignment=p.parent/Path(task['directory']).name/'INCARICO.md'
-                    task['assignment']=assignment.read_text(encoding='utf-8') if assignment.exists() else ''
+                    assignment = p.parent / Path(task['directory']).name / 'INCARICO.md'
+                    task['assignment'] = assignment.read_text(encoding='utf-8') if assignment.exists() else ''
                 batches.append(item)
-            except (OSError,ValueError,KeyError): continue
+            except (OSError, ValueError, KeyError):
+                continue
         return batches
 
     def pick_folder(self, data=None):
-        data=data or {}
-        titles={'project':'Scegli la cartella del progetto',
-                'source':'Scegli la cartella della fonte locale',
-                'dossier':'Scegli la cartella del dossier di documentazione tecnico funzionale'}
-        context=data.get('context','project')
-        initial=data.get('initialPath','')
-        if not isinstance(context,str) or context not in titles:
+        data = data or {}
+        titles = {
+            'project': 'Scegli la cartella del progetto',
+            'source': 'Scegli la cartella della fonte locale',
+            'dossier': 'Scegli la cartella del dossier di documentazione tecnico funzionale',
+        }
+        context = data.get('context', 'project')
+        initial = data.get('initialPath', '')
+        if not isinstance(context, str) or context not in titles:
             raise ValueError('Tipo di selezione cartella non valido.')
-        if not isinstance(initial,str) or len(initial)>32767 or '\0' in initial:
+        if not isinstance(initial, str) or len(initial) > 32767 or '\0' in initial:
             raise ValueError('Percorso iniziale non valido.')
-        if not self.picker_guard.acquire(blocking=False): raise ValueError('Il selettore cartelle è già aperto.')
-        try: return {'path':choose_folder(initial,titles[context])}
-        finally: self.picker_guard.release()
+        if not self.picker_guard.acquire(blocking=False):
+            raise ValueError('Il selettore cartelle è già aperto.')
+        try:
+            return {'path': choose_folder(initial, titles[context])}
+        finally:
+            self.picker_guard.release()
 
     def pick_project_folder(self):
         return self.pick_folder()
 
-    def add_project(self,path='',name=''):
+    def add_project(self, path='', name=''):
         with self.guard:
-            if self.busy: raise ValueError('Attendi l’operazione in corso.')
-            if not isinstance(path,str): raise ValueError('Cartella progetto non valida.')
-            name=project_name(name) if name else ''
+            if self.busy:
+                raise ValueError('Attendi l’operazione in corso.')
+            if not isinstance(path, str):
+                raise ValueError('Cartella progetto non valida.')
+            name = project_name(name) if name else ''
             if path.strip():
-                repo=Path(path).expanduser().resolve()
-                if not repo.is_dir(): raise ValueError('Scegli una cartella esistente.')
+                repo = Path(path).expanduser().resolve()
+                if not repo.is_dir():
+                    raise ValueError('Scegli una cartella esistente.')
             else:
-                name=project_name(name)
-                parent=self.home/'projects';parent.mkdir(exist_ok=True)
-                repo=(parent/name).resolve()
-                if repo.parent!=parent.resolve(): raise ValueError('Nome progetto non valido.')
-                if repo.exists(): raise ValueError('Esiste già una cartella con questo nome. Scegli un altro nome o collega la cartella esistente.')
+                name = project_name(name)
+                parent = self.home / 'projects'
+                parent.mkdir(exist_ok=True)
+                repo = (parent / name).resolve()
+                if repo.parent != parent.resolve():
+                    raise ValueError('Nome progetto non valido.')
+                if repo.exists():
+                    raise ValueError(
+                        'Esiste già una cartella con questo nome. Scegli un altro nome o collega la cartella esistente.'
+                    )
                 repo.mkdir()
-            pid=__import__('hashlib').sha256(str(repo).encode()).hexdigest()[:16]
-            if not any(p['id']==pid for p in self.settings['projects']):
-                self.settings['projects'].append({'id':pid,'path':str(repo),'name':name or repo.name})
-                save_json(self.settings_path,self.settings)
+            pid = __import__('hashlib').sha256(str(repo).encode()).hexdigest()[:16]
+            if not any(p['id'] == pid for p in self.settings['projects']):
+                self.settings['projects'].append({'id': pid, 'path': str(repo), 'name': name or repo.name})
+                save_json(self.settings_path, self.settings)
             return self.project(pid)
 
-    def project(self,pid):
+    def project(self, pid):
         checked_id(pid)
-        project=next((p for p in self.settings['projects'] if p['id']==pid),None)
-        if not project: raise ValueError('Progetto sconosciuto')
-        repo=Path(project['path'])
-        if not repo.is_dir(): raise ValueError('La cartella del progetto non è disponibile.')
-        top=subprocess.run(['git','-C',str(repo),'rev-parse','--show-toplevel'],capture_output=True)
-        is_git=top.returncode==0 and Path(os.fsdecode(top.stdout).strip()).resolve()==repo.resolve()
-        names=project_files(repo) if is_git else None
-        entries=scan(repo,names)
-        head=subprocess.run(['git','-C',str(repo),'rev-parse','--verify','HEAD'],capture_output=True) if is_git else None
-        graph_path=self.home/'graphs'/pid/'graph.json'
-        info=read_json(graph_path) if graph_path.exists() else None
-        return {**project,'files':[n for n,d,s in entries if d], 'isGit':is_git,
-                'head':head.stdout.decode().strip() if head and head.returncode==0 else None,
-                'graph':None if not info else {'stats':info['stats'],'base':info['base'],'createdAt':info['createdAt'],
-                    'stale':info['fingerprint']!=fingerprint(entries)}}
+        project = next((p for p in self.settings['projects'] if p['id'] == pid), None)
+        if not project:
+            raise ValueError('Progetto sconosciuto')
+        repo = Path(project['path'])
+        if not repo.is_dir():
+            raise ValueError('La cartella del progetto non è disponibile.')
+        top = subprocess.run(['git', '-C', str(repo), 'rev-parse', '--show-toplevel'], capture_output=True)
+        is_git = top.returncode == 0 and Path(os.fsdecode(top.stdout).strip()).resolve() == repo.resolve()
+        names = project_files(repo) if is_git else None
+        entries = scan(repo, names)
+        head = (
+            subprocess.run(['git', '-C', str(repo), 'rev-parse', '--verify', 'HEAD'], capture_output=True)
+            if is_git
+            else None
+        )
+        graph_path = self.home / 'graphs' / pid / 'graph.json'
+        info = read_json(graph_path) if graph_path.exists() else None
+        return {
+            **project,
+            'files': [n for n, d, s in entries if d],
+            'isGit': is_git,
+            'head': head.stdout.decode().strip() if head and head.returncode == 0 else None,
+            'graph': None
+            if not info
+            else {
+                'stats': info['stats'],
+                'base': info['base'],
+                'createdAt': info['createdAt'],
+                'stale': info['fingerprint'] != fingerprint(entries),
+            },
+        }
 
-    def save_project_references(self,pid,section,data):
+    def save_project_references(self, pid, section, data):
         with self.guard:
-            if self.busy: raise ValueError('Attendi l’operazione in corso.')
+            if self.busy:
+                raise ValueError('Attendi l’operazione in corso.')
             checked_id(pid)
-            project=next((p for p in self.settings['projects'] if p['id']==pid),None)
-            if not project: raise ValueError('Progetto sconosciuto')
-            if not isinstance(data,dict): raise ValueError('Riferimenti non validi')
-            if section=='documentation':
-                ids=data.get('sources',project.get('workspace',{}).get('documentation',{}).get('sources',[]))
-                available={s['id'] for s in self.sources.connections()}
-                if not isinstance(ids,list) or any(not isinstance(s,str) or s not in available for s in ids):
+            project = next((p for p in self.settings['projects'] if p['id'] == pid), None)
+            if not project:
+                raise ValueError('Progetto sconosciuto')
+            if not isinstance(data, dict):
+                raise ValueError('Riferimenti non validi')
+            if section == 'documentation':
+                ids = data.get('sources', project.get('workspace', {}).get('documentation', {}).get('sources', []))
+                available = {s['id'] for s in self.sources.connections()}
+                if not isinstance(ids, list) or any(not isinstance(s, str) or s not in available for s in ids):
                     raise ValueError('Seleziona fonti esistenti')
-                references={'sources':list(dict.fromkeys(ids))}
-                graph_ids=data.get('graphs',[])
-                if not isinstance(graph_ids,list) or any(not isinstance(g,str) for g in graph_ids):
+                references = {'sources': list(dict.fromkeys(ids))}
+                graph_ids = data.get('graphs', [])
+                if not isinstance(graph_ids, list) or any(not isinstance(g, str) for g in graph_ids):
                     raise ValueError('Grafi selezionati non validi')
-                references['graphs']=list(dict.fromkeys(graph_ids))
-                documents=data.get('documents',[])
-                if not isinstance(documents,list) or any(not isinstance(d,str) for d in documents):raise ValueError('Documenti selezionati non validi')
-                references['documents']=list(dict.fromkeys(documents))
-                fields={'objective':20000,'dossierWorkspace':4000,'name':150}
-                refresh_sources=data.get('refreshSources',False)
-                if not isinstance(refresh_sources,bool):raise ValueError('Opzione aggiornamento fonti non valida')
-                references['refreshSources']=refresh_sources
-            elif section=='graph':
-                ids=data.get('sources',workspace.source_references(project))
-                available={s['id'] for s in self.sources.connections()}
-                if not isinstance(ids,list) or any(not isinstance(s,str) or s not in available for s in ids):
+                references['graphs'] = list(dict.fromkeys(graph_ids))
+                documents = data.get('documents', [])
+                if not isinstance(documents, list) or any(not isinstance(d, str) for d in documents):
+                    raise ValueError('Documenti selezionati non validi')
+                references['documents'] = list(dict.fromkeys(documents))
+                fields = {'objective': 20000, 'dossierWorkspace': 4000, 'name': 150}
+                refresh_sources = data.get('refreshSources', False)
+                if not isinstance(refresh_sources, bool):
+                    raise ValueError('Opzione aggiornamento fonti non valida')
+                references['refreshSources'] = refresh_sources
+            elif section == 'graph':
+                ids = data.get('sources', workspace.source_references(project))
+                available = {s['id'] for s in self.sources.connections()}
+                if not isinstance(ids, list) or any(not isinstance(s, str) or s not in available for s in ids):
                     raise ValueError('Seleziona fonti esistenti')
-                references={'sources':list(dict.fromkeys(ids))};fields={'query':1000,'evidenceQuery':2000}
-            else: raise ValueError('Sezione riferimenti sconosciuta')
-            for key,limit in fields.items():
-                value=data.get(key,'')
-                if not isinstance(value,str) or len(value)>limit: raise ValueError('Riferimento non valido: '+key)
-                references[key]=value.strip()
-            previous=project.get('workspace',{})
-            project['workspace']={**previous,section:references}
-            save_json(self.settings_path,self.settings)
+                references = {'sources': list(dict.fromkeys(ids))}
+                fields = {'query': 1000, 'evidenceQuery': 2000}
+            else:
+                raise ValueError('Sezione riferimenti sconosciuta')
+            for key, limit in fields.items():
+                value = data.get(key, '')
+                if not isinstance(value, str) or len(value) > limit:
+                    raise ValueError('Riferimento non valido: ' + key)
+                references[key] = value.strip()
+            previous = project.get('workspace', {})
+            project['workspace'] = {**previous, section: references}
+            save_json(self.settings_path, self.settings)
             return project['workspace']
 
-    def graph(self,pid,query='',node_id=None,identifier=None):
+    def graph(self, pid, query='', node_id=None, identifier=None):
         self.project(pid)
-        item=workspace.graph_entry(self,pid,identifier) if identifier else None
-        if item and item['kind']!='project':raise ValueError('Seleziona un grafo del codice.')
-        path=Path(item['path']) if item else self.home/'graphs'/pid/'graph.json'
-        if not path.exists(): raise ValueError('Crea prima il grafo del progetto.')
-        return query_graph(read_json(path),query,node_id)
+        item = workspace.graph_entry(self, pid, identifier) if identifier else None
+        if item and item['kind'] != 'project':
+            raise ValueError('Seleziona un grafo del codice.')
+        path = Path(item['path']) if item else self.home / 'graphs' / pid / 'graph.json'
+        if not path.exists():
+            raise ValueError('Crea prima il grafo del progetto.')
+        return query_graph(read_json(path), query, node_id)
 
-    def generate_graph(self,data):
-        pid=data['project'];project=workspace.project_record(self,pid)
+    def generate_graph(self, data):
+        pid = data['project']
+        project = workspace.project_record(self, pid)
         if not data.get('source'):
-            data={**data,'name':project['name'][:125]+' · Grafo del codice','graphKind':'project',
-                  'source':{'kind':'sharepoint-local','path':project['path']}}
-        name=str(data.get('name','')).strip()
-        kind=data.get('graphKind')
-        if not name or len(name)>150:raise ValueError('Inserisci un nome per il grafo, fino a 150 caratteri.')
-        if kind not in ('document','project'):raise ValueError('Tipo di grafo non valido.')
-        source_data=dict(data.get('source') or {})
-        source_data.pop('id',None);source_data['name']=name
-        if kind=='document':self.document_graph_profile()
-        rows=self.sources.save(source_data);sid=rows[-1]['id']
-        manifest=self.sources.sync(sid)
-        folder=self.sources.root/sid/manifest['id']
-        identifier='saved:'+uuid.uuid4().hex
-        if kind=='document':
-            graph=self.build_document_graph(pid,[sid],refresh=False)
-            ref={'project':pid,'version':graph['fingerprint']}
-            path=document_graph.graph_path(self.home,ref)
-            extra={'reference':ref,'documentCount':graph['stats']['documents']}
+            data = {
+                **data,
+                'name': project['name'][:125] + ' · Grafo del codice',
+                'graphKind': 'project',
+                'source': {'kind': 'sharepoint-local', 'path': project['path']},
+            }
+        name = str(data.get('name', '')).strip()
+        kind = data.get('graphKind')
+        if not name or len(name) > 150:
+            raise ValueError('Inserisci un nome per il grafo, fino a 150 caratteri.')
+        if kind not in ('document', 'project'):
+            raise ValueError('Tipo di grafo non valido.')
+        source_data = dict(data.get('source') or {})
+        source_data.pop('id', None)
+        source_data['name'] = name
+        if kind == 'document':
+            self.document_graph_profile()
+        rows = self.sources.save(source_data)
+        sid = rows[-1]['id']
+        manifest = self.sources.sync(sid)
+        folder = self.sources.root / sid / manifest['id']
+        identifier = 'saved:' + uuid.uuid4().hex
+        if kind == 'document':
+            graph = self.build_document_graph(pid, [sid], refresh=False)
+            ref = {'project': pid, 'version': graph['fingerprint']}
+            path = document_graph.graph_path(self.home, ref)
+            extra = {'reference': ref, 'documentCount': graph['stats']['documents']}
         else:
-            path=folder/'graph.json'
-            if not path.is_file():raise ValueError('La cartella non contiene codice Python, JavaScript o TypeScript utilizzabile.')
-            graph=read_json(path);extra={}
-        item={'id':identifier,'name':name,'kind':kind,'path':str(path),'createdAt':graph['createdAt'],
-              'stats':graph['stats'],'source':sid,'snapshot':manifest['id'],**extra}
+            path = folder / 'graph.json'
+            if not path.is_file():
+                raise ValueError('La cartella non contiene codice Python, JavaScript o TypeScript utilizzabile.')
+            graph = read_json(path)
+            extra = {}
+        item = {
+            'id': identifier,
+            'name': name,
+            'kind': kind,
+            'path': str(path),
+            'createdAt': graph['createdAt'],
+            'stats': graph['stats'],
+            'source': sid,
+            'snapshot': manifest['id'],
+            **extra,
+        }
         # Publish the graph in the library only after extraction and generation succeed.
-        saved=workspace.saved_graphs(self,pid)
-        save_json(self.home/'graphs'/pid/'saved.json',[*saved,item])
-        refs={**project.get('workspace',{}).get('graph',{})}
-        refs['sources']=list(dict.fromkeys([*workspace.source_references(project),sid]))
-        project.setdefault('workspace',{})['graph']=refs
-        save_json(self.settings_path,self.settings)
-        return {'project':pid,'graph':identifier,'kind':kind,'stats':graph['stats']}
+        saved = workspace.saved_graphs(self, pid)
+        save_json(self.home / 'graphs' / pid / 'saved.json', [*saved, item])
+        refs = {**project.get('workspace', {}).get('graph', {})}
+        refs['sources'] = list(dict.fromkeys([*workspace.source_references(project), sid]))
+        project.setdefault('workspace', {})['graph'] = refs
+        save_json(self.settings_path, self.settings)
+        return {'project': pid, 'graph': identifier, 'kind': kind, 'stats': graph['stats']}
 
     def document_graph_profile(self):
         # Estrazione massiva: modello dedicato, poi Subagenti, poi Orchestratore.
-        roles=self.settings['roles']
-        profile=roles.get('documentation') or roles.get('worker') or roles.get('orchestrator')
-        if not profile:raise ValueError('Configura il modello Estrazione documentale, Subagenti o Orchestratore per costruire il grafo documentale semantico.')
-        model=next((m for m in self.models() if m['provider']==profile['provider'] and m['model']==profile['model']),None)
-        if not model or model.get('toolCalling') is False:raise ValueError('Il grafo documentale richiede un modello disponibile con strumenti.')
-        context=int(model.get('contextWindow') or 32000)
-        if context<16000:raise ValueError('Il grafo documentale richiede un modello con almeno 16.000 token di contesto.')
-        return {**profile,'transport':profile.get('transport','auto'),'contextWindow':context,
-                'maxOutputTokens':min(int(model.get('maxTokens') or 4096),8192,context//4)}
+        roles = self.settings['roles']
+        profile = roles.get('documentation') or roles.get('worker') or roles.get('orchestrator')
+        if not profile:
+            raise ValueError(
+                'Configura il modello Estrazione documentale, Subagenti o Orchestratore per costruire il grafo documentale semantico.'
+            )
+        model = next(
+            (m for m in self.models() if m['provider'] == profile['provider'] and m['model'] == profile['model']), None
+        )
+        if not model or model.get('toolCalling') is False:
+            raise ValueError('Il grafo documentale richiede un modello disponibile con strumenti.')
+        context = int(model.get('contextWindow') or 32000)
+        if context < 16000:
+            raise ValueError('Il grafo documentale richiede un modello con almeno 16.000 token di contesto.')
+        return {
+            **profile,
+            'transport': profile.get('transport', 'auto'),
+            'contextWindow': context,
+            'maxOutputTokens': min(int(model.get('maxTokens') or 4096), 8192, context // 4),
+        }
 
-    def _document_graph_completion(self,request,profile,directory):
-        directory=local_path(directory)
-        job={**profile,'keyEnv':key_env(profile['provider']),'agentDir':str(self.model_dir(directory/'agent')),
-             'cwd':str(directory),'evidenceHome':str(self.home),'timeoutSeconds':600,'maxTurns':24,
-             'systemPrompt':request['systemPrompt'],'documentGraph':{k:request[k] for k in ('bundle','draftPath','phase','context')},
-             'prompt':json.dumps({k:request[k] for k in ('phase','context','validationError')},ensure_ascii=False)}
-        path=directory/('pass-'+uuid.uuid4().hex+'.json');save_json(path,job)
-        env=self.secret_environment({**self.settings,'roles':{'orchestrator':profile}})
-        report=json.loads(self._process(['node',str(ROOT/'adapter.mjs'),str(path)],env,log_output=False))
-        if not report.get('documentGraph'):raise ValueError('Il modello non ha consegnato il grafo documentale.')
-        return {'graph':report['documentGraph'],'usage':report.get('usage',[]),'seconds':report.get('seconds')}
+    def _document_graph_completion(self, request, profile, directory):
+        directory = local_path(directory)
+        job = {
+            **profile,
+            'keyEnv': key_env(profile['provider']),
+            'agentDir': str(self.model_dir(directory / 'agent')),
+            'cwd': str(directory),
+            'evidenceHome': str(self.home),
+            'timeoutSeconds': 600,
+            'maxTurns': 24,
+            'systemPrompt': request['systemPrompt'],
+            'documentGraph': {k: request[k] for k in ('bundle', 'draftPath', 'phase', 'context')},
+            'prompt': json.dumps({k: request[k] for k in ('phase', 'context', 'validationError')}, ensure_ascii=False),
+        }
+        path = directory / ('pass-' + uuid.uuid4().hex + '.json')
+        save_json(path, job)
+        env = self.secret_environment({**self.settings, 'roles': {'orchestrator': profile}})
+        report = json.loads(self._process(['node', str(ROOT / 'adapter.mjs'), str(path)], env, log_output=False))
+        if not report.get('documentGraph'):
+            raise ValueError('Il modello non ha consegnato il grafo documentale.')
+        return {'graph': report['documentGraph'], 'usage': report.get('usage', []), 'seconds': report.get('seconds')}
 
-    def build_document_graph(self,pid,ids,refresh=True,bundle=None,progress=None,include_documentation=False):
-        workspace.project_record(self,pid)
-        profile=self.document_graph_profile()
-        progress=progress or (lambda message:self.job.update(log=(self.job.get('log','')+'\n'+message)[-30000:]))
-        ids=list(dict.fromkeys(ids));known={s['id'] for s in self.sources.connections()}
-        if not ids or (bundle is None and any(s not in known for s in ids)):raise ValueError('Seleziona fonti documentali esistenti.')
+    def build_document_graph(self, pid, ids, refresh=True, bundle=None, progress=None, include_documentation=False):
+        workspace.project_record(self, pid)
+        profile = self.document_graph_profile()
+        progress = progress or (
+            lambda message: self.job.update(log=(self.job.get('log', '') + '\n' + message)[-30000:])
+        )
+        ids = list(dict.fromkeys(ids))
+        known = {s['id'] for s in self.sources.connections()}
+        if not ids or (bundle is None and any(s not in known for s in ids)):
+            raise ValueError('Seleziona fonti documentali esistenti.')
         if bundle is None:
             if refresh:
                 for sid in ids:
-                    progress('Acquisizione e relazioni esplicite: '+sid);self.sources.sync(sid)
-            bundle=self.sources.bundle(ids)
-        directory=self.home/'jobs'/('document-'+uuid.uuid4().hex)
-        model={k:profile[k] for k in ('provider','model','effort')}
-        model['configurationFingerprint']=byok.digest({'profile':profile,'connection':next((p for p in self.settings['providers'] if p['id']==profile['provider']),{})})
-        builder=document_graph.DocumentGraphBuilder(self.home,pid,bundle,model,
-            lambda request:self._document_graph_completion(request,profile,directory),directory,progress,
-            batch_chars=min(24000,max(2000,profile['contextWindow']-profile['maxOutputTokens']-10000)),include_documentation=include_documentation)
-        graph=builder.build();progress('Grafo documentale semantico salvato per il progetto.')
+                    progress('Acquisizione e relazioni esplicite: ' + sid)
+                    self.sources.sync(sid)
+            bundle = self.sources.bundle(ids)
+        directory = self.home / 'jobs' / ('document-' + uuid.uuid4().hex)
+        model = {k: profile[k] for k in ('provider', 'model', 'effort')}
+        model['configurationFingerprint'] = byok.digest(
+            {
+                'profile': profile,
+                'connection': next((p for p in self.settings['providers'] if p['id'] == profile['provider']), {}),
+            }
+        )
+        builder = document_graph.DocumentGraphBuilder(
+            self.home,
+            pid,
+            bundle,
+            model,
+            lambda request: self._document_graph_completion(request, profile, directory),
+            directory,
+            progress,
+            batch_chars=min(24000, max(2000, profile['contextWindow'] - profile['maxOutputTokens'] - 10000)),
+            include_documentation=include_documentation,
+        )
+        graph = builder.build()
+        progress('Grafo documentale semantico salvato per il progetto.')
         return graph
 
-    def finalize_documentation(self,folder,auto_select=True):
-        folder=Path(folder).resolve()
-        registered=self.sources.register_documentation(folder)
-        metadata=read_json(folder/'PROGETTO.json');pid=metadata['project']
-        sid=registered['source'];snapshot=registered['snapshot'];directory=self.sources.root/sid/snapshot
-        bundle=[{'source':sid,'snapshot':snapshot,'directory':str(directory),'manifest':read_json(directory/'manifest.json')}]
-        graph=self.build_document_graph(pid,[sid],refresh=False,bundle=bundle,include_documentation=True)
-        ref={'project':pid,'version':graph['fingerprint']};identifier='documentation-graph:'+folder.name
-        item={'id':identifier,'name':metadata.get('name') or 'documentazione tecnico funzionale','kind':'document','path':str(document_graph.graph_path(self.home,ref)),
-              'reference':ref,'source':sid,'snapshot':snapshot,'workspace':str(folder),'createdAt':graph['createdAt'],'stats':graph['stats']}
-        save_json(self.home/'graphs'/pid/'saved.json',[g for g in workspace.saved_graphs(self,pid) if g['id']!=identifier]+[item])
-        project=workspace.project_record(self,pid);prefs=project.setdefault('workspace',{}).setdefault('documentation',{})
+    def finalize_documentation(self, folder, auto_select=True):
+        folder = Path(folder).resolve()
+        registered = self.sources.register_documentation(folder)
+        metadata = read_json(folder / 'PROGETTO.json')
+        pid = metadata['project']
+        sid = registered['source']
+        snapshot = registered['snapshot']
+        directory = self.sources.root / sid / snapshot
+        bundle = [
+            {
+                'source': sid,
+                'snapshot': snapshot,
+                'directory': str(directory),
+                'manifest': read_json(directory / 'manifest.json'),
+            }
+        ]
+        graph = self.build_document_graph(pid, [sid], refresh=False, bundle=bundle, include_documentation=True)
+        ref = {'project': pid, 'version': graph['fingerprint']}
+        identifier = 'documentation-graph:' + folder.name
+        item = {
+            'id': identifier,
+            'name': metadata.get('name') or 'documentazione tecnico funzionale',
+            'kind': 'document',
+            'path': str(document_graph.graph_path(self.home, ref)),
+            'reference': ref,
+            'source': sid,
+            'snapshot': snapshot,
+            'workspace': str(folder),
+            'createdAt': graph['createdAt'],
+            'stats': graph['stats'],
+        }
+        save_json(
+            self.home / 'graphs' / pid / 'saved.json',
+            [g for g in workspace.saved_graphs(self, pid) if g['id'] != identifier] + [item],
+        )
+        project = workspace.project_record(self, pid)
+        prefs = project.setdefault('workspace', {}).setdefault('documentation', {})
         if auto_select:
-            prefs['graphs']=list(dict.fromkeys([*prefs.get('graphs',[]),identifier]))
-            prefs['documents']=list(dict.fromkeys([*prefs.get('documents',[]),'documentation:'+folder.name+':DOCUMENTAZIONE-TECNICO-FUNZIONALE.md']))
-        project['workspace']['removedGraphs']=[g for g in project['workspace'].get('removedGraphs',[]) if g!=identifier]
-        project['workspace']['removedGraphPaths']=[p for p in project['workspace'].get('removedGraphPaths',[]) if p!=item['path']]
-        save_json(self.settings_path,self.settings)
+            prefs['graphs'] = list(dict.fromkeys([*prefs.get('graphs', []), identifier]))
+            prefs['documents'] = list(
+                dict.fromkeys(
+                    [
+                        *prefs.get('documents', []),
+                        'documentation:' + folder.name + ':DOCUMENTAZIONE-TECNICO-FUNZIONALE.md',
+                    ]
+                )
+            )
+        project['workspace']['removedGraphs'] = [
+            g for g in project['workspace'].get('removedGraphs', []) if g != identifier
+        ]
+        project['workspace']['removedGraphPaths'] = [
+            p for p in project['workspace'].get('removedGraphPaths', []) if p != item['path']
+        ]
+        save_json(self.settings_path, self.settings)
         from suite_graph import digest
-        save_json(folder/'FINALIZZATO.json',{'sha256':digest((folder/'DOCUMENTAZIONE-TECNICO-FUNZIONALE.md').read_bytes()),'graph':identifier})
-        return {**registered,'graph':identifier,'documentGraph':ref}
 
-    def remove_graph(self,pid,identifier):
+        save_json(
+            folder / 'FINALIZZATO.json',
+            {'sha256': digest((folder / 'DOCUMENTAZIONE-TECNICO-FUNZIONALE.md').read_bytes()), 'graph': identifier},
+        )
+        return {**registered, 'graph': identifier, 'documentGraph': ref}
+
+    def remove_graph(self, pid, identifier):
         with self.guard:
-            if self.busy:raise ValueError('È già in corso un’operazione.')
-            item=workspace.graph_entry(self,pid,identifier)
-            project=workspace.project_record(self,pid);prefs=project.setdefault('workspace',{})
-            prefs['removedGraphs']=list(dict.fromkeys([*prefs.get('removedGraphs',[]),identifier]))
-            prefs['removedGraphPaths']=list(dict.fromkeys([*prefs.get('removedGraphPaths',[]),item['path']]))
-            refs=prefs.setdefault('documentation',{});refs['graphs']=[g for g in refs.get('graphs',[]) if g!=identifier]
-            save_json(self.home/'graphs'/pid/'saved.json',[g for g in workspace.saved_graphs(self,pid) if g['id']!=identifier])
-            save_json(self.settings_path,self.settings)
-            return workspace.inventory(self,pid)
+            if self.busy:
+                raise ValueError('È già in corso un’operazione.')
+            item = workspace.graph_entry(self, pid, identifier)
+            project = workspace.project_record(self, pid)
+            prefs = project.setdefault('workspace', {})
+            prefs['removedGraphs'] = list(dict.fromkeys([*prefs.get('removedGraphs', []), identifier]))
+            prefs['removedGraphPaths'] = list(dict.fromkeys([*prefs.get('removedGraphPaths', []), item['path']]))
+            refs = prefs.setdefault('documentation', {})
+            refs['graphs'] = [g for g in refs.get('graphs', []) if g != identifier]
+            save_json(
+                self.home / 'graphs' / pid / 'saved.json',
+                [g for g in workspace.saved_graphs(self, pid) if g['id'] != identifier],
+            )
+            save_json(self.settings_path, self.settings)
+            return workspace.inventory(self, pid)
 
-    def project_for_workspace(self,path):
-        folder=Path(path).resolve();marker=folder/'PROGETTO.json'
-        if marker.is_file():return workspace.project_record(self,read_json(marker)['project'])['id']
-        matching=sorted((p for p in self.settings['projects'] if folder.is_relative_to(Path(p['path']).resolve())),key=lambda p:len(p['path']),reverse=True)
+    def project_for_workspace(self, path):
+        folder = Path(path).resolve()
+        marker = folder / 'PROGETTO.json'
+        if marker.is_file():
+            return workspace.project_record(self, read_json(marker)['project'])['id']
+        matching = sorted(
+            (p for p in self.settings['projects'] if folder.is_relative_to(Path(p['path']).resolve())),
+            key=lambda p: len(p['path']),
+            reverse=True,
+        )
         return matching[0]['id'] if matching else None
 
-    def prepare_technical_functional_documentation(self,ids,objective='',refresh=True,project=None,graph_ref=None,use_document_graph=False,progress=None):
-        progress=progress or (lambda message:self.job.update(log=(self.job.get('log','')+'\n'+message)[-30000:]))
-        ids=list(dict.fromkeys(ids));snapshots={}
-        if not use_document_graph:graph_ref=None
+    def prepare_technical_functional_documentation(
+        self, ids, objective='', refresh=True, project=None, graph_ref=None, use_document_graph=False, progress=None
+    ):
+        progress = progress or (
+            lambda message: self.job.update(log=(self.job.get('log', '') + '\n' + message)[-30000:])
+        )
+        ids = list(dict.fromkeys(ids))
+        snapshots = {}
+        if not use_document_graph:
+            graph_ref = None
         if graph_ref and not refresh:
-            graph=document_graph.load_graph(self.home,graph_ref)
-            if project and graph['project']!=project:raise ValueError('Grafo documentale di un altro progetto.')
-            snapshots={d['source']:d['snapshot'] for d in graph['dependencies']}
+            graph = document_graph.load_graph(self.home, graph_ref)
+            if project and graph['project'] != project:
+                raise ValueError('Grafo documentale di un altro progetto.')
+            snapshots = {d['source']: d['snapshot'] for d in graph['dependencies']}
         if refresh:
-            known={s['id'] for s in self.sources.connections()}
+            known = {s['id'] for s in self.sources.connections()}
             for sid in ids:
-                if sid not in known:continue
-                progress('Acquisizione e relazioni esplicite: '+sid);snapshots[sid]=self.sources.sync(sid)['id']
-        bundle=self.sources.bundle(ids,snapshots)
-        for item in bundle:item['indexVersion']=ensure_index(item['directory'],item['manifest'])['fingerprint']
+                if sid not in known:
+                    continue
+                progress('Acquisizione e relazioni esplicite: ' + sid)
+                snapshots[sid] = self.sources.sync(sid)['id']
+        bundle = self.sources.bundle(ids, snapshots)
+        for item in bundle:
+            item['indexVersion'] = ensure_index(item['directory'], item['manifest'])['fingerprint']
         if use_document_graph and document_graph.document_refs(bundle):
-            if not project:raise ValueError('Associa le fonti a un progetto in Grafi di conoscenza per salvare il grafo documentale semantico.')
+            if not project:
+                raise ValueError(
+                    'Associa le fonti a un progetto in Grafi di conoscenza per salvare il grafo documentale semantico.'
+                )
             if not graph_ref or refresh:
-                candidate=document_graph.current_ref(self.home,project)
+                candidate = document_graph.current_ref(self.home, project)
                 if candidate and not refresh:
                     try:
-                        existing=document_graph.load_graph(self.home,candidate,bundle)
-                        if {d['source'] for d in existing['dependencies']}=={r['source'] for r,_docs in document_graph.document_refs(bundle)}:graph_ref=candidate
-                    except ValueError:pass
+                        existing = document_graph.load_graph(self.home, candidate, bundle)
+                        if {d['source'] for d in existing['dependencies']} == {
+                            r['source'] for r, _docs in document_graph.document_refs(bundle)
+                        }:
+                            graph_ref = candidate
+                    except ValueError:
+                        pass
                 if not graph_ref or refresh:
-                    graph=self.build_document_graph(project,ids,refresh=False,bundle=bundle,progress=progress)
-                    graph_ref={'project':project,'version':graph['fingerprint']}
-            document_graph.load_graph(self.home,graph_ref,bundle)
-        else:graph_ref=None
-        result=self.sources.prepare_documentation(ids,objective,snapshots,graph_ref)
+                    graph = self.build_document_graph(project, ids, refresh=False, bundle=bundle, progress=progress)
+                    graph_ref = {'project': project, 'version': graph['fingerprint']}
+            document_graph.load_graph(self.home, graph_ref, bundle)
+        else:
+            graph_ref = None
+        result = self.sources.prepare_documentation(ids, objective, snapshots, graph_ref)
         if project:
-            save_json(Path(result['workspace'])/'PROGETTO.json',{'project':project,'documentGraph':graph_ref})
-            save_json(Path(result['workspace'])/'CONTESTO.json',workspace.chat_context(self,project))
+            save_json(Path(result['workspace']) / 'PROGETTO.json', {'project': project, 'documentGraph': graph_ref})
+            save_json(Path(result['workspace']) / 'CONTESTO.json', workspace.chat_context(self, project))
         return result
 
-    def start(self,operation,data):
+    def start(self, operation, data):
         with self.guard:
-            if self.busy: raise ValueError('È già in corso un’operazione.')
+            if self.busy:
+                raise ValueError('È già in corso un’operazione.')
             if operation not in OPERATIONS:
                 raise ValueError('Operazione non supportata')
-            if operation in ('prepare-documentation','auto-documentation'):
-                project=workspace.project_record(self,data.get('project'))
-                added=project.get('workspace',{}).get('documentation',{}).get('sources',[])
-                selected=data.get('sources',added);known={s['id'] for s in self.sources.connections()}
-                if not isinstance(selected,list) or not selected or any(not isinstance(s,str) or s not in added or s not in known for s in selected):
+            if operation in ('prepare-documentation', 'auto-documentation'):
+                project = workspace.project_record(self, data.get('project'))
+                added = project.get('workspace', {}).get('documentation', {}).get('sources', [])
+                selected = data.get('sources', added)
+                known = {s['id'] for s in self.sources.connections()}
+                if (
+                    not isinstance(selected, list)
+                    or not selected
+                    or any(not isinstance(s, str) or s not in added or s not in known for s in selected)
+                ):
                     raise ValueError('Aggiungi almeno una fonte dal menu Documentazione tecnico funzionale → Aggiungi.')
-                data={**data,'sources':list(dict.fromkeys(selected))}
-                workspace.selected_graphs(self,data)
-                if 'name' in data and (not isinstance(data['name'],str) or not data['name'].strip() or len(data['name'])>150):
-                    raise ValueError('Inserisci un nome per la documentazione tecnico funzionale, fino a 150 caratteri.')
-            if operation=='generate-graph':
-                workspace.project_record(self,data.get('project'))
-                if data.get('graphKind')=='document':self.document_graph_profile()
-            if operation=='document-graphs':
-                ids=data.get('sources')
-                linked=workspace.source_references(workspace.project_record(self,data.get('project')))
-                if not isinstance(ids,list) or not ids or any(not isinstance(s,str) or s not in linked for s in ids):
+                data = {**data, 'sources': list(dict.fromkeys(selected))}
+                workspace.selected_graphs(self, data)
+                if 'name' in data and (
+                    not isinstance(data['name'], str) or not data['name'].strip() or len(data['name']) > 150
+                ):
+                    raise ValueError(
+                        'Inserisci un nome per la documentazione tecnico funzionale, fino a 150 caratteri.'
+                    )
+            if operation == 'generate-graph':
+                workspace.project_record(self, data.get('project'))
+                if data.get('graphKind') == 'document':
+                    self.document_graph_profile()
+            if operation == 'document-graphs':
+                ids = data.get('sources')
+                linked = workspace.source_references(workspace.project_record(self, data.get('project')))
+                if not isinstance(ids, list) or not ids or any(not isinstance(s, str) or s not in linked for s in ids):
                     raise ValueError('Seleziona almeno una fonte collegata al progetto per creare i grafi documentali.')
-                data={**data,'sources':list(dict.fromkeys(ids))}
+                data = {**data, 'sources': list(dict.fromkeys(ids))}
                 self.document_graph_profile()
-            self.busy=True; self.job={'id':uuid.uuid4().hex,'operation':operation,'state':'running','startedAt':time.time(),'log':''}
-            save_json(self.home/'last-job.json',self.job)
-            threading.Thread(target=self._work,args=(operation,data),daemon=True).start()
+            self.busy = True
+            self.job = {
+                'id': uuid.uuid4().hex,
+                'operation': operation,
+                'state': 'running',
+                'startedAt': time.time(),
+                'log': '',
+            }
+            save_json(self.home / 'last-job.json', self.job)
+            threading.Thread(target=self._work, args=(operation, data), daemon=True).start()
             return dict(self.job)
 
-    def _work(self,operation,data):
+    def _work(self, operation, data):
         try:
-            directory=self.home/'jobs'/self.job['id']; directory.mkdir(parents=True)
-            env=os.environ.copy()
-            env.update(PI_SUITE_GRAPH_CACHE=str(self.cache),PYTHONUTF8='1')
-            if operation=='generate-graph':
-                self.job['result']=self.generate_graph(data)
-            elif operation=='sync-source':
-                manifest=self.sources.sync(data['source'])
-                self.job['result']={'source':data['source'],'documents':len(manifest['documents']),'excluded':len(manifest['excluded'])}
-            elif operation=='document-graphs':
-                graph=self.build_document_graph(data['project'],data['sources'])
-                self.job['result']={'documentGraph':{'project':data['project'],'version':graph['fingerprint']},'stats':graph['stats']}
-            elif operation=='index-sources':self.job['result']=self.sources.index_sources(data['sources'])
-            elif operation=='register-documentation':self.job['result']=self.finalize_documentation(data['workspace'])
-            elif operation in ('prepare-documentation','auto-documentation'):
-                def progress(message):self.job['log']=(self.job.get('log','')+'\n'+message)[-30000:]
-                data['sources']=workspace.prepare_sources(self,data,operation)
-                result=self.prepare_technical_functional_documentation(data['sources'],data.get('objective',''),operation=='auto-documentation',data['project'],
-                    data.get('documentGraph'),False,progress)
-                save_json(Path(result['workspace'])/'PROGETTO.json',{'project':data['project'],'name':data.get('name','').strip(),
-                    'graphs':data['graphs'],'documentGraph':result.get('documentGraph')})
-                save_json(Path(result['workspace'])/'CONTESTO.json',workspace.chat_context(self,data['project']))
-                result['prompt']+=' Produci un documento DOCUMENTAZIONE-TECNICO-FUNZIONALE.md tecnico-funzionale dettagliato e autosufficiente. Applica il workflow AS-IS presente nel prompt di sistema: prima PIANO-DOCUMENTAZIONE.md, poi un task distinto per ogni micro modulo o funzionalità terminale. I figli descrivono solo la propria unità e lasciano riferimenti alle altre. Applica le proposte verificate con apply_proposal, componi il documento con assemble_documentation, aggiorna il piano e crea nuovi task per le lacune; segnala eventuali unità ancora parziali o bloccate. Alla fine chiama register_documentation: genera anche il grafo semantico LLM del Markdown finale e lo seleziona nel contesto.'
-                self.job['result']={'project':data['project'],**{k:v for k,v in result.items() if k not in ('sources','prompt')}}
-                if data.get('openChat',True):self.open_chat(result['workspace'],result['prompt'])
-            elif operation=='graph':
-                p=self.project(data['project']); repo=Path(p['path'])
-                graph=build_graph(repo,self.cache,project_files(repo) if p['isGit'] else None,prefix='repo/',base=p['head'])
-                save_json(self.home/'graphs'/p['id']/'graph.json',graph)
-                self.job['log']=json.dumps(graph['stats'],ensure_ascii=False)
-            elif operation=='probe':
-                profile=({'provider':data['provider'],'model':data['model'],'effort':data.get('effort','off'),'transport':'auto','keyEnv':key_env(data['provider'])}
-                    if data.get('provider') and data.get('model') else self.settings['roles'].get(data.get('role')))
-                if not profile and data.get('role')=='documentation':profile=self.document_graph_profile()
-                if not profile: raise ValueError('Salva prima il modello per questo ruolo.')
-                if not any(m['provider']==profile['provider'] and m['model']==profile['model'] for m in self.models()):raise ValueError('Modello non disponibile')
-                env=self.secret_environment({**self.settings,'roles':{'probe':profile}})
-                c={**profile,'agentDir':str(self.model_dir(directory/'pi')),'timeoutSeconds':90,'maxTurns':4,'probe':True}
-                nonce=secrets.token_hex(12) if data.get('provider') else 'OK'
-                job={**c,'probeNonce':nonce,'prompt':'Call capability_check with value '+nonce+', then read its result and reply CHECK_COMPLETE.','cwd':str(directory)}
-                save_json(directory/'probe.json',job)
-                output=self._process(['node',str(ROOT/'adapter.mjs'),str(directory/'probe.json')],env)
-                report=json.loads(output)
-                if not report.get('probeToolCalled'): raise ValueError('Il modello ha risposto ma non ha eseguito il tool di prova. Verifica il supporto tool calling.')
-                self.job['result']={'model':profile['model'],'provider':profile['provider'],'requested':report['requested'],'effective':report['piLevel'],'toolCalling':True,
-                    'status':'verified','usage':report['usage'],'payloads':report['payloads']}
-                self.record_check(profile['provider'],profile['model'],self.job['result'])
-            self.job.update(state='done',finishedAt=time.time())
+            directory = self.home / 'jobs' / self.job['id']
+            directory.mkdir(parents=True)
+            env = os.environ.copy()
+            env.update(PI_SUITE_GRAPH_CACHE=str(self.cache), PYTHONUTF8='1')
+            if operation == 'generate-graph':
+                self.job['result'] = self.generate_graph(data)
+            elif operation == 'sync-source':
+                manifest = self.sources.sync(data['source'])
+                self.job['result'] = {
+                    'source': data['source'],
+                    'documents': len(manifest['documents']),
+                    'excluded': len(manifest['excluded']),
+                }
+            elif operation == 'document-graphs':
+                graph = self.build_document_graph(data['project'], data['sources'])
+                self.job['result'] = {
+                    'documentGraph': {'project': data['project'], 'version': graph['fingerprint']},
+                    'stats': graph['stats'],
+                }
+            elif operation == 'index-sources':
+                self.job['result'] = self.sources.index_sources(data['sources'])
+            elif operation == 'register-documentation':
+                self.job['result'] = self.finalize_documentation(data['workspace'])
+            elif operation in ('prepare-documentation', 'auto-documentation'):
+
+                def progress(message):
+                    self.job['log'] = (self.job.get('log', '') + '\n' + message)[-30000:]
+
+                data['sources'] = workspace.prepare_sources(self, data, operation)
+                result = self.prepare_technical_functional_documentation(
+                    data['sources'],
+                    data.get('objective', ''),
+                    operation == 'auto-documentation',
+                    data['project'],
+                    data.get('documentGraph'),
+                    False,
+                    progress,
+                )
+                save_json(
+                    Path(result['workspace']) / 'PROGETTO.json',
+                    {
+                        'project': data['project'],
+                        'name': data.get('name', '').strip(),
+                        'graphs': data['graphs'],
+                        'documentGraph': result.get('documentGraph'),
+                    },
+                )
+                save_json(Path(result['workspace']) / 'CONTESTO.json', workspace.chat_context(self, data['project']))
+                result['prompt'] += (
+                    ' Produci un documento DOCUMENTAZIONE-TECNICO-FUNZIONALE.md tecnico-funzionale dettagliato e autosufficiente. Applica il workflow AS-IS presente nel prompt di sistema: prima PIANO-DOCUMENTAZIONE.md, poi un task distinto per ogni micro modulo o funzionalità terminale. I figli descrivono solo la propria unità e lasciano riferimenti alle altre. Applica le proposte verificate con apply_proposal, componi il documento con assemble_documentation, aggiorna il piano e crea nuovi task per le lacune; segnala eventuali unità ancora parziali o bloccate. Alla fine chiama register_documentation: genera anche il grafo semantico LLM del Markdown finale e lo seleziona nel contesto.'
+                )
+                self.job['result'] = {
+                    'project': data['project'],
+                    **{k: v for k, v in result.items() if k not in ('sources', 'prompt')},
+                }
+                if data.get('openChat', True):
+                    self.open_chat(result['workspace'], result['prompt'])
+            elif operation == 'graph':
+                p = self.project(data['project'])
+                repo = Path(p['path'])
+                graph = build_graph(
+                    repo, self.cache, project_files(repo) if p['isGit'] else None, prefix='repo/', base=p['head']
+                )
+                save_json(self.home / 'graphs' / p['id'] / 'graph.json', graph)
+                self.job['log'] = json.dumps(graph['stats'], ensure_ascii=False)
+            elif operation == 'probe':
+                profile = (
+                    {
+                        'provider': data['provider'],
+                        'model': data['model'],
+                        'effort': data.get('effort', 'off'),
+                        'transport': 'auto',
+                        'keyEnv': key_env(data['provider']),
+                    }
+                    if data.get('provider') and data.get('model')
+                    else self.settings['roles'].get(data.get('role'))
+                )
+                if not profile and data.get('role') == 'documentation':
+                    profile = self.document_graph_profile()
+                if not profile:
+                    raise ValueError('Salva prima il modello per questo ruolo.')
+                if not any(
+                    m['provider'] == profile['provider'] and m['model'] == profile['model'] for m in self.models()
+                ):
+                    raise ValueError('Modello non disponibile')
+                env = self.secret_environment({**self.settings, 'roles': {'probe': profile}})
+                c = {
+                    **profile,
+                    'agentDir': str(self.model_dir(directory / 'pi')),
+                    'timeoutSeconds': 90,
+                    'maxTurns': 4,
+                    'probe': True,
+                }
+                nonce = secrets.token_hex(12) if data.get('provider') else 'OK'
+                job = {
+                    **c,
+                    'probeNonce': nonce,
+                    'prompt': 'Call capability_check with value '
+                    + nonce
+                    + ', then read its result and reply CHECK_COMPLETE.',
+                    'cwd': str(directory),
+                }
+                save_json(directory / 'probe.json', job)
+                output = self._process(['node', str(ROOT / 'adapter.mjs'), str(directory / 'probe.json')], env)
+                report = json.loads(output)
+                if not report.get('probeToolCalled'):
+                    raise ValueError(
+                        'Il modello ha risposto ma non ha eseguito il tool di prova. Verifica il supporto tool calling.'
+                    )
+                self.job['result'] = {
+                    'model': profile['model'],
+                    'provider': profile['provider'],
+                    'requested': report['requested'],
+                    'effective': report['piLevel'],
+                    'toolCalling': True,
+                    'status': 'verified',
+                    'usage': report['usage'],
+                    'payloads': report['payloads'],
+                }
+                self.record_check(profile['provider'], profile['model'], self.job['result'])
+            self.job.update(state='done', finishedAt=time.time())
         except Exception as e:
-            if operation=='probe' and 'profile' in locals() and profile:
-                self.record_check(profile['provider'],profile['model'],{'status':'failed','error':self.redact(str(e))})
-            self.job.update(state='failed',error=self.redact(str(e)),finishedAt=time.time())
+            if operation == 'probe' and 'profile' in locals() and profile:
+                self.record_check(
+                    profile['provider'], profile['model'], {'status': 'failed', 'error': self.redact(str(e))}
+                )
+            self.job.update(state='failed', error=self.redact(str(e)), finishedAt=time.time())
         finally:
             with self.guard:
-                save_json(self.home/'last-job.json',self.job); self.busy=False
+                save_json(self.home / 'last-job.json', self.job)
+                self.busy = False
 
-    def _process(self,args,env,log_output=True):
-        process=subprocess.run(args,cwd=ROOT,env=env,capture_output=True,encoding='utf-8',errors='replace',timeout=7200)
-        output=self.redact(process.stdout); error=self.redact(process.stderr)
-        self.job['log']=(self.job.get('log','')+(output if log_output else '')+'\n'+error)[-30000:]
-        if process.returncode: raise ValueError(error[-3000:] or output[-3000:] or 'Processo terminato con errore')
+    def _process(self, args, env, log_output=True):
+        process = subprocess.run(
+            args, cwd=ROOT, env=env, capture_output=True, encoding='utf-8', errors='replace', timeout=7200
+        )
+        output = self.redact(process.stdout)
+        error = self.redact(process.stderr)
+        self.job['log'] = (self.job.get('log', '') + (output if log_output else '') + '\n' + error)[-30000:]
+        if process.returncode:
+            raise ValueError(error[-3000:] or output[-3000:] or 'Processo terminato con errore')
         return output
 
+
 class Server(http.server.ThreadingHTTPServer):
-    daemon_threads=True
-    def __init__(self,addr,suite,token):
-        self.suite=suite; self.token=token
-        super().__init__(addr,Handler)
+    daemon_threads = True
+
+    def __init__(self, addr, suite, token):
+        self.suite = suite
+        self.token = token
+        super().__init__(addr, Handler)
+
 
 class Handler(http.server.BaseHTTPRequestHandler):
-    def log_message(self,*args): pass
-    def send(self,status,body,kind='application/json'):
-        raw=json.dumps(body,ensure_ascii=False).encode() if kind=='application/json' else body
-        self.send_response(status); self.send_header('Content-Type',kind+'; charset=utf-8')
-        self.send_header('Content-Length',str(len(raw))); self.send_header('Cache-Control','no-store')
-        self.send_header('X-Content-Type-Options','nosniff'); self.send_header('Referrer-Policy','no-referrer')
-        self.send_header('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
-        self.end_headers(); self.wfile.write(raw)
-    def dispatch(self,post=False):
+    def log_message(self, *args):
+        pass
+
+    def send(self, status, body, kind='application/json'):
+        raw = json.dumps(body, ensure_ascii=False).encode() if kind == 'application/json' else body
+        self.send_response(status)
+        self.send_header('Content-Type', kind + '; charset=utf-8')
+        self.send_header('Content-Length', str(len(raw)))
+        self.send_header('Cache-Control', 'no-store')
+        self.send_header('X-Content-Type-Options', 'nosniff')
+        self.send_header('Referrer-Policy', 'no-referrer')
+        self.send_header(
+            'Content-Security-Policy',
+            "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+        )
+        self.end_headers()
+        self.wfile.write(raw)
+
+    def dispatch(self, post=False):
         try:
-            origin=f'http://127.0.0.1:{self.server.server_port}'
-            if self.headers.get('Host')!=f'127.0.0.1:{self.server.server_port}':
-                return self.send(403,{'error':'Host non consentito'})
-            if self.headers.get('Origin') not in (None,origin):
-                return self.send(403,{'error':'Origine non consentita'})
-            path=urllib.parse.urlsplit(self.path); route=path.path; params=urllib.parse.parse_qs(path.query)
-            static={'/':('index.html','text/html'),'/app.js':('app.js','text/javascript'),'/evidence-panel.js':('evidence-panel.js','text/javascript'),'/style.css':('style.css','text/css')}
-            static['/benchmark-panel.js']=('benchmark-panel.js','text/javascript')
-            static['/benchmark.css']=('benchmark.css','text/css')
-            static['/themes.js']=('themes.js','text/javascript')
+            origin = f'http://127.0.0.1:{self.server.server_port}'
+            if self.headers.get('Host') != f'127.0.0.1:{self.server.server_port}':
+                return self.send(403, {'error': 'Host non consentito'})
+            if self.headers.get('Origin') not in (None, origin):
+                return self.send(403, {'error': 'Origine non consentita'})
+            path = urllib.parse.urlsplit(self.path)
+            route = path.path
+            params = urllib.parse.parse_qs(path.query)
+            static = {
+                '/': ('index.html', 'text/html'),
+                '/app.js': ('app.js', 'text/javascript'),
+                '/evidence-panel.js': ('evidence-panel.js', 'text/javascript'),
+                '/style.css': ('style.css', 'text/css'),
+            }
+            static['/benchmark-panel.js'] = ('benchmark-panel.js', 'text/javascript')
+            static['/benchmark.css'] = ('benchmark.css', 'text/css')
+            static['/themes.js'] = ('themes.js', 'text/javascript')
             if not post and route in static:
-                file,kind=static[route]; return self.send(200,(ROOT/'suite-ui'/file).read_bytes(),kind)
-            token=self.headers.get('X-Suite-Token','')
-            if not hmac.compare_digest(token,self.server.token): return self.send(401,{'error':'Apri il pannello dal collegamento Pi Suite per autenticarti.'})
-            data={}
+                file, kind = static[route]
+                return self.send(200, (ROOT / 'suite-ui' / file).read_bytes(), kind)
+            token = self.headers.get('X-Suite-Token', '')
+            if not hmac.compare_digest(token, self.server.token):
+                return self.send(401, {'error': 'Apri il pannello dal collegamento Pi Suite per autenticarti.'})
+            data = {}
             if post:
-                if self.headers.get('Content-Type','').split(';')[0]!='application/json': raise ValueError('Richiesto JSON')
-                length=int(self.headers.get('Content-Length','0'))
-                limit=3000000 if route in ('/api/benchmarks/import-result-file','/api/benchmarks/import-evaluation-file') else 1000000
-                if not 0<length<=limit: raise ValueError('Richiesta troppo grande o vuota')
-                data=json.loads(self.rfile.read(length))
-            app=self.server.suite
-            if route=='/api/state' and not post: result={'settings':app.public_settings(),'job':dict(app.job),'busy':app.busy,'version':'0.6.5'}
-            elif route=='/api/settings' and post: result=app.save_settings(data)
-            elif route=='/api/benchmarks' or route.startswith('/api/benchmarks/'):
-                result=app.benchmarks.request(route,data,params,post)
-            elif route=='/api/byok/config' and not post:result={'config':app.byok.config(),'revision':app.byok.revision()}
-            elif route=='/api/byok/import/preview' and post:result=app.import_byok(data)
-            elif route=='/api/byok/import/apply' and post:result=app.import_byok(data,apply=True)
-            elif route=='/api/byok/secrets' and post:result=app.save_secret(data)
-            elif route=='/api/byok/connections' and post:result=app.save_connection(data)
-            elif route=='/api/byok/export' and not post:
-                format=params.get('format',['json'])[0]
-                result={'format':format,'content':app.byok.export(format)}
-            elif route=='/api/byok/probe' and post:result=app.start('probe',data)
-            elif route=='/api/skills' and post: result=app.import_skill(data['content'])
-            elif route=='/api/models' and not post: result=app.models()
-            elif route=='/api/projects' and post: result=app.add_project(data.get('path',''),data.get('name',''))
-            elif route in ('/api/folder','/api/project-folder') and post: result=app.pick_folder(data)
-            elif route=='/api/project-references' and post:
-                result=app.save_project_references(data['project'],data['section'],data['references'])
-            elif route=='/api/chat' and post: result=app.open_chat(data.get('path',''),project_id=data.get('project'))
-            elif route=='/api/remove-graph' and post:result=app.remove_graph(data['project'],data['graph'])
-            elif route=='/api/delegations' and not post: result=app.delegations()
-            elif route=='/api/sources' and not post: result=app.sources.public()
-            elif route=='/api/sources' and post:
+                if self.headers.get('Content-Type', '').split(';')[0] != 'application/json':
+                    raise ValueError('Richiesto JSON')
+                length = int(self.headers.get('Content-Length', '0'))
+                limit = (
+                    3000000
+                    if route in ('/api/benchmarks/import-result-file', '/api/benchmarks/import-evaluation-file')
+                    else 1000000
+                )
+                if not 0 < length <= limit:
+                    raise ValueError('Richiesta troppo grande o vuota')
+                data = json.loads(self.rfile.read(length))
+            app = self.server.suite
+            if route == '/api/state' and not post:
+                result = {'settings': app.public_settings(), 'job': dict(app.job), 'busy': app.busy, 'version': '0.6.5'}
+            elif route == '/api/settings' and post:
+                result = app.save_settings(data)
+            elif route == '/api/benchmarks' or route.startswith('/api/benchmarks/'):
+                result = app.benchmarks.request(route, data, params, post)
+            elif route == '/api/byok/config' and not post:
+                result = {'config': app.byok.config(), 'revision': app.byok.revision()}
+            elif route == '/api/byok/import/preview' and post:
+                result = app.import_byok(data)
+            elif route == '/api/byok/import/apply' and post:
+                result = app.import_byok(data, apply=True)
+            elif route == '/api/byok/secrets' and post:
+                result = app.save_secret(data)
+            elif route == '/api/byok/connections' and post:
+                result = app.save_connection(data)
+            elif route == '/api/byok/export' and not post:
+                format = params.get('format', ['json'])[0]
+                result = {'format': format, 'content': app.byok.export(format)}
+            elif route == '/api/byok/probe' and post:
+                result = app.start('probe', data)
+            elif route == '/api/skills' and post:
+                result = app.import_skill(data['content'])
+            elif route == '/api/models' and not post:
+                result = app.models()
+            elif route == '/api/projects' and post:
+                result = app.add_project(data.get('path', ''), data.get('name', ''))
+            elif route in ('/api/folder', '/api/project-folder') and post:
+                result = app.pick_folder(data)
+            elif route == '/api/project-references' and post:
+                result = app.save_project_references(data['project'], data['section'], data['references'])
+            elif route == '/api/chat' and post:
+                result = app.open_chat(data.get('path', ''), project_id=data.get('project'))
+            elif route == '/api/remove-graph' and post:
+                result = app.remove_graph(data['project'], data['graph'])
+            elif route == '/api/delegations' and not post:
+                result = app.delegations()
+            elif route == '/api/sources' and not post:
+                result = app.sources.public()
+            elif route == '/api/sources' and post:
                 with app.guard:
-                    if app.busy:raise ValueError('Attendi il completamento dell’operazione in corso.')
-                    result=app.sources.save(data)
-            elif route=='/api/documentazione-tecnico-funzionale-registry' and not post:result=app.sources.documentation_registry()
-            elif route=='/api/evidence' and post:
+                    if app.busy:
+                        raise ValueError('Attendi il completamento dell’operazione in corso.')
+                    result = app.sources.save(data)
+            elif route == '/api/documentazione-tecnico-funzionale-registry' and not post:
+                result = app.sources.documentation_registry()
+            elif route == '/api/evidence' and post:
                 from suite_evidence import query
-                if data['action'] not in ('knowledge_search','knowledge_trace','read_evidence'):raise ValueError('Consultazione non supportata')
+
+                if data['action'] not in ('knowledge_search', 'knowledge_trace', 'read_evidence'):
+                    raise ValueError('Consultazione non supportata')
                 if data.get('documentGraph'):
-                    pid=data['project'];workspace.project_record(app,pid)
-                    ref={'project':pid,'version':data['documentGraphVersion']} if data.get('documentGraphVersion') else document_graph.current_ref(app.home,pid)
-                    graph=document_graph.load_graph(app.home,ref)
-                    dependencies=graph['dependencies'];snapshots={d['source']:d['snapshot'] for d in dependencies}
-                    bundle=app.sources.bundle(list(snapshots),snapshots)
-                else:bundle=app.sources.knowledge_bundle(data['sources'])
-                result=query(bundle,data['action'],data.get('args',{}))
-            elif route=='/api/relation-proposals' and not post:
-                from suite_evidence import local_path,load
-                result=[load(p) for p in sorted((local_path(app.home)/'knowledge'/'proposals').glob('*/*.json')) if re.fullmatch('[a-f0-9]{32}',p.stem)]
-            elif route=='/api/relation-review' and post:
-                from suite_evidence import local_path,load,review_relation,corpus_version
-                version=data['corpusVersion']
-                if not re.fullmatch('[a-f0-9]{64}',version):raise ValueError('Corpus non valido')
-                bundle=load(local_path(app.home)/'knowledge'/'proposals'/version/'corpus.json')['bundle']
-                if corpus_version(bundle)!=version:raise ValueError('Corpus alterato')
-                result=review_relation(app.home,bundle,data['id'],data['verdict'],data['reason'])
-            elif route=='/api/project' and not post: result=app.project(params['id'][0])
-            elif route=='/api/project-files' and not post: result=workspace.inventory(app,params['id'][0])
-            elif route=='/api/project-file' and not post: result=workspace.read_file(app,params['id'][0],params['file'][0])
-            elif route=='/api/graph' and not post: result=app.graph(params['id'][0],params.get('q',[''])[0],params.get('node',[None])[0],params.get('file',[None])[0])
-            elif route=='/api/document-graph' and not post:
-                pid=params['id'][0];workspace.project_record(app,pid);ref=document_graph.current_ref(app.home,pid)
+                    pid = data['project']
+                    workspace.project_record(app, pid)
+                    ref = (
+                        {'project': pid, 'version': data['documentGraphVersion']}
+                        if data.get('documentGraphVersion')
+                        else document_graph.current_ref(app.home, pid)
+                    )
+                    graph = document_graph.load_graph(app.home, ref)
+                    dependencies = graph['dependencies']
+                    snapshots = {d['source']: d['snapshot'] for d in dependencies}
+                    bundle = app.sources.bundle(list(snapshots), snapshots)
+                else:
+                    bundle = app.sources.knowledge_bundle(data['sources'])
+                result = query(bundle, data['action'], data.get('args', {}))
+            elif route == '/api/relation-proposals' and not post:
+                from suite_evidence import local_path, load
+
+                result = [
+                    load(p)
+                    for p in sorted((local_path(app.home) / 'knowledge' / 'proposals').glob('*/*.json'))
+                    if re.fullmatch('[a-f0-9]{32}', p.stem)
+                ]
+            elif route == '/api/relation-review' and post:
+                from suite_evidence import local_path, load, review_relation, corpus_version
+
+                version = data['corpusVersion']
+                if not re.fullmatch('[a-f0-9]{64}', version):
+                    raise ValueError('Corpus non valido')
+                bundle = load(local_path(app.home) / 'knowledge' / 'proposals' / version / 'corpus.json')['bundle']
+                if corpus_version(bundle) != version:
+                    raise ValueError('Corpus alterato')
+                result = review_relation(app.home, bundle, data['id'], data['verdict'], data['reason'])
+            elif route == '/api/project' and not post:
+                result = app.project(params['id'][0])
+            elif route == '/api/project-files' and not post:
+                result = workspace.inventory(app, params['id'][0])
+            elif route == '/api/project-file' and not post:
+                result = workspace.read_file(app, params['id'][0], params['file'][0])
+            elif route == '/api/graph' and not post:
+                result = app.graph(
+                    params['id'][0],
+                    params.get('q', [''])[0],
+                    params.get('node', [None])[0],
+                    params.get('file', [None])[0],
+                )
+            elif route == '/api/document-graph' and not post:
+                pid = params['id'][0]
+                workspace.project_record(app, pid)
+                ref = document_graph.current_ref(app.home, pid)
                 if params.get('file'):
-                    item=workspace.graph_entry(app,pid,params['file'][0])
-                    if item['kind']!='document':raise ValueError('Seleziona un grafo documentale.')
-                    ref=item['reference']
-                result=document_graph.query_graph(app.home,ref,{'query':params.get('q',[''])[0],'nodes':params.get('node',[]),'limit':30}) if ref else {'available':False,'nodes':[],'edges':[]}
-            elif route=='/api/source' and not post:
-                project=app.project(params['id'][0]); name=params['path'][0]
+                    item = workspace.graph_entry(app, pid, params['file'][0])
+                    if item['kind'] != 'document':
+                        raise ValueError('Seleziona un grafo documentale.')
+                    ref = item['reference']
+                result = (
+                    document_graph.query_graph(
+                        app.home, ref, {'query': params.get('q', [''])[0], 'nodes': params.get('node', []), 'limit': 30}
+                    )
+                    if ref
+                    else {'available': False, 'nodes': [], 'edges': []}
+                )
+            elif route == '/api/source' and not post:
+                project = app.project(params['id'][0])
+                name = params['path'][0]
                 if params.get('file'):
-                    item=workspace.graph_entry(app,project['id'],params['file'][0])
+                    item = workspace.graph_entry(app, project['id'], params['file'][0])
                     if item.get('source'):
-                        bundle=app.sources.bundle([item['source']],{item['source']:item['snapshot']})[0]
-                        doc=next((d for d in bundle['manifest']['documents'] if d['path']==name),None)
-                        if not doc:raise ValueError('Sorgente non disponibile nel grafo.')
-                        result={'text':(Path(bundle['directory'])/(doc['id']+'.txt')).read_text(encoding='utf-8')}
-                        return self.send(200,result)
-                if name not in project['files']: raise ValueError('Sorgente non disponibile nel progetto')
-                root=Path(project['path']); target=root/checked_relative(name)
-                if not target.resolve().is_relative_to(root.resolve()) or target.is_symlink() or target.stat().st_size>200000:
+                        bundle = app.sources.bundle([item['source']], {item['source']: item['snapshot']})[0]
+                        doc = next((d for d in bundle['manifest']['documents'] if d['path'] == name), None)
+                        if not doc:
+                            raise ValueError('Sorgente non disponibile nel grafo.')
+                        result = {
+                            'text': (Path(bundle['directory']) / (doc['id'] + '.txt')).read_text(encoding='utf-8')
+                        }
+                        return self.send(200, result)
+                if name not in project['files']:
+                    raise ValueError('Sorgente non disponibile nel progetto')
+                root = Path(project['path'])
+                target = root / checked_relative(name)
+                if (
+                    not target.resolve().is_relative_to(root.resolve())
+                    or target.is_symlink()
+                    or target.stat().st_size > 200000
+                ):
                     raise ValueError('Sorgente fuori perimetro')
-                result={'text':target.read_text(encoding='utf-8')}
-            elif route=='/api/action' and post: result=app.start(data['operation'],data)
-            else: return self.send(404,{'error':'Risorsa non trovata'})
-            self.send(200,result)
-        except (ValueError,KeyError,TypeError,subprocess.SubprocessError,sqlite3.Error,OSError) as e:
-            self.send(400,{'error':self.server.suite.redact(str(e))})
-    def do_GET(self): self.dispatch()
-    def do_POST(self): self.dispatch(True)
+                result = {'text': target.read_text(encoding='utf-8')}
+            elif route == '/api/action' and post:
+                result = app.start(data['operation'], data)
+            else:
+                return self.send(404, {'error': 'Risorsa non trovata'})
+            self.send(200, result)
+        except (ValueError, KeyError, TypeError, subprocess.SubprocessError, sqlite3.Error, OSError) as e:
+            self.send(400, {'error': self.server.suite.redact(str(e))})
+
+    def do_GET(self):
+        self.dispatch()
+
+    def do_POST(self):
+        self.dispatch(True)
+
 
 def main():
-    p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--home',default=os.environ.get('PI_SUITE_HOME',str(ROOT/'suite-data')))
-    p.add_argument('--port',type=int,default=0); p.add_argument('--no-browser',action='store_true')
-    args=p.parse_args(); home=Path(args.home).resolve(); marker=home/'server.json'
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument('--home', default=os.environ.get('PI_SUITE_HOME', str(ROOT / 'suite-data')))
+    p.add_argument('--port', type=int, default=0)
+    p.add_argument('--no-browser', action='store_true')
+    args = p.parse_args()
+    home = Path(args.home).resolve()
+    marker = home / 'server.json'
     if marker.exists():
         try:
-            running=read_json(marker)
-            req=urllib.request.Request(running['url']+'/api/state',headers={'X-Suite-Token':running['token']})
-            with urllib.request.urlopen(req,timeout=2) as response: response.read()
-            if not args.no_browser: webbrowser.open(running['url']+'/#'+running['token'])
-            print('Pi Suite è già in esecuzione.'); return
-        except (OSError,ValueError,KeyError): pass
-    app=Suite(home); token=secrets.token_urlsafe(32); server=Server(('127.0.0.1',args.port),app,token)
-    url=f'http://127.0.0.1:{server.server_port}'
-    save_json(marker,{'url':url,'token':token,'pid':os.getpid()})
-    print('Pi Suite pronta: '+url,flush=True)
-    if not args.no_browser: webbrowser.open(url+'/#'+token)
-    try: server.serve_forever()
-    except KeyboardInterrupt: pass
+            running = read_json(marker)
+            req = urllib.request.Request(running['url'] + '/api/state', headers={'X-Suite-Token': running['token']})
+            with urllib.request.urlopen(req, timeout=2) as response:
+                response.read()
+            if not args.no_browser:
+                webbrowser.open(running['url'] + '/#' + running['token'])
+            print('Pi Suite è già in esecuzione.')
+            return
+        except (OSError, ValueError, KeyError):
+            pass
+    app = Suite(home)
+    token = secrets.token_urlsafe(32)
+    server = Server(('127.0.0.1', args.port), app, token)
+    url = f'http://127.0.0.1:{server.server_port}'
+    save_json(marker, {'url': url, 'token': token, 'pid': os.getpid()})
+    print('Pi Suite pronta: ' + url, flush=True)
+    if not args.no_browser:
+        webbrowser.open(url + '/#' + token)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
     finally:
         server.server_close()
-        if marker.exists() and read_json(marker).get('pid')==os.getpid(): marker.unlink()
+        if marker.exists() and read_json(marker).get('pid') == os.getpid():
+            marker.unlink()
 
-if __name__=='__main__': main()
+
+if __name__ == '__main__':
+    main()

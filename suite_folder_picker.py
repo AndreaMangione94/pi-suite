@@ -1,4 +1,5 @@
 """Windows Explorer folder picker, without PowerShell or optional GUI packages."""
+
 from __future__ import annotations
 
 import ctypes
@@ -8,8 +9,12 @@ from pathlib import Path
 
 
 class GUID(ctypes.Structure):
-    _fields_ = [('data1', ctypes.c_uint32), ('data2', ctypes.c_uint16),
-                ('data3', ctypes.c_uint16), ('data4', ctypes.c_ubyte * 8)]
+    _fields_ = [
+        ('data1', ctypes.c_uint32),
+        ('data2', ctypes.c_uint16),
+        ('data3', ctypes.c_uint16),
+        ('data4', ctypes.c_ubyte * 8),
+    ]
 
     @classmethod
     def parse(cls, value):
@@ -24,7 +29,7 @@ def _method(instance, index, result_type, *argument_types):
 
 def _check(result):
     if result < 0:
-        raise OSError('Errore del selettore Windows (HRESULT 0x%08X).' % (result & 0xffffffff))
+        raise OSError('Errore del selettore Windows (HRESULT 0x%08X).' % (result & 0xFFFFFFFF))
 
 
 def choose_folder(initial_path='', title='Scegli una cartella'):
@@ -46,13 +51,22 @@ def choose_folder(initial_path='', title='Scegli una cartella'):
     ole32.CoInitializeEx.restype = hresult
     ole32.CoUninitialize.argtypes = []
     ole32.CoUninitialize.restype = None
-    ole32.CoCreateInstance.argtypes = [ctypes.POINTER(GUID), pointer, wintypes.DWORD,
-                                     ctypes.POINTER(GUID), ctypes.POINTER(pointer)]
+    ole32.CoCreateInstance.argtypes = [
+        ctypes.POINTER(GUID),
+        pointer,
+        wintypes.DWORD,
+        ctypes.POINTER(GUID),
+        ctypes.POINTER(pointer),
+    ]
     ole32.CoCreateInstance.restype = hresult
     ole32.CoTaskMemFree.argtypes = [pointer]
     ole32.CoTaskMemFree.restype = None
-    shell32.SHCreateItemFromParsingName.argtypes = [wintypes.LPCWSTR, pointer,
-                                                   ctypes.POINTER(GUID), ctypes.POINTER(pointer)]
+    shell32.SHCreateItemFromParsingName.argtypes = [
+        wintypes.LPCWSTR,
+        pointer,
+        ctypes.POINTER(GUID),
+        ctypes.POINTER(pointer),
+    ]
     shell32.SHCreateItemFromParsingName.restype = hresult
     user32.GetForegroundWindow.argtypes = []
     user32.GetForegroundWindow.restype = wintypes.HWND
@@ -78,16 +92,22 @@ def choose_folder(initial_path='', title='Scegli una cartella'):
             while not path.is_dir() and path != path.parent:
                 path = path.parent
             if path.is_dir():
-                _check(shell32.SHCreateItemFromParsingName(str(path.resolve()), None,
-                                                          ctypes.byref(shell_iid), ctypes.byref(folder)))
+                _check(
+                    shell32.SHCreateItemFromParsingName(
+                        str(path.resolve()), None, ctypes.byref(shell_iid), ctypes.byref(folder)
+                    )
+                )
                 _check(_method(dialog, 12, hresult, pointer)(dialog, folder))
         result = _method(dialog, 3, hresult, wintypes.HWND)(dialog, owner)
-        if result & 0xffffffff == 0x800704c7:  # HRESULT_FROM_WIN32(ERROR_CANCELLED)
+        if result & 0xFFFFFFFF == 0x800704C7:  # HRESULT_FROM_WIN32(ERROR_CANCELLED)
             return ''
         _check(result)
         _check(_method(dialog, 20, hresult, ctypes.POINTER(pointer))(dialog, ctypes.byref(selection)))
-        _check(_method(selection, 5, hresult, wintypes.DWORD, ctypes.POINTER(pointer))(
-            selection, 0x80058000, ctypes.byref(name)))  # SIGDN_FILESYSPATH
+        _check(
+            _method(selection, 5, hresult, wintypes.DWORD, ctypes.POINTER(pointer))(
+                selection, 0x80058000, ctypes.byref(name)
+            )
+        )  # SIGDN_FILESYSPATH
         return ctypes.wstring_at(name)
     finally:
         if name:

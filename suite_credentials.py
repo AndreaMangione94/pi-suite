@@ -1,4 +1,5 @@
 """Credential helper for byok-network.mjs: prints one protected key to stdout and never writes it elsewhere."""
+
 import os
 import sys
 import suite_byok as byok
