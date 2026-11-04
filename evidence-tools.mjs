@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { runPython } from './python-process.mjs';
+import { runPython, askEvidenceWorker } from './python-process.mjs';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const string = { type: 'string' },
@@ -89,11 +89,16 @@ const descriptions = {
 
 export async function invokeEvidence(action, args, bundle, options = {}) {
   const home = options.home || process.env.PI_SUITE_HOME || path.join(root, 'suite-data');
+  const request = { action, args, bundle, home, workspace: options.workspace },
+    messages = { timeoutMessage: 'Operazione evidenze scaduta', abortMessage: 'Consultazione interrotta' };
+  // Le consultazioni brevi usano i worker persistenti; preparazione e registrazione del dossier, lunghe e rare,
+  // restano un processo dedicato.
+  if (!['prepare_documentation', 'register_documentation'].includes(action))
+    return askEvidenceWorker(request, { ...messages, timeoutMs: 180000, signal: options.signal });
   const result = await runPython('suite_evidence_cli.py', [], {
-    input: JSON.stringify({ action, args, bundle, home, workspace: options.workspace }),
-    timeoutMs: ['prepare_documentation', 'register_documentation'].includes(action) ? 1800000 : 180000,
-    timeoutMessage: 'Operazione evidenze scaduta',
-    abortMessage: 'Consultazione interrotta',
+    ...messages,
+    input: JSON.stringify(request),
+    timeoutMs: 1800000,
     signal: options.signal,
     stderrTail: 4000
   });

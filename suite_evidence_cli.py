@@ -2,22 +2,23 @@
 
 from suite_documentation_migration import is_documentation
 import json
+import os
 import sys
 from pathlib import Path
 from suite_evidence import query, propose_relation, semantic_proposals, corpus_version, local_path
 
 
-def main():
-    sys.stdin.reconfigure(encoding='utf-8')
-    sys.stdout.reconfigure(encoding='utf-8')
-    if sys.argv[1:] == ['--self-check']:
-        import sqlite3
+# Variabili che cambiano fra una richiesta e l'altra quando il processo resta attivo (--serve).
+REQUEST_ENV = ('PI_SUITE_SESSION_ID', 'PI_SUITE_CONTEXT')
 
-        with sqlite3.connect(':memory:') as db:
-            db.execute('CREATE VIRTUAL TABLE check_fts USING fts5(text)')
-        print(json.dumps({'fts5': True, 'evidenceTools': True}))
-        return
-    request = json.load(sys.stdin)
+
+def handle(request):
+    for name in REQUEST_ENV:
+        value = (request.get('env') or {}).get(name)
+        if value:
+            os.environ[name] = value
+        else:
+            os.environ.pop(name, None)
     action = request['action']
     bundle = request.get('bundle', [])
     args = request.get('args', {})
@@ -81,7 +82,39 @@ def main():
             result = {k: v for k, v in prepared.items() if k != 'sources'}
     else:
         raise ValueError('Operazione non supportata')
-    print(json.dumps(result, ensure_ascii=False))
+    return result
+
+
+def serve():
+    """Processo persistente: una richiesta JSON per riga, una risposta per riga con lo stesso id; termina a fine input."""
+    for line in sys.stdin:
+        if not line.strip():
+            continue
+        identifier = None
+        try:
+            request = json.loads(line)
+            identifier = request.get('id')
+            response = {'id': identifier, 'result': handle(request)}
+        except Exception as error:
+            response = {'id': identifier, 'error': str(error)}
+        sys.stdout.write(json.dumps(response, ensure_ascii=False) + '\n')
+        sys.stdout.flush()
+
+
+def main():
+    sys.stdin.reconfigure(encoding='utf-8')
+    sys.stdout.reconfigure(encoding='utf-8')
+    if sys.argv[1:] == ['--self-check']:
+        import sqlite3
+
+        with sqlite3.connect(':memory:') as db:
+            db.execute('CREATE VIRTUAL TABLE check_fts USING fts5(text)')
+        print(json.dumps({'fts5': True, 'evidenceTools': True}))
+        return
+    if sys.argv[1:] == ['--serve']:
+        serve()
+        return
+    print(json.dumps(handle(json.load(sys.stdin)), ensure_ascii=False))
 
 
 if __name__ == '__main__':
