@@ -1,6 +1,6 @@
-# Pi Suite 0.6.5 — Contesto della chat e consegne dei subagenti
+# Pi Suite — Contesto della chat e consegne dei subagenti
 
-Documentazione della distribuzione Windows del 27 ottobre 2026.
+Contesto della chat, incarichi ai subagenti e consegne.
 
 L’orchestratore mantiene il contesto della conversazione nella sessione Pi.
 Ogni figlio parte da un contesto fresco: il genitore deve includere nell’incarico

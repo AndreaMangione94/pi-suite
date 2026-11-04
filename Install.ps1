@@ -42,13 +42,13 @@ try {
     $dataRoot = Join-Path $Destination 'data'
     $binRoot = Join-Path $Destination 'bin'
     New-Item -ItemType Directory -Force -Path $appRoot,$dataRoot,$binRoot | Out-Null
-    $files = @('suite_byok.py','byok-format.mjs','byok-network.mjs','models.schema.json','models.config.example.json','models.config.example.yaml','models.custom.example.json','GUIDA-BYOK.md','LICENSE','THIRD-PARTY-NOTICES.md','suite_evidence.py','suite_evidence_cli.py','evidence-tools.mjs','GUIDA-CONOSCENZA-E-GRAFI.md','adapter.mjs','suite.py','suite_documentation.py','suite_sources.py','suite_graph.py','suite_cli.py','suite-extension.ts','suite-delegation.ts','suite-child.ts','delegation-core.mjs','connected-sources.mjs','GUIDA-FONTI-DOCUMENTAZIONE-TECNICO-FUNZIONALE.md','package.json','package-lock.json','requirements-ast.txt','README-SUITE.md','RESOCONTO-E-PRIMO-AVVIO.md','VERIFICA-SUITE.md','MEMORY.md','Start-Suite.ps1')
-    $files += @('suite_workspace.py','suite_benchmarks.py','suite_inspect.py','benchmark-catalog.json','requirements-inspect.txt','Install-Inspect.ps1','GUIDA-BENCHMARK.md')
+    $files = @('suite_byok.py','byok-format.mjs','byok-network.mjs','models.schema.json','models.config.example.json','models.config.example.yaml','models.custom.example.json','LICENSE','THIRD-PARTY-NOTICES.md','suite_evidence.py','suite_evidence_cli.py','evidence-tools.mjs','adapter.mjs','suite.py','suite_documentation.py','suite_sources.py','suite_graph.py','suite_cli.py','suite-extension.ts','suite-delegation.ts','suite-child.ts','delegation-core.mjs','connected-sources.mjs','package.json','package-lock.json','requirements-ast.txt','Start-Suite.ps1')
+    $files += @('suite_workspace.py','suite_benchmarks.py','suite_inspect.py','benchmark-catalog.json','requirements-inspect.txt','Install-Inspect.ps1')
     $files += @('suite_folder_picker.py','suite_document_graph.py','document-graph-tools.mjs','evidence-reading.mjs')
     $files += @('suite_credentials.py','sensitive-files.json','suite_storage.py','prompts.mjs','suite_prompts.py','child-tools.mjs','graph-query.mjs','python-process.mjs','pi-bridge.mjs')
     $files += @('chat-context.mjs','suite_refresh_graphs.py','suite_documentation_migration.py','documentation-compat.json','documentation-compat.mjs','documentation-workflow.mjs','suite-metrics.mjs')
     foreach ($name in $files) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination (Join-Path $appRoot $name) -Force }
-    foreach ($name in @('skills','suite-ui','prompts')) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $appRoot -Recurse -Force }
+    foreach ($name in @('skills','suite-ui','prompts','docs')) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $appRoot -Recurse -Force }
     Push-Location $appRoot
     try {
         Run-Checked 'npm.cmd' @('ci','--omit=dev','--no-audit','--no-fund')

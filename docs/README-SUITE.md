@@ -1,6 +1,6 @@
-# Pi Suite 0.6.6 — Windows
+# Pi Suite — Windows
 
-Documentazione della distribuzione Windows 0.6.6, aggiornata il 28 ottobre 2026.
+Panoramica della distribuzione Windows; la versione è quella di `package.json`, mostrata anche nel pannello.
 
 Il punto di ingresso è la chat Pi: scrivi al modello orchestratore, che risponde direttamente alle richieste semplici e, quando è selezionato un modello Subagenti, affida ai figli letture estese, stesure ampie e lavori parallelizzabili, poi controlla e applica i risultati. Se è selezionato soltanto il modello Orchestratore, svolge direttamente il lavoro senza figli. Ogni subagente riceve un INCARICO.md preciso. La suite integra Pi 1.0.0, pi-subagents 0.79.0, skill e grafo Graphify locale persistente.
 
@@ -99,7 +99,7 @@ L’orchestratore specifica titolo, obiettivo, contesto/fonti iniziali, istruzio
 
 I subagenti possono esplorare e leggere l’intero progetto, anche file fuori dalla lista modificabile. Dispongono di search_project, list_sources, read_source (a intervalli), graph_query, read_skill, propose_edit e propose_file. Le scritture producono proposte separate, solo per i percorsi assegnati. I file che possono contenere credenziali (`.env`, `credentials*.json`, `secrets*.yaml`, chiavi `.pem`/`.key`, `id_rsa`, cartelle `.ssh` e `.aws`; elenco completo in `sensitive-files.json`) sono esclusi da read_source, search_project, dagli estratti `refs` e dagli snapshot delle fonti; restano leggibili gli esempi come `.env.example`. search_project si interrompe dopo 20 secondi, così una regex troppo costosa non blocca il figlio. Non hanno shell, accesso diretto di scrittura al progetto, delega ricorsiva o rete propria. L’orchestratore usa gli strumenti standard di Pi per integrare le proposte e fare le verifiche. Questi controlli limitano gli strumenti dei figli; non sono una sandbox del sistema operativo e non restringono gli strumenti del genitore.
 
-Sono disponibili anche knowledge_search, knowledge_trace, read_evidence e propose_relation. Gli strumenti di conoscenza sono opzionali e le interpretazioni restano separate dalle evidenze strutturali. La lettura estesa riguarda gli snapshot; read_source mantiene il limite di 200 KB.
+Sono disponibili anche knowledge_search, knowledge_trace, read_evidence e propose_relation. Gli strumenti di conoscenza sono opzionali e le interpretazioni restano separate dalle evidenze strutturali. La lettura estesa riguarda gli snapshot.
 
 Sono ammessi fino a 4 incarichi per chiamata, con parallelismo configurabile e percorsi di scrittura non sovrapposti. Con la politica «Sempre» il flusso chat avvia almeno un figlio per richiesta; questo aumenta i tempi e le chiamate modello anche per richieste semplici. Il limite impostato nel pannello conta i subagenti avviati nell’apertura corrente della chat. Ogni figlio ha scadenza di 600 secondi e budget di 64 chiamate a strumenti; dopo 40 viene invitato a concludere. Non è un tetto monetario e non comprende le richieste del modello principale.
 
@@ -109,7 +109,7 @@ In Attività e risultati sono consultabili gli incarichi e i risultati. Su disco
 
 Graphify 0.1.14 indicizza le strutture AST Python, JavaScript e TypeScript senza LLM. Aggiungi un repository nel pannello, aprilo e crea/aggiorna il grafo. Orchestratore e figli possono interrogare il grafo salvato. Il grafo della chat può precedere le modifiche correnti: aggiornalo quando serve e verifica i sorgenti.
 
-La cache SQLite riutilizza i file invariati. Il grafo strutturale per file non risolve globalmente ogni import/chiamata o dipendenza semantica. Indica la copertura e gli errori: file Git tracciati non nascosti nei repository, oppure file non nascosti della cartella nei progetti senza Git, UTF-8 fino a 200 KB; massimo 10.000 file e 100 MB testuali. Le letture dei figli sono UTF-8 fino a 200 KB per file; list_sources permette esplorazione progressiva delle directory.
+La cache SQLite riutilizza i file invariati. Il grafo strutturale per file non risolve globalmente ogni import/chiamata o dipendenza semantica. Indica la copertura e gli errori: file Git tracciati non nascosti nei repository, oppure file non nascosti della cartella nei progetti senza Git, UTF-8 fino a 200 KB; massimo 10.000 file e 100 MB testuali. read_source dei figli legge file UTF-8 fino a 2 MB: interi se brevi, altrimenti a blocchi di 300 righe (massimo 1.000) e 40.000 caratteri; search_project esclude i file oltre 1 MB e propose_file accetta proposte fino a 200 KB; list_sources permette esplorazione progressiva delle directory.
 
 Incluse: graph-explorer, task-planner, candidate-review, documentazione-tecnico-funzionale e la skill upstream pi-subagents per il genitore. La copia integrale upstream e i suoi riferimenti sono nella dipendenza npm. La skill guida l’orchestrazione; il runtime avvia i figli e la suite applica i contratti. Le skill non ampliano i permessi. L’importazione dal pannello accetta SKILL.md autonomi; non importa risorse/script di supporto né connettori di altri prodotti.
 

@@ -1,4 +1,4 @@
-# Modelli locali e BYOK — Pi Suite 0.6.5
+# Modelli locali e BYOK — Pi Suite
 
 Guida aggiornata alla distribuzione Windows del 27 ottobre 2026.
 

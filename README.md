@@ -1,7 +1,8 @@
 # Pi Suite
 
 Suite Windows per una chat con orchestratore, subagenti con incarichi Markdown,
-fonti documentali e grafi di conoscenza locali. Versione applicativa: **0.6.5**.
+fonti documentali e grafi di conoscenza locali. La versione è quella di `package.json`,
+mostrata anche in fondo al pannello.
 
 **Autore:** [AndreaMangione94](https://github.com/AndreaMangione94).
 Copyright (c) 2026 AndreaMangione94 and Pi Suite contributors.
@@ -80,15 +81,18 @@ all'orchestratore e visibili nelle attivita.
 
 ## Documentazione
 
-- [Panoramica e comandi](README-SUITE.md)
-- [Primo avvio](RESOCONTO-E-PRIMO-AVVIO.md)
-- [Connessioni e chiavi](GUIDA-BYOK.md)
-- [Fonti e documentazione tecnico funzionale](GUIDA-FONTI-DOCUMENTAZIONE-TECNICO-FUNZIONALE.md)
-- [Conoscenza e grafi](GUIDA-CONOSCENZA-E-GRAFI.md)
-- [Benchmark](GUIDA-BENCHMARK.md)
-- [Contesto e consegne](MEMORY.md)
-- [Verifiche e limiti della distribuzione](VERIFICA-SUITE.md)
-- [Controllo privacy del repository](PRIVACY-REVIEW.md)
+- [Panoramica e comandi](docs/README-SUITE.md)
+- [Primo avvio](docs/RESOCONTO-E-PRIMO-AVVIO.md)
+- [Connessioni e chiavi](docs/GUIDA-BYOK.md)
+- [Fonti e documentazione tecnico funzionale](docs/GUIDA-FONTI-DOCUMENTAZIONE-TECNICO-FUNZIONALE.md)
+- [Conoscenza e grafi](docs/GUIDA-CONOSCENZA-E-GRAFI.md)
+- [Benchmark](docs/GUIDA-BENCHMARK.md)
+- [Contesto e consegne](docs/CONTESTO-E-CONSEGNE.md)
+- [Verifiche e limiti della distribuzione](docs/VERIFICA-SUITE.md)
+- [Controllo privacy del repository](docs/PRIVACY-REVIEW.md)
+- [Prompt inviati ai modelli](prompts/LEGGIMI.md)
+
+I report di analisi interni sono in `docs/interni/`.
 
 Questo repository contiene i sorgenti necessari all'installer. I riferimenti
 nelle guide a ZIP, checksum, Archivio, Documentazione e Gestisci-PiSuite.ps1

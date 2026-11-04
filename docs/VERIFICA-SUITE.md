@@ -1,4 +1,6 @@
-# Pi Suite 0.6.6 — Distribuzione, verifiche e limiti
+# Pi Suite — Distribuzione, verifiche e limiti
+
+Registro dei collaudi della distribuzione ZIP 0.6.6; i test correnti sono in `tests/` (`npm test`).
 
 Riferimento: pacchetto Windows corrente, documentazione aggiornata il 28 ottobre 2026.
 

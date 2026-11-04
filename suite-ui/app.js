@@ -562,6 +562,7 @@ function projects() {
 }
 async function refresh(initial = false) {
   state = await api('state');
+  $('app-version').textContent = state.version;
   if (initial || !settings) settings = state.settings;
   else settings.projects = state.settings.projects;
   if (project && !pendingDocumentationSaves.has(project.id) && !documentationSaving) {

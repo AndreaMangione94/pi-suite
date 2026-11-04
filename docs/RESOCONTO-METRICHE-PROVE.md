@@ -1,4 +1,6 @@
-# Pi Suite 0.6.6 — Metriche osservabili nelle prove
+# Pi Suite — Metriche osservabili nelle prove
+
+Resoconto dell’intervento introdotto con la versione 0.6.6.
 
 Resoconto degli interventi del 28 e 29 ottobre 2026.
 

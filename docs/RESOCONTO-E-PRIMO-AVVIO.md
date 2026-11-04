@@ -1,4 +1,4 @@
-# Pi Suite 0.6.5 — Resoconto e primo avvio
+# Pi Suite — Resoconto e primo avvio
 
 Aggiornamento del 27 ottobre 2026. Ricerca testuale, grafi documentali/SQL e documentazione tecnico funzionale persistenti: vedi la [Guida conoscenza e grafi](GUIDA-CONOSCENZA-E-GRAFI.md). Con il modello Subagenti selezionato, il flusso principale segue la richiesta: chat → orchestratore → almeno un subagente con incarico Markdown → integrazione e verifica → risposta.
 
@@ -25,7 +25,7 @@ Ricercatore, esecutore, revisore e documentazione non sono più selezioni obblig
 
 ## Installazione e prima configurazione
 
-1. Estrai Pi-Suite-0.6.5-Windows.zip, apri la cartella pi-suite ed esegui Install.cmd. Serve Internet per le dipendenze. Apri quindi Pi Suite dal collegamento desktop.
+1. Estrai lo ZIP della distribuzione (Pi-Suite-<versione>-Windows.zip), apri la cartella pi-suite ed esegui Install.cmd. Serve Internet per le dipendenze. Apri quindi Pi Suite dal collegamento desktop.
 2. In Connessioni e modelli configura un server locale senza account o un provider cloud con la sua chiave. Puoi importare JSON/YAML e nominare più connessioni allo stesso provider: vedi GUIDA-BYOK.md.
 3. In Orchestratore e subagenti scegli il modello principale; seleziona anche quello dei figli per attivare la delega obbligatoria oppure lascia Subagenti senza modello per la modalità singola. Per contenere il costo scegli per i figli un modello meno costoso o un ragionamento inferiore. Copia modello orchestratore copia la selezione del modello e conserva il ragionamento dei figli se supportato; altrimenti lo disattiva. Salva squadra.
 4. Usa Verifica per provare il profilo con tool calling: è una chiamata reale potenzialmente a pagamento. Non abbiamo usato chiavi cloud nel collaudo.

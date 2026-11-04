@@ -33,6 +33,8 @@ from suite_evidence import ensure_index, local_path
 from suite_folder_picker import choose_folder
 
 ROOT = Path(__file__).resolve().parent
+# Unica fonte della versione: package.json.
+VERSION = json.loads((ROOT / 'package.json').read_text(encoding='utf-8'))['version']
 APIS = ('openai-completions', 'openai-responses', 'anthropic-messages', 'google-generative-ai')
 OPERATIONS = (
     'generate-graph',
@@ -1456,7 +1458,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 data = json.loads(self.rfile.read(length))
             app = self.server.suite
             if route == '/api/state' and not post:
-                result = {'settings': app.public_settings(), 'job': dict(app.job), 'busy': app.busy, 'version': '0.6.5'}
+                result = {'settings': app.public_settings(), 'job': dict(app.job), 'busy': app.busy, 'version': VERSION}
             elif route == '/api/settings' and post:
                 result = app.save_settings(data)
             elif route == '/api/benchmarks' or route.startswith('/api/benchmarks/'):

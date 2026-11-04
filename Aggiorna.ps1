@@ -31,7 +31,7 @@ function Get-ApplicationFiles([string]$Directory) {
             throw "File sorgente mancante o non valido: $file"
         }
     }
-    foreach ($folder in @('suite-ui', 'skills', 'prompts')) {
+    foreach ($folder in @('suite-ui', 'skills', 'prompts', 'docs')) {
         if (-not (Test-Path -LiteralPath (Join-Path $Directory $folder) -PathType Container)) {
             throw "Cartella sorgente mancante: $folder"
         }
@@ -165,7 +165,7 @@ function Invoke-Update {
     try {
         New-Item -ItemType Directory -Path $staging | Out-Null
         foreach ($file in $files) { Copy-Item -LiteralPath (Join-Path $sourceRoot $file) -Destination (Join-Path $staging $file) }
-        foreach ($folder in @('suite-ui', 'skills', 'prompts')) { Copy-Item -LiteralPath (Join-Path $sourceRoot $folder) -Destination $staging -Recurse }
+        foreach ($folder in @('suite-ui', 'skills', 'prompts', 'docs')) { Copy-Item -LiteralPath (Join-Path $sourceRoot $folder) -Destination $staging -Recurse }
         $documentationCompatibility = Get-Content -LiteralPath (Join-Path $sourceRoot 'documentation-compat.json') -Raw | ConvertFrom-Json
         $retiredSkillFolders = @($documentationCompatibility.skills.PSObject.Properties.Name)
         $retiredSkillFolders += @($documentationCompatibility.skills.PSObject.Properties.Value | ForEach-Object { $_.Replace('tecnico-funzionale', 'tecnica') })

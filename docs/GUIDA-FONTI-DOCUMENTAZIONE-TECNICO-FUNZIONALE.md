@@ -1,4 +1,4 @@
-# Fonti del progetto, SharePoint e Azure — Pi Suite 0.6.5
+# Fonti del progetto, SharePoint e Azure — Pi Suite
 
 Guida aggiornata alla distribuzione Windows del 1 novembre 2026.
 

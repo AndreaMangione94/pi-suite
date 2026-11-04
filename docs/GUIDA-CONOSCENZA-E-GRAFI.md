@@ -1,4 +1,4 @@
-# Pi Suite 0.6.5 — Fonti, grafi e documentazione tecnico funzionale riutilizzabile
+# Pi Suite — Fonti, grafi e documentazione tecnico funzionale riutilizzabile
 
 Guida aggiornata alla distribuzione Windows del 1 novembre 2026.
 

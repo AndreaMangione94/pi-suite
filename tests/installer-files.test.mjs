@@ -20,7 +20,7 @@ const application = fs
   .filter(e => e.isFile() && !e.name.startsWith('.') && /\.(py|mjs|ts|json)$/.test(e.name))
   .map(e => e.name);
 for (const file of application) assert.ok(listed.has(file), 'file applicativo non copiato da Install.ps1: ' + file);
-for (const folder of ['skills', 'suite-ui', 'prompts']) {
+for (const folder of ['skills', 'suite-ui', 'prompts', 'docs']) {
   assert.ok(folders.includes("'" + folder + "'"), 'cartella non copiata da Install.ps1: ' + folder);
   assert.ok(updater.includes("'" + folder + "'"), 'cartella non copiata da Aggiorna.ps1: ' + folder);
 }
