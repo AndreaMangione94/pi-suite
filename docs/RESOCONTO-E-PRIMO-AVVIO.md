@@ -128,4 +128,4 @@ I figli partono da un contesto fresco. Il genitore deve includere nell’incaric
 
 Per aggiornare o disinstallare usa `Gestisci-PiSuite.ps1` dalla cartella di consegna: entrambe le azioni conservano i dati. Vedi i comandi nel [README](README-SUITE.md#aggiornare-o-disinstallare).
 
-Per riaprire la suite usa sempre il collegamento o pi suite: una vecchia porta del browser può non essere più valida. Per errori di provider usa Verifica e controlla chiave, modello, protocollo e tool calling prima di ripetere task costosi.
+Per riaprire la suite usa sempre il collegamento o pisuite pannello: una vecchia porta del browser può non essere più valida. Per errori di provider usa Verifica e controlla chiave, modello, protocollo e tool calling prima di ripetere task costosi.

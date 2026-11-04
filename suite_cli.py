@@ -1,4 +1,4 @@
-"""Installed `pi` entry point. Credentials reach Pi only through its environment."""
+"""Installed `pisuite` (and legacy `pi`) entry point: `pisuite` opens the chat, `pisuite pannello` the panel."""
 
 import os
 import subprocess
@@ -10,7 +10,7 @@ from suite import Suite, ROOT
 def main():
     home = Path(os.environ.get('PI_SUITE_HOME', str(ROOT / 'suite-data')))
     args = sys.argv[1:]
-    if args and args[0] in ('suite', '--suite'):
+    if args and args[0] in ('pannello', 'suite', '--suite'):
         python = Path(sys.executable).with_name('pythonw.exe')
         subprocess.Popen(
             [str(python if python.exists() else sys.executable), str(ROOT / 'suite.py'), '--home', str(home)],

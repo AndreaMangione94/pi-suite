@@ -65,10 +65,12 @@ try {
     } finally { Pop-Location }
     # The user-level command only points at this installation; no existing Pi files are changed.
     $launcher = '@echo off' + "`r`n" + 'setlocal' + "`r`n" + 'set "PI_SUITE_HOME=%~dp0..\data"' + "`r`n" + '"%~dp0..\app\.venv\Scripts\python.exe" "%~dp0..\app\suite_cli.py" %*' + "`r`n" + 'exit /b %errorlevel%' + "`r`n"
-    [IO.File]::WriteAllText((Join-Path $binRoot 'pi.cmd'), $launcher, [Text.Encoding]::Default)
+    # pisuite non entra in conflitto con il comando pi di Pi; pi.cmd resta per compatibilita.
+    foreach ($command in @('pisuite.cmd', 'pi.cmd')) { [IO.File]::WriteAllText((Join-Path $binRoot $command), $launcher, [Text.Encoding]::Default) }
     if (-not $NoIntegration) {
     $userPath = [Environment]::GetEnvironmentVariable('Path','User')
-    if (($userPath -split ';') -notcontains $binRoot) { [Environment]::SetEnvironmentVariable('Path',"$binRoot;$userPath",'User') }
+    # In coda al PATH: un pi di Pi gia installato resta prioritario.
+    if (($userPath -split ';') -notcontains $binRoot) { [Environment]::SetEnvironmentVariable('Path', (@(([string]$userPath).TrimEnd(';'), $binRoot) | Where-Object { $_ }) -join ';', 'User') }
     $shell = New-Object -ComObject WScript.Shell
     $shortcut = $shell.CreateShortcut((Join-Path ([Environment]::GetFolderPath('Desktop')) 'Pi Suite.lnk'))
     $shortcut.TargetPath = 'powershell.exe'

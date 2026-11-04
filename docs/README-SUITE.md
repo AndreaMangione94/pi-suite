@@ -80,15 +80,17 @@ Con la politica «Sempre» (e nei dossier di documentazione tecnico funzionale),
 ## Comandi
 
 ```text
-pi suite       apre il pannello
-pi             apre la chat nella cartella corrente
-/suite         dentro Pi: apre il pannello
+pisuite pannello   apre il pannello
+pisuite            apre la chat nella cartella corrente
+/suite             dentro Pi: apre il pannello
 ```
 
-Se un altro pi prevale nel PATH, usa il collegamento desktop o, in PowerShell:
+`pi` e `pi suite` restano disponibili per compatibilità. Le nuove installazioni aggiungono la cartella dei comandi
+in coda al PATH, così un `pi` di Pi già installato non viene oscurato; `pisuite` è sempre quello della suite.
+Le installazioni precedenti mantengono l'ordine del PATH: se `pi` apre un altro programma usa `pisuite`, oppure:
 
 ```powershell
-& "$env:LOCALAPPDATA/PiSuite/bin/pi.cmd" suite
+& "$env:LOCALAPPDATA/PiSuite/bin/pisuite.cmd" pannello
 ```
 
 ## Incarichi Markdown e libertà di esplorazione

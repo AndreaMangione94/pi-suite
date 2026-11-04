@@ -23,11 +23,11 @@ estrai completamente la cartella ed esegui `Install.cmd`.
 
 L'installer prepara Node >=22.19, Python 3.13 e Git tramite winget quando
 mancano, scarica le dipendenze npm e Python, verifica il supporto FTS5,
-installa l'app in `%LOCALAPPDATA%\PiSuite` e crea il comando `pi` e il
+installa l'app in `%LOCALAPPDATA%\PiSuite` e crea il comando `pisuite` e il
 collegamento **Pi Suite** sul desktop. Sono necessari Windows e Internet;
 le installazioni dei prerequisiti possono richiedere interventi del sistema.
 
-Dopo l'installazione apri **Pi Suite** dal desktop oppure `pi suite` in un
+Dopo l'installazione apri **Pi Suite** dal desktop oppure `pisuite pannello` in un
 nuovo terminale. L'applicazione installata usa la propria copia del codice e
 la propria area dati, quindi puo funzionare senza la cartella clonata.
 
@@ -47,7 +47,7 @@ dell'applicazione precedente per il ripristino in caso di errore. Le chat
 vanno riaperte dopo l'aggiornamento. Se le dipendenze cambiano serve Internet.
 
 L'unico file `.cmd` del repository e `Install.cmd`, per la prima installazione
-e gli aggiornamenti successivi. Il comando `pi` viene generato nella
+e gli aggiornamenti successivi. Il comando `pisuite` (con `pi` per compatibilità) viene generato nella
 cartella `bin` dell'installazione; il pannello si apre dal collegamento desktop.
 Il comando accetta `-Destination` per una destinazione personalizzata
 e `-NoLaunch` per evitare l'apertura del pannello. `Install.cmd -ValidateOnly`

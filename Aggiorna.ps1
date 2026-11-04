@@ -40,7 +40,7 @@ function Get-ApplicationFiles([string]$Directory) {
 }
 
 function Test-ApplicationCommand([string]$CommandLine, [string]$Application) {
-    $entryPoints = @('suite.py', 'suite_cli.py', 'suite_evidence_cli.py', 'adapter.mjs', 'suite-child.ts', 'pi.cmd', 'Pi-Suite.cmd', 'Start-Suite.ps1')
+    $entryPoints = @('suite.py', 'suite_cli.py', 'suite_evidence_cli.py', 'adapter.mjs', 'suite-child.ts', 'pi.cmd', 'pisuite.cmd', 'Pi-Suite.cmd', 'Start-Suite.ps1')
     $arguments = @([regex]::Matches($CommandLine, '"([^"]*)"|(\S+)') | ForEach-Object {
         if ($_.Groups[1].Success) { $_.Groups[1].Value } else { $_.Groups[2].Value }
     })
@@ -208,7 +208,7 @@ function Invoke-Update {
         $binRoot = Join-Path $targetRoot 'bin'
         New-Item -ItemType Directory -Force -Path $binRoot | Out-Null
         $launcher = '@echo off' + "`r`n" + 'setlocal' + "`r`n" + 'set "PI_SUITE_HOME=%~dp0..\data"' + "`r`n" + '"%~dp0..\app\.venv\Scripts\python.exe" "%~dp0..\app\suite_cli.py" %*' + "`r`n" + 'exit /b %errorlevel%' + "`r`n"
-        [IO.File]::WriteAllText((Join-Path $binRoot 'pi.cmd'), $launcher, [Text.Encoding]::Default)
+        foreach ($command in @('pisuite.cmd', 'pi.cmd')) { [IO.File]::WriteAllText((Join-Path $binRoot $command), $launcher, [Text.Encoding]::Default) }
     } catch {
         $failure = $_
         if ($oldMoved) {
