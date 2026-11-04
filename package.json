@@ -16,8 +16,8 @@
   },
   "scripts": {
     "test": "node tests/run.mjs",
-    "format": "prettier --write . && python -m ruff format .",
-    "format:check": "prettier --check . && python -m ruff format --check ."
+    "format": "prettier --write . && node scripts/python.mjs -m ruff format .",
+    "format:check": "prettier --check . && node scripts/python.mjs -m ruff format --check ."
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "1.0.0",

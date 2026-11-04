@@ -1,18 +1,12 @@
 // Esegue tutti i test dalla radice del repository: npm test (oppure node tests/run.mjs [filtro]).
-// Python: PI_SUITE_TEST_PYTHON, poi .venv del repository, poi python nel PATH.
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { python, repo } from '../scripts/python.mjs';
 
-const tests = path.dirname(fileURLToPath(import.meta.url)),
-  repo = path.dirname(tests),
+const tests = path.join(repo, 'tests'),
   filter = process.argv[2] || '';
 fs.mkdirSync(path.join(tests, 'tmp'), { recursive: true });
-const python =
-  process.env.PI_SUITE_TEST_PYTHON ||
-  [path.join(repo, '.venv', 'Scripts', 'python.exe'), path.join(repo, '.venv', 'bin', 'python')].find(fs.existsSync) ||
-  'python';
 const files = fs.readdirSync(tests).sort();
 const steps = [
   [

@@ -21,8 +21,5 @@ jobs:
       - run: python -m venv .venv
       - run: .venv\Scripts\python.exe -m pip install --disable-pip-version-check --no-deps -r requirements-ast.txt
       - run: .venv\Scripts\python.exe -m pip install --disable-pip-version-check -r requirements-dev.txt
-      - name: Formattazione
-        run: |
-          npx prettier --check .
-          .venv\Scripts\python.exe -m ruff format --check .
+      - run: npm run format:check
       - run: npm test
