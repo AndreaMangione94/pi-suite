@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { stripTypeScriptTypes } from 'node:module';
+import { prompt } from '../prompts.mjs';
 import * as core from '../delegation-core.mjs';
 import * as metrics from '../suite-metrics.mjs';
 import { chatContext } from '../chat-context.mjs';
@@ -19,6 +20,7 @@ const Type = new Proxy(
   }
 );
 const params = {
+  prompt,
   fs,
   path,
   crypto,

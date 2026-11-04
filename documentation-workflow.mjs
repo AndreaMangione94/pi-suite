@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { legacyDocumentation } from './documentation-compat.mjs';
+import { prompt } from './prompts.mjs';
 
 export function isDocumentationDossier(workspace) {
   return (
@@ -19,8 +20,7 @@ export function documentationInstructions(workspace) {
   );
 }
 
-export const documentationChildInstructions =
-  'Per questo dossier AS-IS di documentazione tecnico funzionale esegui solo il micro modulo o la funzionalità assegnata. Se l’incarico è di solo censimento iniziale, elenca unità e riferimenti senza stenderne la documentazione. La lettura di fonti adiacenti serve soltanto a chiarire contesto e punti di passaggio: non estendere analisi o stesura ad altre funzionalità. Per esse lascia riferimenti agli ID del piano scritti come [[F-002]], con input/output di collegamento ed evidenze, senza duplicarne i dettagli. Il modulo inizia con «# <ID> <Nome>» e usa «##» per le sezioni. Segnala funzionalità nuove, lacune o necessità di scomposizione come proposte di nuovi task al genitore; non ampliare il tuo incarico e non avviare altri agenti. Documenta nell’ambito assegnato attori, permessi, prerequisiti, azioni e risposte, regole, esiti, varianti, errori e dettagli tecnici pertinenti. Consegna solo la proposta autorizzata, citazioni, riferimenti e punti aperti; l’orchestratore aggiorna il piano, integra i pezzi e assegna le continuazioni.';
+export const documentationChildInstructions = prompt('documentazione-figlio');
 
 // --- Assemblaggio deterministico del documento finale ---
 const MODULE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$/;

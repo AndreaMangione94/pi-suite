@@ -1,11 +1,9 @@
 import { upgradeDocumentationContext } from './documentation-compat.mjs';
 import fs from 'node:fs';
+import { prompt } from './prompts.mjs';
 import path from 'node:path';
 
-export const externalSourcesInstructions = `PI SUITE — FONTI ESTERNE E OUTPUT
-Il progetto selezionato è l'ambito delle modifiche richieste al progetto. Le fonti esterne alla sua cartella (documenti, Markdown, grafi, cartelle e repository collegati, originali remoti e snapshot) sono riferimenti in sola lettura. Selezionarle, leggerle o riceverne il percorso non autorizza a modificarle. Non sovrascrivere, cancellare, spostare o rinominare gli originali, né modificarli indirettamente tramite shell, script o altri strumenti.
-Usa queste fonti per analisi, risposte, generazione di output richiesti dall'utente e come supporto alle modifiche del progetto. Una richiesta di correggere, adattare o aggiornare un documento esterno va soddisfatta creando una nuova copia rielaborata, mantenendo intatto l'originale. Salva i nuovi output nella cartella del progetto o nel dossier di output attivo; usa una destinazione esterna soltanto se indicata dall'utente e distinta dalle fonti originali. Senza progetto, usa la cartella della chat o il dossier di output attivo. Non trasformare la cartella di una fonte esterna nella cartella di lavoro o di consegna.
-Un dossier aperto appositamente per produrre l'output è una destinazione di lavoro; gli altri dossier selezionati come riferimenti restano fonti in sola lettura. Gli aggiornamenti gestiti dalla suite a cache, indici e grafi derivati non autorizzano modifiche agli originali o agli artefatti esterni di riferimento. Trasmetti questa regola e la destinazione dell'output in ogni incarico ai subagenti; verifica le proposte prima di integrarle e distingui sempre fonte originale, nuova copia e file del progetto modificati.`;
+export const externalSourcesInstructions = prompt('fonti-esterne');
 
 // Il contesto indicato dal launcher è affidabile; un CONTESTO.json trovato nella cartella vale solo nei dossier e nelle sessioni dell'area dati.
 export function suiteContextFile(file, home = process.env.PI_SUITE_HOME) {

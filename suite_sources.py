@@ -1,6 +1,7 @@
 """Read-only connected sources and immutable, cited text snapshots for documentazione tecnico funzionale."""
 
 from suite_documentation_migration import is_documentation
+from suite_prompts import prompt
 import base64
 import hashlib
 import io
@@ -602,14 +603,14 @@ class Sources:
         for s in bundle:
             m = s['manifest']
             brief += f'- {s["name"]}: snapshot {s["snapshot"]}, data {m["createdAt"]}, commit {m["revision"] or "non disponibile"}, {len(m["documents"])} documenti, {len(m["excluded"])} esclusi.\n'
-        brief += '\n## Consegne\nProduci DOCUMENTAZIONE-TECNICO-FUNZIONALE.md dettagliato e autosufficiente sull’utilizzo dell’applicazione: funzionalità, attori, permessi, prerequisiti, azioni e risposte, regole, varianti ed errori, con dettagli tecnici e architetturali, limiti e citazioni. Crea anche ARCHITETTURA.md, FLUSSI-E-INTERFACCE.md, OPERATIVITA.md, LACUNE-E-DOMANDE.md e MATRICE-FONTI.md. Gli indici delle fonti sono fissati per questi snapshot; i grafi eventualmente selezionati sono nel contesto della chat. Per creare la documentazione tecnico funzionale, se sono selezionati grafi documentali semantici consulta document_graph, poi usa knowledge_search e knowledge_trace per ricostruire sezioni, requisiti, processi e riferimenti, quindi leggi le evidenze originali con read_evidence. Solo dopo consulta il grafo del codice con connected_graph o graph_query per confrontare l’implementazione e rilevare differenze o lacune. Trasmetti questa priorità anche negli incarichi dei subagenti. Se il corpus contiene solo codice, dichiarane l’assenza di documentazione e procedi con le evidenze disponibili. La vicinanza nel grafo non prova il significato delle relazioni e non sostituisce le citazioni degli originali. Leggi soprattutto documenti e codice ORIGINALI con read_evidence (mode full, section o passage), anche integralmente quando utile; rispetta nextOffset e segnala parti non lette o escluse. Puoi anche usare connected_sources e read_connected_source. Cita ogni affermazione sostanziale con [sourceId:documentId] e, per il codice, percorsi e simboli/righe. Distingui stato attuale, ipotesi e TO-BE; segnala contraddizioni fra documenti e codice senza risolverle per supposizione. Documenta esclusioni e testi troncati. Segui il workflow AS-IS presente nel prompt di sistema della chat: salva prima il piano, assegna un task distinto per ogni unità terminale e confronta e integra le consegne prima di comporre il dossier. Se manca il profilo Subagenti, prepara il piano e segnala la configurazione necessaria prima di procedere alla stesura delegata. Non presentare questo brief come documentazione tecnico funzionale già completata. Alla fine usa register_documentation per validare le citazioni e salvare una versione consultabile, senza attribuirle approvazione umana o verifica semantica automatica.\n'
+        brief += prompt('documentazione-consegne')
         (workspace / 'INCARICO-DOCUMENTAZIONE-TECNICO-FUNZIONALE.md').write_text(brief, encoding='utf-8')
         return {
             'id': rid,
             'workspace': str(workspace),
             'sources': bundle,
             'documentGraph': document_graph,
-            'prompt': 'Leggi INCARICO-DOCUMENTAZIONE-TECNICO-FUNZIONALE.md (FONTI.json è riservato al runtime: non leggerlo; per elencare i documenti usa connected_sources). Consulta gli eventuali grafi selezionati con document_graph, leggi gli originali e confronta il codice del progetto. Usa la skill documentazione-tecnico-funzionale e il workflow AS-IS presente nel prompt di sistema: salva prima PIANO-DOCUMENTAZIONE.md, crea un task distinto per ogni micro modulo o funzionalità, integra le consegne e assegna nuovi task mirati per le lacune. I figli mantengono i confini assegnati e lasciano riferimenti alle altre unità.',
+            'prompt': prompt('documentazione-dossier'),
             'state': 'ready_for_orchestrator',
         }
 

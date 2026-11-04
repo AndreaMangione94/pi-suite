@@ -5,6 +5,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { stripTypeScriptTypes } from 'node:module';
+import { prompt } from '../prompts.mjs';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { legacyDocumentation } from '../documentation-compat.mjs';
 import { sourceBundle, connectedTools, isCleanWorkspace } from '../connected-sources.mjs';
@@ -48,6 +49,7 @@ const Type = new Proxy(
   }
 );
 const params = {
+  prompt,
   legacyDocumentation,
   spawn,
   path,

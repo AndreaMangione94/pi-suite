@@ -24,6 +24,7 @@ from suite_benchmarks import Benchmarks
 from suite_graph import build_graph, project_files, scan, fingerprint, query_graph
 import suite_byok as byok
 import suite_storage as storage
+from suite_prompts import prompt
 import suite_workspace as workspace
 import suite_document_graph as document_graph
 from suite_documentation_migration import migrate_home, LEGACY, SKILL_RENAMES
@@ -1293,9 +1294,7 @@ class Suite:
                     },
                 )
                 save_json(Path(result['workspace']) / 'CONTESTO.json', workspace.chat_context(self, data['project']))
-                result['prompt'] += (
-                    ' Produci un documento DOCUMENTAZIONE-TECNICO-FUNZIONALE.md tecnico-funzionale dettagliato e autosufficiente. Applica il workflow AS-IS presente nel prompt di sistema: prima PIANO-DOCUMENTAZIONE.md, poi un task distinto per ogni micro modulo o funzionalità terminale. I figli descrivono solo la propria unità e lasciano riferimenti alle altre. Applica le proposte verificate con apply_proposal, componi il documento con assemble_documentation, aggiorna il piano e crea nuovi task per le lacune; segnala eventuali unità ancora parziali o bloccate. Alla fine chiama register_documentation: genera anche il grafo semantico LLM del Markdown finale e lo seleziona nel contesto.'
-                )
+                result['prompt'] += prompt('documentazione-automatica')
                 self.job['result'] = {
                     'project': data['project'],
                     **{k: v for k, v in result.items() if k not in ('sources', 'prompt')},
