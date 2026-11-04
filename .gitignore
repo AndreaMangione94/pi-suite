@@ -70,11 +70,9 @@ Archivio/
 Thumbs.db
 .DS_Store
 
-# Local checks and test harnesses are not part of the published application
+# Tests are versioned in tests/; their temporary outputs and local publication checks are not
 /scripts/verify_publication.py
-/test_*.py
-/test_*.cjs
-/test_*.ps1
+tests/tmp/
 
 # Publish one entry point; runtime commands are generated during installation
 /*.cmd

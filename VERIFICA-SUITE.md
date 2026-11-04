@@ -41,10 +41,11 @@ Per i passaggi operativi vedi [Primo avvio](RESOCONTO-E-PRIMO-AVVIO.md), [Fonti 
 
 ## Disponibilità degli strumenti di collaudo
 
-Dal 29 ottobre 2026 gli script di test e di controllo della pubblicazione
-sono conservati negli strumenti locali di sviluppo e non sono inclusi nel
-repository. I riferimenti ai test in questo documento descrivono i collaudi
-eseguiti e i contenuti della distribuzione Windows separata.
+Dal 4 novembre 2026 i test sono di nuovo nel repository, in `tests/`, ed
+eseguiti da `npm test` e da GitHub Actions; i controlli della pubblicazione
+restano negli strumenti locali di sviluppo. Alcuni test citati in questo
+documento descrivono collaudi precedenti e i contenuti della distribuzione
+Windows separata.
 
 ## Integrità e controllo documentale
 

@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import crypto from 'node:crypto';import {pathToFileURL} from 'node:url';
+const repo=path.resolve(process.argv[2]||'.');
+const load=name=>import(pathToFileURL(path.join(repo,name)).href);
+const temp=prefix=>fs.realpathSync(fs.mkdtempSync(path.join(repo,'tests','tmp',prefix)));
+const core=await load('delegation-core.mjs');
+const task=temp('wp3-');fs.mkdirSync(path.join(task,'proposals','src'),{recursive:true});fs.writeFileSync(path.join(task,'proposals','src','a.ts'),'x');
+const d=core.taskDigest({title:'T',state:'completed',directory:task,result:{status:'completed',result:{kind:'text',text:'y'.repeat(7000)},usage:{input:10,output:5,cacheRead:0,cost:0.01,toolCalls:3,durationMs:4200}}},0);
+assert.equal(d.task,1);assert.deepEqual(d.proposals,['src/a.ts']);assert.match(d.answer,/troncato/);assert.equal(d.usage.seconds,4);assert.equal(d.evidence,undefined);
+const s=core.taskDigest({title:'S',state:'completed',directory:task,result:{result:{kind:'structured',value:{status:'done',answer:'ok'}}}},1);
+assert.equal(s.answer,undefined);assert.deepEqual(s.result,{status:'done',answer:'ok'});
+console.log('WP3 OK');

@@ -8,7 +8,12 @@ esempi dimostrativi, licenza e dipendenze con lockfile.
 
 Aggiornamento del 29 ottobre 2026: gli script di test e di controllo della
 pubblicazione sono stati rimossi dal repository e conservati localmente.
-Le esclusioni in `.gitignore` ne impediscono l'aggiunta accidentale.
+
+Aggiornamento del 4 novembre 2026: i test tornano nel repository in `tests/`.
+Il riferimento a una copia locale di Playwright con percorso utente è stato
+sostituito dalla dipendenza di sviluppo `playwright-core`; gli host presenti
+sono loopback o esempi. Gli output in `tests/tmp/` e i controlli della
+pubblicazione restano esclusi da `.gitignore`.
 
 La ricerca di credenziali, token noti, chiavi private, JWT, email, identificativi
 italiani, URL con credenziali, percorsi utente e riferimenti a servizi interni

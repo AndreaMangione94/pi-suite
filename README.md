@@ -98,8 +98,21 @@ riguardano la distribuzione Windows separata: per installare dal clone basta
 ## Sviluppo e pubblicazione
 
 Le dipendenze sono fissate in `package-lock.json` e nei file
-`requirements-*.txt`. Gli script di test e di controllo della pubblicazione
-restano negli strumenti locali di sviluppo e sono esclusi dal repository.
+`requirements-*.txt`. I test sono in `tests/` e non fanno parte dell'app
+installata. Per eseguirli dalla cartella del clone:
+
+```powershell
+npm ci
+py -3.13 -m venv .venv
+.venv\Scripts\python.exe -m pip install --no-deps -r requirements-ast.txt
+npm test
+```
+
+`npm test` esegue il controllo sintattico TypeScript, i test Python e Node e i
+test dell'interfaccia con Microsoft Edge; `node tests/run.mjs <filtro>` ne
+esegue solo una parte. La stessa sequenza gira in GitHub Actions a ogni push
+(`.github/workflows/test.yml`). I controlli della pubblicazione restano negli
+strumenti locali di sviluppo.
 
 Prima di ogni push, controlla i file selezionati con `git diff --cached`.
 Configurazioni reali,

@@ -14,10 +14,16 @@
       "./skills"
     ]
   },
+  "scripts": {
+    "test": "node tests/run.mjs"
+  },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "1.0.0",
     "pi-subagents": "0.79.0",
     "yaml": "2.8.3"
+  },
+  "devDependencies": {
+    "playwright-core": "1.62.1"
   },
   "license": "MIT"
 }
