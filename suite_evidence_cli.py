@@ -12,13 +12,15 @@ from suite_evidence import query, propose_relation, semantic_proposals, corpus_v
 REQUEST_ENV = ('PI_SUITE_SESSION_ID', 'PI_SUITE_CONTEXT')
 
 
-def handle(request):
-    for name in REQUEST_ENV:
-        value = (request.get('env') or {}).get(name)
-        if value:
-            os.environ[name] = value
-        else:
-            os.environ.pop(name, None)
+def handle(request, *, worker=False):
+    # Solo i worker riusati devono sostituire l'ambiente a ogni richiesta; i processi dedicati ereditano la chat.
+    if worker:
+        for name in REQUEST_ENV:
+            value = (request.get('env') or {}).get(name)
+            if value:
+                os.environ[name] = value
+            else:
+                os.environ.pop(name, None)
     action = request['action']
     bundle = request.get('bundle', [])
     args = request.get('args', {})
@@ -94,7 +96,7 @@ def serve():
         try:
             request = json.loads(line)
             identifier = request.get('id')
-            response = {'id': identifier, 'result': handle(request)}
+            response = {'id': identifier, 'result': handle(request, worker=True)}
         except Exception as error:
             response = {'id': identifier, 'error': str(error)}
         sys.stdout.write(json.dumps(response, ensure_ascii=False) + '\n')

@@ -62,13 +62,15 @@ const { chromium } = require('playwright-core');
           graphs = graphs.filter(g => g.id !== data.graph);
           project.workspace.documentation.graphs = [];
           result = { graphs, documentation: [] };
-        } else if (u.pathname === '/api/sources') result = [{ id: 'source:new', name: data.name }];
-        else if (u.pathname === '/api/folder') result = { path: 'C:\\Scelta' };
+        } else if (u.pathname === '/api/sources') {
+          // Il salvataggio identifica la fonte creata; un'altra fonte può già seguire nell'elenco condiviso.
+          result = { id: 'source:new', name: data.name, hasSecret: false };
+        } else if (u.pathname === '/api/folder') result = { path: 'C:\\Scelta' };
         else if (u.pathname === '/api/chat') result = { folder: project.path };
         else throw Error('Unexpected write ' + u.pathname);
       } else if (u.pathname === '/api/state') result = { settings, busy, job };
-      else if (u.pathname === '/api/models' || u.pathname === '/api/sources' || u.pathname === '/api/delegations')
-        result = [];
+      else if (u.pathname === '/api/sources') result = [{ id: 'source:new' }, { id: 'source:concurrent' }];
+      else if (u.pathname === '/api/models' || u.pathname === '/api/delegations') result = [];
       else if (u.pathname === '/api/project') result = project;
       else if (u.pathname === '/api/project-files') result = { graphs, documentation: [] };
       else if (u.pathname === '/api/graph')

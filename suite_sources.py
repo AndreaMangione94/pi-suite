@@ -163,7 +163,7 @@ def resolve_graph_folder(url, token):
     except urllib.error.HTTPError as error:
         reasons = {
             401: 'token non valido o scaduto',
-            403: 'il token non ha accesso in lettura alla cartella',
+            403: 'il token non ha accesso alla cartella o i permessi richiesti da /shares (Files.ReadWrite delegato, Files.ReadWrite.All applicativo)',
             404: 'cartella non trovata: controlla il link',
         }
         raise ValueError(
@@ -221,6 +221,7 @@ class Sources:
         return result
 
     def save(self, data):
+        """Salva e restituisce la fonte interessata, senza segreti; l'elenco completo si ottiene con public()."""
         sources = self.connections()
         sid = data.get('id') or uuid.uuid4().hex
         if not re.fullmatch('[a-f0-9]{32}', sid):
@@ -276,7 +277,7 @@ class Sources:
             s['secret'] = old['secret']
         # Il pannello e i job (generazione grafi, sincronizzazioni) aggiornano le fonti in parallelo: si scrive sotto lock.
         update_json(self.path, lambda current: [x for x in current if x['id'] != sid] + [s], [])
-        return self.public()
+        return {**{k: v for k, v in s.items() if k != 'secret'}, 'hasSecret': bool(s.get('secret'))}
 
     def _git(self, args, env=None):
         result = subprocess.run(['git', '-c', 'core.longpaths=true', *args], env=env, capture_output=True, timeout=180)

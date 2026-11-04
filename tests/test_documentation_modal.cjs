@@ -52,7 +52,7 @@ const { chromium } = require('playwright-core');
         assert.equal(data.section, 'documentation');
         project.workspace.documentation = data.references;
         result = project.workspace;
-      } else if (u.pathname === '/api/sources') result = [{ id: 'source:docs', name: data.name }];
+      } else if (u.pathname === '/api/sources') result = { id: 'source:docs', name: data.name, hasSecret: false };
       else if (u.pathname === '/api/action') {
         assert.ok(['prepare-documentation', 'auto-documentation'].includes(data.operation));
         job = { id: String(calls.length), state: 'running', operation: data.operation };

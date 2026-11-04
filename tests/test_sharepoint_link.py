@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 import suite
 import suite_sources
+from scripts import check_sharepoint
 from suite_sources import Sources, graph_share_id
 
 SHARING = 'https://azienda.sharepoint.com/:f:/s/progetto/EabcDEF123?e=xyz'
@@ -61,12 +62,14 @@ class SharePointLinkTests(unittest.TestCase):
             'parentReference': {'driveId': 'b!DRIVE'},
         }
         with self.graph(item):
-            rows = self.sources.save(
+            result = self.sources.save(
                 {'name': 'Specifiche', 'kind': 'sharepoint-graph', 'url': BROWSER, 'token': 'TOKEN-1'}
             )
-        saved = next(s for s in self.sources.connections() if s['id'] == rows[-1]['id'])
+        saved = next(s for s in self.sources.connections() if s['id'] == result['id'])
         self.assertEqual((saved['driveId'], saved['folderId'], saved['url']), ('b!DRIVE', 'FOLDER-1', BROWSER))
-        self.assertNotIn('TOKEN-1', json.dumps(rows))
+        self.assertNotIn('TOKEN-1', json.dumps(result))
+        self.assertNotIn('secret', result)
+        self.assertTrue(result['hasSecret'])
         call = self.calls[0]
         self.assertTrue(call['graph'])
         self.assertTrue(
@@ -104,6 +107,32 @@ class SharePointLinkTests(unittest.TestCase):
                 self.sources.save({'name': 'Y', 'kind': 'sharepoint-graph', 'driveId': 'b!D', 'token': 'T'})
         self.assertEqual(self.calls, [])
         self.assertEqual(self.sources.connections()[0]['folderId'], 'root')
+
+    def test_manual_check_acquires_expected_files_and_cleans_up(self):
+        # Esegue il collaudo preparato senza tenant: simula solo risoluzione/download, usa salvataggio e snapshot reali.
+        for expected, succeeds in [('sottocartella/prova.txt', True), ('mancante.txt', False)]:
+            with self.subTest(expected=expected):
+                output = io.StringIO()
+                temporary_root = suite.ROOT / 'tests' / 'tmp'
+                before = set(temporary_root.glob('sharepoint-live-*'))
+                with (
+                    patch('sys.argv', ['check_sharepoint.py', '--url', SHARING, '--expect-file', expected]),
+                    patch.object(check_sharepoint.getpass, 'getpass', return_value='TOKEN-COLLAUDO'),
+                    patch.object(suite_sources, 'resolve_graph_folder', return_value={'driveId': 'D', 'folderId': 'F'}),
+                    patch.object(
+                        Sources, '_graph', return_value=iter([('sottocartella/prova.txt', b'Testo di prova', {})])
+                    ),
+                    patch('sys.stdout', output),
+                ):
+                    if succeeds:
+                        check_sharepoint.main()
+                    else:
+                        with self.assertRaisesRegex(ValueError, 'File attesi mancanti'):
+                            check_sharepoint.main()
+                self.assertEqual(set(temporary_root.glob('sharepoint-live-*')), before)
+                self.assertNotIn('TOKEN-COLLAUDO', output.getvalue())
+                self.assertNotIn(SHARING, output.getvalue())
+                self.assertEqual('Collaudo completato' in output.getvalue(), succeeds)
 
 
 if __name__ == '__main__':

@@ -63,7 +63,7 @@ class ContextArtifactsTests(unittest.TestCase):
         extra = Path(self.temp.name) / 'extra'
         extra.mkdir()
         (extra / 'process.md').write_text('# Processo\nOrdini.\n', encoding='utf-8')
-        sid = self.app.sources.save({'kind': 'sharepoint-local', 'path': str(extra), 'name': 'Processi'})[-1]['id']
+        sid = self.app.sources.save({'kind': 'sharepoint-local', 'path': str(extra), 'name': 'Processi'})['id']
         # A Git connection to the same directory must not replace the current working folder.
         self.app.sources.save(
             {'kind': 'azure-local', 'path': str(self.root), 'branch': 'main', 'name': 'Commit storico'}

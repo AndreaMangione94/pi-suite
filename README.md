@@ -89,6 +89,8 @@ all'orchestratore e visibili nelle attivita.
 - [Benchmark](docs/GUIDA-BENCHMARK.md)
 - [Contesto e consegne](docs/CONTESTO-E-CONSEGNE.md)
 - [Verifiche e limiti della distribuzione](docs/VERIFICA-SUITE.md)
+- [Consolidamento delle evolutive](docs/CONSOLIDAMENTO-2026-11-04.md)
+- [Collaudo SharePoint su tenant reale](docs/COLLAUDO-SHAREPOINT.md)
 - [Controllo privacy del repository](docs/PRIVACY-REVIEW.md)
 - [Prompt inviati ai modelli](prompts/LEGGIMI.md)
 

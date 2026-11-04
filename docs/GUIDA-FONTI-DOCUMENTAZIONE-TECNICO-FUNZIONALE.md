@@ -58,7 +58,14 @@ Al salvataggio la suite ricava Drive ID e Folder Item ID dal link con l’API [`
 
 Il token viene cifrato con Windows DPAPI e non viene passato agli agenti. La suite legge ricorsivamente la cartella e gestisce le pagine di risultati. Registra webUrl, eTag e lastModifiedDateTime quando restituiti da Graph. Scarica i contenuti tramite gli URL temporanei restituiti da Microsoft senza inoltrare loro il bearer token Graph.
 
-Il token deve avere le autorizzazioni necessarie sulla risorsa; la documentazione Microsoft indica Files.Read come permesso delegato minimo per le API di lettura, con possibili requisiti ulteriori secondo il tenant e il tipo di accesso. Non incollare password Microsoft o client secret nel campo access token. Questa versione non esegue login OAuth interattivo, consenso amministratore o refresh automatico: quando il token scade, usa Modifica collegamento e salvalo nuovamente. Sono supportati gli endpoint del cloud Microsoft pubblico, non i cloud nazionali.
+I permessi dipendono dal percorso usato:
+
+- **Link con risoluzione automatica degli ID:** Microsoft documenta per [`/shares`](https://learn.microsoft.com/en-us/graph/api/shares-get?view=graph-rest-1.0) almeno `Files.ReadWrite` con token delegato, oppure `Files.ReadWrite.All` con token applicativo. Il solo `Files.Read` non è il permesso documentato per questo endpoint. Servono anche accesso alla risorsa e i consensi richiesti dal tenant.
+- **Drive ID e Folder Item ID inseriti a mano:** la suite salta `/shares`. Per [elencare i file della cartella](https://learn.microsoft.com/en-us/graph/api/driveitem-list-children?view=graph-rest-1.0), Microsoft documenta almeno `Files.Read` delegato o `Files.Read.All` applicativo, sempre con accesso alla risorsa. In questo percorso il salvataggio non verifica il token in rete: l'accesso viene verificato durante l'acquisizione.
+
+La suite non modifica i documenti remoti. La risoluzione del link usa `Prefer: redeemSharingLinkIfNecessary`: l'accesso concesso dal link è garantito solo per quella richiesta. Il successo del salvataggio non prova che le successive richieste per ID e i download siano autorizzati; il collaudo deve includere l'acquisizione dei file.
+
+Non incollare password Microsoft o client secret nel campo access token. Questa versione non esegue login OAuth interattivo, consenso amministratore o refresh automatico: quando il token scade, usa Modifica collegamento e salvalo nuovamente. Sono supportati gli endpoint del cloud Microsoft pubblico, non i cloud nazionali. Per la prova su un tenant reale vedi [Collaudo SharePoint](COLLAUDO-SHAREPOINT.md).
 
 Riferimenti: [elenco cartella](https://learn.microsoft.com/en-us/graph/api/driveitem-list-children?view=graph-rest-1.0), [download dei contenuti](https://learn.microsoft.com/en-us/graph/api/driveitem-get-content?view=graph-rest-1.0).
 

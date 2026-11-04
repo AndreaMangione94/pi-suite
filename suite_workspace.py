@@ -239,8 +239,7 @@ def prepare_sources(app, data, operation):
             None,
         )
         if source is None:
-            rows = app.sources.save({'name': project['name'], 'kind': 'sharepoint-local', 'path': project['path']})
-            source = rows[-1]
+            source = app.sources.save({'name': project['name'], 'kind': 'sharepoint-local', 'path': project['path']})
         ids.append(source['id'])
     # The selected project is always an input, even without an existing graph.
     source = next(
@@ -254,7 +253,7 @@ def prepare_sources(app, data, operation):
         None,
     )
     if source is None:
-        source = app.sources.save({'name': project['name'], 'kind': 'sharepoint-local', 'path': project['path']})[-1]
+        source = app.sources.save({'name': project['name'], 'kind': 'sharepoint-local', 'path': project['path']})
     if source['id'] not in ids:
         ids.append(source['id'])
     app.sources.sync(source['id'])

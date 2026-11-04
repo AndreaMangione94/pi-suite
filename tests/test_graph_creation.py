@@ -1,9 +1,11 @@
 import json
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 import suite
+import suite_sources
 import suite_workspace as workspace
 
 
@@ -82,6 +84,47 @@ class CreationTests(unittest.TestCase):
                 self.app.generate_graph(self.data)
         self.assertEqual(workspace.saved_graphs(self.app, self.pid), [])
         self.assertEqual(workspace.source_references(self.app.settings['projects'][0]), [])
+
+    def test_concurrent_source_does_not_replace_graph_source(self):
+        written, release = threading.Event(), threading.Event()
+        update = suite_sources.update_json
+        outcome = {}
+
+        def pause_after_write(*args, **kwargs):
+            result = update(*args, **kwargs)
+            if threading.current_thread().name == 'graph-job':
+                written.set()
+                if not release.wait(10):
+                    raise TimeoutError('Il test non ha sbloccato il job')
+            return result
+
+        def generate():
+            try:
+                outcome['result'] = self.app.generate_graph(self.data)
+            except Exception as error:
+                outcome['error'] = error
+
+        other = self.root / 'other'
+        other.mkdir()
+        with (
+            patch.object(suite_sources, 'update_json', side_effect=pause_after_write),
+            patch.object(self.app.sources, 'sync', side_effect=self.sync),
+        ):
+            worker = threading.Thread(target=generate, name='graph-job')
+            worker.start()
+            try:
+                self.assertTrue(written.wait(10))
+                self.app.sources.save({'name': 'Fonte concorrente', 'kind': 'sharepoint-local', 'path': str(other)})
+            finally:
+                release.set()
+                worker.join(10)
+        self.assertFalse(worker.is_alive())
+        self.assertNotIn('error', outcome)
+        saved = workspace.saved_graphs(self.app, self.pid)[0]
+        linked = next(s for s in self.app.sources.connections() if s['id'] == saved['source'])
+        self.assertEqual(linked['path'], str(self.root))
+        self.assertEqual(linked['name'], self.data['name'])
+        self.assertEqual(workspace.source_references(self.app.settings['projects'][0]), [linked['id']])
 
     def test_document_graph_is_generated_and_retrievable(self):
         (self.root / 'requirements.txt').write_text('REQ-17: Il sistema registra gli ordini.\n', encoding='utf-8')

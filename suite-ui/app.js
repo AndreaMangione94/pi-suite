@@ -1453,7 +1453,7 @@ function sourceMode() {
         ? 'https://github.com/organizzazione/repository.git'
         : 'https://dev.azure.com/organizzazione/progetto/_git/repository';
   $('source-token-help').textContent = sharepoint
-    ? 'Token Microsoft Graph con accesso in lettura alla cartella: con il link basta questo, Drive ID e cartella vengono ricavati.'
+    ? 'Token Microsoft Graph: per ricavare gli ID dal link, /shares richiede Files.ReadWrite (delegato) o Files.ReadWrite.All (applicativo), oltre all’accesso alla cartella.'
     : kind === 'git-remote'
       ? 'Token facoltativo, oppure usa le credenziali Git configurate.'
       : 'PAT con permesso Code Read, oppure lascia vuoto per usare le credenziali Git configurate.';
@@ -1511,11 +1511,11 @@ $('graph-create-form').onsubmit = event => {
     };
   if (addingDocumentationSource) {
     api('sources', source)
-      .then(async rows => {
+      .then(async saved => {
         project.workspace ??= {};
         project.workspace.documentation ??= {};
         project.workspace.documentation.sources = [
-          ...new Set([...(project.workspace.documentation.sources || []), rows.at(-1).id])
+          ...new Set([...(project.workspace.documentation.sources || []), saved.id])
         ];
         queueDocumentationReferences();
         await flushDocumentationReferences();

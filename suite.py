@@ -853,8 +853,8 @@ class Suite:
         source_data['name'] = name
         if kind == 'document':
             self.document_graph_profile()
-        rows = self.sources.save(source_data)
-        sid = rows[-1]['id']
+        source = self.sources.save(source_data)
+        sid = source['id']
         manifest = self.sources.sync(sid)
         folder = self.sources.root / sid / manifest['id']
         identifier = 'saved:' + uuid.uuid4().hex
