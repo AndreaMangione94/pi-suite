@@ -53,7 +53,7 @@ export default function (pi: ExtensionAPI) {
     } catch {}
   });
   pi.registerCommand('consumi', {
-    description: 'Mostra token e costo di questa chat, separati fra orchestratore e subagenti.',
+    description: 'Mostra token e costo di questa chat, separati fra orchestratore, subagenti e grafi semantici.',
     handler: async (_args, ctx) => {
       const totals: any = summarizeUsage(home, ctx.sessionManager.getSessionId());
       const value = (t: any, key: string) =>
@@ -80,7 +80,14 @@ export default function (pi: ExtensionAPI) {
             ' · costo ' +
             value(t, 'cost')
           : name + ': nessun dato';
-      ctx.ui.notify(line('Orchestratore', totals.parent) + '\n' + line('Subagenti', totals.child), 'info');
+      ctx.ui.notify(
+        line('Orchestratore', totals.parent) +
+          '\n' +
+          line('Subagenti', totals.child) +
+          '\n' +
+          line('Grafi semantici', totals.graph),
+        'info'
+      );
     }
   });
   const refreshGraphs = async (ctx: any, baseline = false, workspace = activeWorkspace(ctx)) => {
@@ -125,9 +132,12 @@ export default function (pi: ExtensionAPI) {
           .execute(id, args);
       }
     });
-  // L'aggiornamento dei grafi dopo un turno gira in background; il turno successivo lo attende.
+  // L'aggiornamento dei grafi dopo un turno gira in background e non blocca il turno successivo: finché non termina
+  // valgono i grafi precedenti (graph_query lo segnala) e il nuovo corpus si applica all'inizio del turno dopo, mai a metà.
   // La baseline serve una sola volta per sessione e cartella di lavoro: poi il refresh dopo il turno confronta con l'ultimo stato salvato.
   let pendingRefresh: Promise<void> = Promise.resolve(),
+    refreshing = 0,
+    corpusUpdate: { session: string; workspace: string } | null = null,
     baselines = new Map<string, Promise<void>>(),
     evidenceRules = false;
   const ensureBaseline = (ctx: any) => {
@@ -143,6 +153,8 @@ export default function (pi: ExtensionAPI) {
     return baselines.get(workspace)!;
   };
   pi.on('session_start', async (_event, ctx) => {
+    // I processi Python avviati dalla chat registrano qui i consumi dei grafi semantici (riga Grafi semantici di /consumi).
+    process.env.PI_SUITE_SESSION_ID = ctx.sessionManager.getSessionId();
     baselines = new Map();
     evidenceRules = false;
     ensureBaseline(ctx);
@@ -152,8 +164,10 @@ export default function (pi: ExtensionAPI) {
     const workspace = activeWorkspace(ctx),
       sections = event.systemPromptOptions.sections;
     finalizationReminders.delete(workspace);
-    await pendingRefresh;
-    await ensureBaseline(ctx);
+    void ensureBaseline(ctx);
+    if (corpusUpdate?.session === ctx.sessionManager.getSessionId() && corpusUpdate.workspace === workspace)
+      pi.appendEntry('suite-evidence-corpus', { workspace, bundle: sourceBundle(home, workspace) });
+    corpusUpdate = null;
     const context = chatContext(workspace);
     sections.pi_suite_context =
       'Artefatti selezionati e consultabili: ' +
@@ -174,14 +188,17 @@ export default function (pi: ExtensionAPI) {
   });
   pi.on('agent_end', async (_event, ctx) => {
     const workspace = activeWorkspace(ctx),
-      session = ctx.sessionManager.getSessionId();
+      session = ctx.sessionManager.getSessionId(),
+      baseline = ensureBaseline(ctx);
+    refreshing++;
     pendingRefresh = pendingRefresh
+      .then(() => baseline)
       .then(() => refreshGraphs(ctx, false, workspace))
       .then(() => {
-        if (ctx.sessionManager.getSessionId() === session && activeWorkspace(ctx) === workspace)
-          pi.appendEntry('suite-evidence-corpus', { workspace, bundle: sourceBundle(home, workspace) });
+        corpusUpdate = { session, workspace };
       })
-      .catch((error: any) => ctx.ui.notify('Aggiornamento grafi: ' + error.message, 'error'));
+      .catch((error: any) => ctx.ui.notify('Aggiornamento grafi: ' + error.message, 'error'))
+      .finally(() => refreshing--);
   });
   const finalizationReminders = new Set<string>();
   pi.on('agent_before_settle', async (event, ctx) => {
@@ -427,7 +444,14 @@ export default function (pi: ExtensionAPI) {
           edges: edges.slice(0, 100),
           totalMatches: matches.length,
           truncated: matches.length > nodes.length || edges.length > 100,
-          limits: graph.limits
+          limits: graph.limits,
+          ...(item.stale ? { stale: item.staleReason || 'Grafo da aggiornare: rigeneralo dal pannello.' } : {}),
+          ...(refreshing
+            ? {
+                refreshing:
+                  'Aggiornamento in corso dopo l’ultimo turno: il grafo può non includere le modifiche più recenti.'
+              }
+            : {})
         };
       });
       return {

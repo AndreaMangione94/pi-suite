@@ -22,7 +22,7 @@ Dopo la revisione, `register_documentation` verifica le citazioni e genera con i
 
 **Apri chat Pi** conserva le selezioni in un contesto della sessione, disponibile anche ai subagenti. `graph-explorer` viene caricata soltanto quando almeno un grafo è selezionato; `lettura-documentazione-tecnico-funzionale` soltanto quando ci sono documenti di documentazione tecnico funzionale selezionati. `read_documentation` permette ricerca deterministica, righe numerate e paginazione; i grafi semantici si consultano con `document_graph`, quelli del codice con `graph_query` e `connected_graph`.
 
-Alla fine di una richiesta, dopo l’integrazione delle modifiche da parte dell’orchestratore o del modello singolo, la suite confronta i contenuti con l’inizio della richiesta e rigenera i grafi già presenti quando necessario. Aggiorna anche i riferimenti della chat mantenendo gli stessi identificativi e le selezioni esplicite. Una semplice consultazione senza modifiche non rigenera i grafi.
+Alla fine di una richiesta, dopo l’integrazione delle modifiche da parte dell’orchestratore o del modello singolo, la suite confronta i contenuti con l’inizio della richiesta e aggiorna in background i grafi del codice quando necessario; i grafi semantici risultano invece **da aggiornare** e si rigenerano con ↻ nel menu Grafi, perché richiedono il modello. Aggiorna anche i riferimenti della chat mantenendo gli stessi identificativi e le selezioni esplicite. Una semplice consultazione senza modifiche non rigenera i grafi.
 
 ## Comando nella chat
 

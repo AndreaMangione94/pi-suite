@@ -1270,6 +1270,23 @@ body:has(.workspace-dialog[open]) {
 .context-remove:hover {
   color: var(--error-ink);
 }
+.context-refresh {
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 1px 7px;
+  font-size: 18px;
+}
+.context-refresh:hover {
+  color: var(--ink);
+}
+.context-stale {
+  color: var(--muted);
+  font-size: 12px;
+}
 .context-menu > .row {
   flex-wrap: wrap;
 }

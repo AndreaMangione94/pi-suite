@@ -41,6 +41,7 @@ OPERATIONS = (
     'auto-documentation',
     'index-sources',
     'register-documentation',
+    'refresh-graph',
 )
 
 
@@ -932,9 +933,76 @@ class Suite:
         save_json(path, job)
         env = self.secret_environment({**self.settings, 'roles': {'orchestrator': profile}})
         report = json.loads(self._process(['node', str(ROOT / 'adapter.mjs'), str(path)], env, log_output=False))
+        self.record_session_usage(profile, report.get('usage', []))
         if not report.get('documentGraph'):
             raise ValueError('Il modello non ha consegnato il grafo documentale.')
         return {'graph': report['documentGraph'], 'usage': report.get('usage', []), 'seconds': report.get('seconds')}
+
+    def record_session_usage(self, profile, usage):
+        """Consumi del grafo semantico avviato da una chat: stesso registro di /consumi (suite-metrics.mjs)."""
+        session = os.environ.get('PI_SUITE_SESSION_ID', '')
+        if not re.fullmatch(r'[A-Za-z0-9_.-]{1,200}', session):
+            return
+
+        def number(value):
+            return value if isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0 else None
+
+        path = self.home / 'metrics' / (session + '.jsonl')
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open('a', encoding='utf-8') as ledger:
+            for entry in usage:
+                entry = entry if isinstance(entry, dict) else {}
+                cost = entry.get('cost')
+                row = {
+                    'at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+                    'kind': 'graph',
+                    'model': profile['provider'] + '/' + profile['model'],
+                    **{key: number(entry.get(key)) for key in ('input', 'output', 'cacheRead', 'cacheWrite')},
+                    'cost': number(cost.get('total') if isinstance(cost, dict) else cost),
+                }
+                ledger.write(json.dumps(row, ensure_ascii=False) + '\n')
+
+    def refresh_graph(self, pid, identifier):
+        """Rigenera su richiesta un grafo della libreria; i grafi semantici chiamano il modello configurato."""
+        item = workspace.graph_entry(self, pid, identifier)
+        if item.get('workspace'):
+            return self.finalize_documentation(item['workspace'], auto_select=False)
+        if item['kind'] == 'document':
+            ids = [d['source'] for d in document_graph.load_graph(self.home, item['reference'])['dependencies']]
+            # Come dopo un turno: si aggiorna solo la copia della cartella del progetto, le fonti esterne restano fissate.
+            local = workspace.project_source_id(self, workspace.project_record(self, pid)['path'])
+            if local in ids:
+                self.sources.sync(local)
+            graph = self.build_document_graph(pid, ids, refresh=False)
+            ref = {'project': pid, 'version': graph['fingerprint']}
+            update = {'reference': ref, 'path': str(document_graph.graph_path(self.home, ref))}
+        elif item.get('source'):
+            manifest = self.sources.sync(item['source'])
+            path = self.sources.root / item['source'] / manifest['id'] / 'graph.json'
+            if not path.is_file():
+                raise ValueError('La cartella non contiene codice Python, JavaScript o TypeScript utilizzabile.')
+            graph = read_json(path)
+            update = {'path': str(path), 'snapshot': manifest['id']}
+        else:
+            project = self.project(pid)
+            repo = Path(project['path'])
+            graph = build_graph(
+                repo,
+                self.cache,
+                project_files(repo) if project['isGit'] else None,
+                prefix='repo/',
+                base=project['head'],
+            )
+            save_json(Path(item['path']), graph)
+            update = {}
+        update.update(createdAt=graph['createdAt'], stats=graph['stats'])
+        saved = workspace.saved_graphs(self, pid)
+        if any(g['id'] == identifier for g in saved):
+            save_json(
+                self.home / 'graphs' / pid / 'saved.json',
+                [{**g, **update} if g['id'] == identifier else g for g in saved],
+            )
+        return {'project': pid, 'graph': identifier, 'stats': graph['stats']}
 
     def build_document_graph(self, pid, ids, refresh=True, bundle=None, progress=None, include_documentation=False):
         workspace.project_record(self, pid)
@@ -1156,6 +1224,10 @@ class Suite:
                     raise ValueError('Seleziona almeno una fonte collegata al progetto per creare i grafi documentali.')
                 data = {**data, 'sources': list(dict.fromkeys(ids))}
                 self.document_graph_profile()
+            if operation == 'refresh-graph':
+                item = workspace.graph_entry(self, data.get('project'), data.get('graph'))
+                if item['kind'] == 'document' or item.get('workspace'):
+                    self.document_graph_profile()
             self.busy = True
             self.job = {
                 'id': uuid.uuid4().hex,
@@ -1176,6 +1248,8 @@ class Suite:
             env.update(PI_SUITE_GRAPH_CACHE=str(self.cache), PYTHONUTF8='1')
             if operation == 'generate-graph':
                 self.job['result'] = self.generate_graph(data)
+            elif operation == 'refresh-graph':
+                self.job['result'] = self.refresh_graph(data['project'], data['graph'])
             elif operation == 'sync-source':
                 manifest = self.sources.sync(data['source'])
                 self.job['result'] = {

@@ -1,6 +1,8 @@
 """Project-scoped persisted files and graph prerequisites for the workspace UI."""
 
 import json
+import time
+import uuid
 from pathlib import Path
 from suite_evidence import CODE_EXTENSIONS
 from suite_documentation_migration import LEGACY, ASSIGNMENT, PRIMARY_DOCUMENT, previous_name, is_primary_document
@@ -38,6 +40,38 @@ def saved_graphs(app, pid):
     project_record(app, pid)
     path = app.home / 'graphs' / pid / 'saved.json'
     return load(path) if path.exists() else []
+
+
+def project_source_id(app, root):
+    """ID della fonte locale che rappresenta la cartella del progetto, se esiste."""
+    return next(
+        (
+            s['id']
+            for s in app.sources.connections()
+            if s.get('kind') == 'sharepoint-local'
+            and s.get('path')
+            and Path(s['path']).resolve() == Path(root).resolve()
+        ),
+        None,
+    )
+
+
+def stale_markers(app, pid):
+    path = app.home / 'graphs' / pid / 'stale.json'
+    return load(path) if path.exists() else {}
+
+
+def mark_stale(app, pid, graph, reason):
+    """Segna un grafo semantico da aggiornare senza chiamare il modello: il segno vale finché il grafo non cambia percorso."""
+    markers = stale_markers(app, pid)
+    if markers.get(graph['id'], {}).get('path') == graph['path']:
+        return
+    markers[graph['id']] = {'path': graph['path'], 'reason': reason, 'since': time.time()}
+    path = app.home / 'graphs' / pid / 'stale.json'
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + '.' + uuid.uuid4().hex + '.tmp')
+    temporary.write_text(json.dumps(markers, ensure_ascii=False, indent=2), encoding='utf-8')
+    temporary.replace(path)
 
 
 def graph_entry(app, pid, identifier):
@@ -150,6 +184,11 @@ def inventory(app, pid):
             )
     hidden = set(project.get('workspace', {}).get('removedGraphs', []))
     paths = set(project.get('workspace', {}).get('removedGraphPaths', []))
+    markers = stale_markers(app, pid)
+    for graph in graphs:
+        marker = markers.get(graph['id'])
+        if marker and marker.get('path') == graph['path']:
+            graph.update(stale=True, staleReason=marker['reason'])
     return {
         'graphs': sorted(
             [g for g in graphs if g['id'] not in hidden and g['path'] not in paths],

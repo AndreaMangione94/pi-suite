@@ -38,7 +38,11 @@ const { chromium } = require('playwright-core');
         for await (const c of req) raw += c;
         const data = JSON.parse(raw);
         calls.push([u.pathname, data]);
-        if (u.pathname === '/api/action') {
+        if (u.pathname === '/api/action' && data.operation === 'refresh-graph') {
+          job = { id: String(calls.length), state: 'done', operation: 'refresh-graph', result: { graph: data.graph } };
+          graphs = graphs.map(g => ({ ...g, stale: false }));
+          result = job;
+        } else if (u.pathname === '/api/action') {
           assert.equal(data.operation, 'generate-graph');
           assert.equal(data.source, undefined);
           job = {
@@ -151,6 +155,28 @@ const { chromium } = require('playwright-core');
       await page.locator('#graph-context-list .context-remove').click();
       await page.waitForFunction(() => document.querySelectorAll('#graph-context-list .context-choice').length === 0);
       assert.deepEqual(project.workspace.documentation.graphs, []);
+      // Un grafo semantico da aggiornare mostra il segno e si rigenera solo su richiesta.
+      graphs = [
+        {
+          id: 'saved:doc',
+          name: 'Grafo documentale',
+          kind: 'document',
+          path: 'doc.json',
+          createdAt: 1700000000,
+          stale: true,
+          staleReason: 'Il progetto è cambiato dopo la generazione.'
+        }
+      ];
+      await page.evaluate(() => refreshWorkspaceFiles());
+      await page.waitForFunction(() => document.querySelectorAll('#graph-context-list .context-stale').length === 1);
+      const update = page.locator('#graph-context-list .context-refresh');
+      assert.match(await update.getAttribute('title'), /^Il progetto è cambiato dopo la generazione\. Rigenera/);
+      await update.click();
+      await page.waitForFunction(() => document.querySelectorAll('#graph-context-list .context-refresh').length === 0);
+      assert.deepEqual(calls.at(-1), [
+        '/api/action',
+        { operation: 'refresh-graph', project: 'demo', graph: 'saved:doc' }
+      ]);
       assert.equal(await page.locator('body').evaluate(n => n.scrollWidth <= innerWidth), true);
       assert.deepEqual(errors, []);
       await page.close();

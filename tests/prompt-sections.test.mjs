@@ -22,7 +22,9 @@ const tmp = fs.mkdtempSync(path.resolve('tests/tmp/sections-'));
 process.env.PI_SUITE_HOME = path.join(tmp, 'home');
 fs.mkdirSync(process.env.PI_SUITE_HOME);
 const spawns = [];
-let exitCode = 0;
+let exitCode = 0,
+  delay = 5;
+const settle = (ms = 40) => new Promise(resolve => setTimeout(resolve, ms));
 const spawn = (_cmd, args) => {
   const child = new EventEmitter();
   child.stdout = new EventEmitter();
@@ -34,7 +36,7 @@ const spawn = (_cmd, args) => {
   setTimeout(() => {
     if (code) child.stderr.emit('data', 'errore finto');
     child.emit('close', code);
-  }, 5);
+  }, delay);
   return child;
 };
 const Type = new Proxy(
@@ -117,11 +119,26 @@ assert.equal(s.pi_suite_skills, '');
 assert.equal(s.pi_suite_dossier_workflow, '');
 assert.equal(s.pi_suite_evidence, undefined, 'senza fonti niente regole sulle evidenze');
 for (const [name, value] of Object.entries(s)) assert.match(name, /^[a-z][a-z0-9_-]*$/);
-// Il refresh dopo il turno gira in background e non Ã¨ una baseline.
+// Il refresh dopo il turno gira in background, non è una baseline e non blocca il turno successivo.
+const corpus = () => entries.filter(e => e.customType === 'suite-evidence-corpus').length;
+await settle();
+delay = 300;
+const corpusBefore = corpus();
 await emit('agent_end');
+const started = Date.now();
 s = await turn();
+assert.ok(Date.now() - started < 150, 'il turno non attende il refresh');
+await settle();
 assert.equal(spawns.filter(a => !a.includes('--baseline')).length, 1);
 assert.equal(baselines().length, 1);
+// Il corpus aggiornato si applica all'inizio del turno dopo la fine del refresh, mai a metà turno.
+await settle(350);
+assert.equal(corpus(), corpusBefore, 'nessun cambio di corpus fra un turno e l’altro');
+await turn();
+assert.equal(corpus(), corpusBefore + 1);
+await turn();
+assert.equal(corpus(), corpusBefore + 1, 'una sola applicazione per refresh');
+delay = 5;
 // Con un grafo selezionato le regole compaiono e restano anche se la selezione sparisce.
 const selection = JSON.stringify({
   project: { path: ws },
@@ -159,11 +176,13 @@ assert.ok(s.pi_suite_dossier_workflow.length > 100);
 exitCode = 1;
 await emit('session_start');
 await turn();
+await settle();
 assert.ok(notes.some(([level, m]) => level === 'error' && m.includes('errore finto')));
 exitCode = 0;
 const before = baselines().length;
 await turn();
 assert.equal(baselines().length, before + 1);
+await settle();
 await turn();
 assert.equal(baselines().length, before + 1);
 // Nuova sessione: le regole sulle evidenze ripartono da zero.

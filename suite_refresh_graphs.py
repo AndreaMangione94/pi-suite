@@ -33,20 +33,6 @@ def light_signature(root):
     return h.hexdigest()
 
 
-def project_source_id(app, root):
-    """ID della fonte locale che rappresenta la cartella del progetto, se esiste."""
-    return next(
-        (
-            s['id']
-            for s in app.sources.connections()
-            if s.get('kind') == 'sharepoint-local'
-            and s.get('path')
-            and Path(s['path']).resolve() == Path(root).resolve()
-        ),
-        None,
-    )
-
-
 def refresh(app, folder, context_path=None, baseline=False, update_context=True):
     pid = app.project_for_workspace(folder)
     if not pid:
@@ -80,7 +66,7 @@ def refresh(app, folder, context_path=None, baseline=False, update_context=True)
         }
         save_json(state_path, previous)
         return []
-    local = project_source_id(app, root)
+    local = workspace.project_source_id(app, root)
     synced = {}
 
     def sync_local():
@@ -96,7 +82,8 @@ def refresh(app, folder, context_path=None, baseline=False, update_context=True)
                 manifest = read_json(app.sources.root / item['source'] / item['snapshot'] / 'manifest.json')
                 stored = next((d.get('sha256') for d in manifest['documents'] if is_primary_document(d['path'])), None)
                 if stored != value:
-                    app.finalize_documentation(item['workspace'], auto_select=False)
+                    # Registrare richiede il modello: il grafo si segna da aggiornare e si rigenera dal pannello.
+                    workspace.mark_stale(app, pid, item, 'Il documento è cambiato dopo la registrazione.')
                     updated.append(item['id'])
                 previous[item['id']] = value
         elif changed and item['kind'] == 'project':
@@ -120,22 +107,11 @@ def refresh(app, folder, context_path=None, baseline=False, update_context=True)
             import suite_document_graph
 
             ids = [d['source'] for d in suite_document_graph.load_graph(app.home, item['reference'])['dependencies']]
-            # Le fonti esterne non cambiano per le modifiche della chat: si ricostruisce solo se il grafo dipende dalla cartella del progetto.
+            # Le fonti esterne non cambiano per le modifiche della chat: conta solo la dipendenza dalla cartella del progetto.
+            # Ricostruire chiama il modello a pagamento: il grafo si segna da aggiornare e si rigenera dal pannello.
             if local not in ids:
                 continue
-            sync_local()
-            graph = app.build_document_graph(pid, ids, refresh=False)
-            ref = {'project': pid, 'version': graph['fingerprint']}
-            item.update(
-                reference=ref,
-                path=str(suite_document_graph.graph_path(app.home, ref)),
-                createdAt=graph['createdAt'],
-                stats=graph['stats'],
-            )
-            save_json(
-                app.home / 'graphs' / pid / 'saved.json',
-                [item if g['id'] == item['id'] else g for g in workspace.saved_graphs(app, pid)],
-            )
+            workspace.mark_stale(app, pid, item, 'Il progetto è cambiato dopo la generazione.')
             updated.append(item['id'])
     previous['projectLight'] = signature
     save_json(state_path, previous)

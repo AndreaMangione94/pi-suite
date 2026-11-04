@@ -58,7 +58,7 @@ function renderContextMenus() {
     const host = $(kind + '-context-list'),
       signature = JSON.stringify([
         !!state?.busy,
-        items.map(item => [item.id, item.name, item.kind, selection.has(item.id)])
+        items.map(item => [item.id, item.name, item.kind, selection.has(item.id), !!item.stale])
       ]);
     if (host.dataset.signature === signature) continue;
     host.dataset.signature = signature;
@@ -81,9 +81,23 @@ function renderContextMenus() {
       choose.title = item.name;
       choose.append(
         el('span', kind === 'documentation' ? '▤' : item.kind === 'project' ? '⌘' : '◈', 'context-artifact-icon'),
-        el('span', item.name)
+        el('span', item.name),
+        ...(item.stale ? [el('span', 'da aggiornare', 'context-stale')] : [])
       );
       tile.append(choose);
+      // I grafi semantici non si ricostruiscono più da soli dopo ogni turno: l'aggiornamento chiama il modello solo su richiesta.
+      if (kind === 'graph' && item.stale) {
+        const update = btn(
+          '↻',
+          () => action('refresh-graph', { project: project.id, graph: item.id }).catch(e => notice(e.message, true)),
+          'context-refresh'
+        );
+        update.disabled = !!state?.busy;
+        update.title =
+          (item.staleReason || 'Grafo da aggiornare.') + ' Rigenera: usa il modello configurato e può avere costi.';
+        update.setAttribute('aria-label', 'Aggiorna ' + item.name);
+        tile.append(update);
+      }
       if (kind === 'graph') {
         const remove = btn(
           '×',
@@ -594,7 +608,8 @@ async function refresh(initial = false) {
           'prepare-documentation',
           'auto-documentation',
           'index-sources',
-          'register-documentation'
+          'register-documentation',
+          'refresh-graph'
         ].includes(state.job.operation)
       ) {
         await loadSources();

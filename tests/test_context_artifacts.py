@@ -130,11 +130,21 @@ class ContextArtifactsTests(unittest.TestCase):
             (self.root / 'requirements.md').write_text('# Ordini aggiornati\n', encoding='utf-8')
             self.assertEqual(refresh(self.app, self.root), [])
             finalize.assert_not_called()
-            (folder / 'DOCUMENTAZIONE-TECNICO-FUNZIONALE.md').write_text(
-                '# documentazione tecnico funzionale\n## Processo ordini\nAggiornato.\n', encoding='utf-8'
-            )
+            document = folder / 'DOCUMENTAZIONE-TECNICO-FUNZIONALE.md'
+            document.write_text(document.read_text(encoding='utf-8') + 'Aggiornato.\n', encoding='utf-8')
             self.assertEqual(refresh(self.app, self.root), [result['graph']])
-            finalize.assert_called_once_with(str(folder), auto_select=False)
+            # Dopo il turno nessuna chiamata al modello: il grafo risulta da aggiornare.
+            finalize.assert_not_called()
+        entry = workspace.graph_entry(self.app, self.pid, result['graph'])
+        self.assertTrue(entry['stale'])
+        self.assertIn('documento è cambiato', entry['staleReason'])
+        # La rigenerazione su richiesta dal pannello toglie il segno insieme al grafo precedente.
+        with (
+            patch.object(self.app, 'document_graph_profile', return_value=self.profile),
+            patch.object(self.app, '_document_graph_completion', return_value={'graph': {'nodes': [], 'edges': []}}),
+        ):
+            self.app.refresh_graph(self.pid, result['graph'])
+        self.assertNotIn('stale', workspace.graph_entry(self.app, self.pid, result['graph']))
 
     def test_failed_semantic_generation_does_not_publish_graph(self):
         folder = self.dossier()

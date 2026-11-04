@@ -14,7 +14,7 @@ Il risultato comprende un **DOCUMENTAZIONE-TECNICO-FUNZIONALE.md dettagliato**, 
 
 Le scelte sono salvate automaticamente. La chat e i suoi figli ricevono soltanto gli artefatti selezionati: la skill `graph-explorer` è inclusa se almeno un grafo è selezionato, `lettura-documentazione-tecnico-funzionale` se almeno un documento di documentazione tecnico funzionale è selezionato. `read_documentation` offre una navigazione deterministica del testo con ricerca, righe e paginazione, anche senza grafi.
 
-Dopo le modifiche integrate dall’orchestratore o dal modello singolo, la suite rigenera i grafi presenti interessati dal cambiamento e aggiorna i riferimenti della chat. Senza modifiche non parte una rigenerazione. Le selezioni restano rispettate durante l’aggiornamento.
+Dopo le modifiche integrate dall’orchestratore o dal modello singolo, la suite aggiorna in background i grafi del codice interessati dal cambiamento, senza modelli. Il turno successivo non attende l’aggiornamento: fino al termine valgono i grafi precedenti (`graph_query` lo segnala) e i nuovi riferimenti si applicano all’inizio del turno dopo. I grafi semantici, che richiedono il modello a pagamento, non vengono ricostruiti automaticamente: nel menu Grafi compaiono **da aggiornare** e il pulsante ↻ li rigenera su richiesta. Senza modifiche non parte alcun aggiornamento. Le selezioni restano rispettate.
 
 ## Preparare le fonti una volta
 
