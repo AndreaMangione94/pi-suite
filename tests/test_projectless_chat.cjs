@@ -94,7 +94,7 @@ const { chromium } = require('playwright-core');
       }
       result = { ...settings.projects.find(p => p.id === url.searchParams.get('id')), graph: null };
     } else {
-      const file = path.join('suite-ui', url.pathname === '/' ? 'index.html' : url.pathname.slice(1));
+      const file = require('./static-assets.cjs')(url.pathname);
       if (!fs.existsSync(file)) {
         res.writeHead(404);
         res.end();

@@ -6,6 +6,11 @@ from pathlib import Path
 import tempfile
 import unittest
 
+import suite_benchmarks
+
+if suite_benchmarks.load() is None:
+    raise unittest.SkipTest('Modulo benchmark opzionale non installato.')
+
 from suite_benchmarks import Benchmarks
 from suite_inspect import supported, check_answer
 

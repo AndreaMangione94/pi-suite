@@ -76,7 +76,7 @@ const { chromium } = require('playwright-core');
       else if (u.pathname === '/api/graph')
         result = { nodes: [], edges: [], stats: { nodes: 0, edges: 0 }, limits: [] };
       else {
-        const file = path.join('suite-ui', u.pathname === '/' ? 'index.html' : u.pathname.slice(1));
+        const file = require('./static-assets.cjs')(u.pathname);
         if (!fs.existsSync(file)) {
           res.writeHead(404);
           res.end();

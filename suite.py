@@ -20,7 +20,7 @@ import uuid
 import webbrowser
 from pathlib import Path
 from suite_sources import Sources
-from suite_benchmarks import Benchmarks
+from suite_benchmarks import load as load_benchmarks, asset
 from suite_graph import build_graph, project_files, scan, fingerprint, query_graph
 import suite_byok as byok
 import suite_storage as storage
@@ -134,7 +134,8 @@ class Suite:
         self.cache = self.home / 'graphs' / 'cache.sqlite'
         self.settings_path = self.home / 'settings.json'
         self.sources = Sources(self.home, protect)
-        self.benchmarks = Benchmarks(self.home)
+        benchmark_module = load_benchmarks()
+        self.benchmarks = benchmark_module.Benchmarks(self.home, runtime=ROOT) if benchmark_module else None
         self.guard = threading.RLock()
         self.picker_guard = threading.Lock()
         self.busy = False
@@ -1416,7 +1417,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 '/style.css': ('style.css', 'text/css'),
             }
             static['/benchmark-panel.js'] = ('benchmark-panel.js', 'text/javascript')
-            static['/benchmark.css'] = ('benchmark.css', 'text/css')
+            benchmark_assets = {
+                '/modules/benchmarks/benchmark-panel.js': ('benchmark-panel.js', 'text/javascript'),
+                '/modules/benchmarks/benchmark.css': ('benchmark.css', 'text/css'),
+                '/benchmark.css': ('benchmark.css', 'text/css'),
+            }
+            if not post and route in benchmark_assets:
+                if self.server.suite.benchmarks is None:
+                    return self.send(404, {'error': 'Modulo benchmark non installato.'})
+                file, kind = benchmark_assets[route]
+                return self.send(200, asset(file).read_bytes(), kind)
             static['/themes.js'] = ('themes.js', 'text/javascript')
             if not post and route in static:
                 file, kind = static[route]
@@ -1439,10 +1449,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 data = json.loads(self.rfile.read(length))
             app = self.server.suite
             if route == '/api/state' and not post:
-                result = {'settings': app.public_settings(), 'job': dict(app.job), 'busy': app.busy, 'version': VERSION}
+                result = {
+                    'settings': app.public_settings(),
+                    'job': dict(app.job),
+                    'busy': app.busy,
+                    'version': VERSION,
+                    'modules': {'benchmarks': app.benchmarks is not None},
+                }
             elif route == '/api/settings' and post:
                 result = app.save_settings(data)
             elif route == '/api/benchmarks' or route.startswith('/api/benchmarks/'):
+                if app.benchmarks is None:
+                    return self.send(404, {'error': 'Modulo benchmark non installato.'})
                 result = app.benchmarks.request(route, data, params, post)
             elif route == '/api/byok/config' and not post:
                 result = {'config': app.byok.config(), 'revision': app.byok.revision()}

@@ -5,6 +5,11 @@ const { spawn } = require('node:child_process');
 const { once } = require('node:events');
 const { chromium } = require('playwright-core');
 
+if (!fs.existsSync(path.resolve('node_modules/pi-suite-benchmarks/package.json'))) {
+  console.log('SKIP: modulo benchmark opzionale non installato.');
+  process.exit(0);
+}
+
 (async () => {
   const work = path.resolve('tests/tmp/configuration-check');
   fs.mkdirSync(work, { recursive: true });

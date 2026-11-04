@@ -6,7 +6,6 @@
     <title>Pi Suite · Il tuo team, in locale</title>
     <script src="/themes.js"></script>
     <link rel="stylesheet" href="/style.css" />
-    <link rel="stylesheet" href="/benchmark.css" />
     <script src="/app.js" defer></script>
     <script src="/evidence-panel.js" defer></script>
     <script src="/benchmark-panel.js" defer></script>
@@ -20,7 +19,6 @@
       <nav aria-label="Navigazione principale">
         <button data-page="work" class="active"><span>◈</span> Il tuo workspace</button>
         <button data-page="runs"><span>◷</span> Attività subagenti</button>
-        <button data-page="benchmarks"><span>◫</span> Benchmark e confronti</button>
         <div class="nav-caption">CONFIGURAZIONE</div>
         <button data-page="providers"><span>⇄</span> Connessioni e modelli</button>
         <button data-page="roles"><span>◎</span> Orchestratore e subagenti</button>
@@ -282,9 +280,6 @@
         <p class="lead">Leggi gli incarichi Markdown e i risultati dei subagenti.</p>
         <div id="job-panel" class="card"></div>
         <div id="delegation-list"></div>
-      </section>
-      <section id="page-benchmarks" class="page" hidden aria-label="Benchmark e confronti">
-        <div id="benchmark-root"></div>
       </section>
       <dialog
         id="project-dialog"

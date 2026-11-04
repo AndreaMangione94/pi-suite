@@ -44,7 +44,7 @@ Il modello testato non assegna voti alla propria qualità. Il suo esito resta `n
 
 ## Controlli deterministici e LLM esterno
 
-I controlli dell’adattatore in `suite_inspect.py` sono disponibili per le versioni originali di **Calcolo (`math-001`)** ed **Estrazione JSON (`extract-001`)**. Il caricamento del file applica direttamente gli stessi controlli locali a successo, correttezza e formato, senza dipendere dall’installazione di Inspect e senza chiamate a modelli. Se il formato impedisce di interpretare la risposta, la correttezza resta non disponibile e il fallimento di formato rimane esplicito.
+I controlli dell’adattatore nel pacchetto `pi-suite-benchmarks` (richiamato anche dall’entry point compatibile `suite_inspect.py`) sono disponibili per le versioni originali di **Calcolo (`math-001`)** ed **Estrazione JSON (`extract-001`)**. Il caricamento del file applica direttamente gli stessi controlli locali a successo, correttezza e formato, senza dipendere dall’installazione di Inspect e senza chiamate a modelli. Se il formato impedisce di interpretare la risposta, la correttezza resta non disponibile e il fallimento di formato rimane esplicito.
 
 Per le altre prove non viene inventata una verifica deterministica: le dimensioni di qualità non ancora misurate passano al valutatore esterno. Le tre metriche operative restano sempre escluse dal giudice perché richiedono dati osservati nell’esecuzione testata.
 

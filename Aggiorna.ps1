@@ -194,7 +194,8 @@ function Invoke-Update {
         $oldMoved = $true
         Move-Item -LiteralPath $staging -Destination $application
         $newMoved = $true
-        foreach ($runtime in @('.venv', 'node_modules')) {
+        foreach ($runtime in @('.venv', 'node_modules', '.venv-inspect')) {
+            if ($runtime -eq '.venv-inspect' -and -not (Test-Path -LiteralPath (Join-Path $backup $runtime))) { continue }
             if ($runtime -eq 'node_modules' -and $nodeChanged) { continue }
             if ($runtime -eq '.venv' -and $pythonChanged) {
                 Copy-Item -LiteralPath (Join-Path $backup $runtime) -Destination (Join-Path $application $runtime) -Recurse

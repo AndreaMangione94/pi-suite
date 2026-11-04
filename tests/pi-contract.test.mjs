@@ -10,9 +10,16 @@ const repo = path.resolve('.');
 const pkg = JSON.parse(fs.readFileSync(path.join(repo, 'package.json'), 'utf8'));
 const installed = name => JSON.parse(fs.readFileSync(path.join(repo, 'node_modules', name, 'package.json'), 'utf8'));
 
-// Versioni installate = versioni fissate in package.json.
-for (const [name, version] of Object.entries(pkg.dependencies))
-  assert.equal(installed(name).version, version, name + ': installata una versione diversa da package.json');
+// Exact registry versions and file/Git dependencies must match their committed lock entries.
+const lock = JSON.parse(fs.readFileSync(path.join(repo, 'package-lock.json'), 'utf8'));
+for (const [name, specification] of Object.entries(pkg.dependencies)) {
+  assert.equal(lock.packages[''].dependencies[name], specification, name + ': lockfile non aggiornato');
+  const entry = lock.packages['node_modules/' + name];
+  const version = /^\d+\.\d+\.\d+$/.test(specification)
+    ? specification
+    : (entry.link ? lock.packages[entry.resolved] : entry).version;
+  assert.equal(installed(name).version, version, name + ': installata una versione diversa da quella fissata');
+}
 
 // pi-subagents: export usati tramite pi-bridge.mjs (un export rinominato fa fallire subito l'import).
 const bridge = await import('../pi-bridge.mjs');

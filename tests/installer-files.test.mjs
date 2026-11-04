@@ -24,4 +24,5 @@ for (const folder of ['skills', 'suite-ui', 'prompts', 'docs']) {
   assert.ok(folders.includes("'" + folder + "'"), 'cartella non copiata da Install.ps1: ' + folder);
   assert.ok(updater.includes("'" + folder + "'"), 'cartella non copiata da Aggiorna.ps1: ' + folder);
 }
+assert.ok(!listed.has('benchmark-catalog.json'), 'the private catalog belongs to the external module');
 console.log('Installer: ' + listed.size + ' file e cartelle applicative coperti');

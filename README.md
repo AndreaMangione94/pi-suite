@@ -103,6 +103,27 @@ riguardano la distribuzione Windows separata: per installare dal clone basta
 
 ## Sviluppo e pubblicazione
 
+Pi Suite viene fornita **senza la tab benchmark**. Il modulo opzionale si chiama
+`pi-suite-benchmarks`. La cartella [`modules/pi-suite-benchmarks`](modules/pi-suite-benchmarks/README.md)
+è autonoma: il suo contenuto è pronto da copiare nella radice di un nuovo
+repository. Include backend Python, frontend, catalogo, test, CI e licenza.
+La cartella è solo una copia pronta da pubblicare: non viene installata né
+caricata dall’applicazione. Può essere spostata nel nuovo repository.
+
+Dopo aver pubblicato il modulo e creato il tag `v1.0.0`, dalla radice di Pi Suite
+installa il modulo da Git (inserendo URL e tag reali):
+
+```powershell
+npm install --save-exact "git+https://github.com/OWNER/REPOSITORY.git#v1.0.0"
+```
+
+Versiona `package.json` e `package-lock.json`. A quel punto la copia in
+`modules/pi-suite-benchmarks` può essere rimossa da Pi Suite; installer e updater
+supportano anche l'installazione senza questa cartella. Non occorrono modifiche
+al codice: dopo il riavvio, il server rileva il modulo in `node_modules` e
+aggiunge la tab. Senza il pacchetto, la suite funziona e la tab non compare.
+Database e risultati esistenti restano nella cartella dati.
+
 Le dipendenze sono fissate in `package-lock.json` e nei file
 `requirements-*.txt`. I test sono in `tests/` e non fanno parte dell'app
 installata. Per eseguirli dalla cartella del clone:

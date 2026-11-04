@@ -4,6 +4,7 @@ const path = require('node:path');
 const http = require('node:http');
 
 const { chromium } = require('playwright-core');
+const staticFile = require('./static-assets.cjs');
 
 (async () => {
   const work = path.resolve('tests/tmp/documentazione-tecnico-funzionale-modal-check');
@@ -65,7 +66,7 @@ const { chromium } = require('playwright-core');
     else if (u.pathname === '/api/project-files') result = { graphs: [graph], documentation: files };
     else if (u.pathname === '/api/project-file') result = { text: docText };
     else {
-      const f = path.join('suite-ui', u.pathname === '/' ? 'index.html' : u.pathname.slice(1));
+      const f = staticFile(u.pathname);
       if (!fs.existsSync(f)) {
         res.writeHead(404);
         res.end();
