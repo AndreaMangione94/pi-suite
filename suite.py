@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 import argparse
+import copy
 import hmac
 import http.server
 import json
@@ -22,6 +23,7 @@ from suite_sources import Sources
 from suite_benchmarks import Benchmarks
 from suite_graph import build_graph, project_files, scan, fingerprint, query_graph
 import suite_byok as byok
+import suite_storage as storage
 import suite_workspace as workspace
 import suite_document_graph as document_graph
 from suite_documentation_migration import migrate_home, LEGACY, SKILL_RENAMES
@@ -45,23 +47,8 @@ OPERATIONS = (
 )
 
 
-def read_json(path):
-    return json.loads(Path(path).read_text(encoding='utf-8-sig'))
-
-
-def save_json(path, value):
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name('.' + uuid.uuid4().hex[:8] + '.tmp')
-    temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding='utf-8')
-    for attempt in range(5):
-        try:
-            temporary.replace(path)
-            break
-        except PermissionError:
-            if attempt == 4:
-                raise
-            time.sleep(0.05 * (attempt + 1))
+read_json = storage.read_json
+save_json = storage.save_json
 
 
 def checked_relative(value):
@@ -150,9 +137,12 @@ class Suite:
         self.busy = False
         self.catalog = None
         self.job = {'state': 'idle'}
+        disk = read_json(self.settings_path) if self.settings_path.exists() else None
+        # Base della fusione: ciò che è su disco ora. Pannello, chat e refresh scrivono lo stesso file da processi diversi.
+        self._settings_base = copy.deepcopy(disk) if disk is not None else {}
         self.settings = (
-            read_json(self.settings_path)
-            if self.settings_path.exists()
+            copy.deepcopy(disk)
+            if disk is not None
             else {
                 'providers': [],
                 'roles': {},
@@ -176,7 +166,9 @@ class Suite:
             self.settings['suiteSchema'] = 3
         self.byok = byok.Store(self.home, protect)
         self.settings.update(self.byok.load_or_migrate(self.settings))
-        save_json(self.settings_path, self.settings)
+        # CLI, refresh e strumenti creano una Suite a ogni avvio: si scrive solo se le migrazioni cambiano qualcosa.
+        if self.settings != disk:
+            self.save_settings_file()
         self.builtin_catalog = None
         self.credential_notices = []
         if previous.exists():
@@ -189,13 +181,32 @@ class Suite:
                     error='Il pannello è stato riavviato. Controlla il risultato prima di ripetere l’operazione.',
                 )
 
+    def save_settings_file(self):
+        """Scrive settings.json fondendo le modifiche fatte da altri processi (chat, refresh) dopo l'ultima lettura."""
+        with self.guard, storage.file_lock(self.settings_path):
+            disk = read_json(self.settings_path) if self.settings_path.exists() else {}
+            merged = storage.merge_changes(self._settings_base, self.settings, disk)
+            if merged != disk:
+                save_json(self.settings_path, merged)
+            self.settings.clear()
+            self.settings.update(merged)
+            self._settings_base = copy.deepcopy(merged)
+
+    def reload_settings(self):
+        """Allinea la copia in memoria a ciò che altri processi hanno scritto nel frattempo."""
+        with self.guard:
+            if not self.settings_path.exists():
+                return
+            disk = read_json(self.settings_path)
+            if disk != self._settings_base:
+                merged = storage.merge_changes(self._settings_base, self.settings, disk)
+                self.settings.clear()
+                self.settings.update(merged)
+                self._settings_base = disk
+
     def public_settings(self):
-        # Chat tools publish workspace selections from a separate Python process.
-        if self.settings_path.exists():
-            disk = {p['id']: p for p in read_json(self.settings_path).get('projects', [])}
-            for project in self.settings['projects']:
-                if project['id'] in disk:
-                    project['workspace'] = disk[project['id']].get('workspace', {})
+        # Chat e refresh scrivono le selezioni da processi separati.
+        self.reload_settings()
         result = json.loads(json.dumps(self.settings))
         for p in result['providers']:
             p.pop('encryptedKey', None)
@@ -230,7 +241,7 @@ class Suite:
             target.parent.mkdir(parents=True)
             target.write_text(content, encoding='utf-8')
             self.settings['enabledSkills'].append(name)
-            save_json(self.settings_path, self.settings)
+            self.save_settings_file()
             return self.public_settings()
 
     def secret_environment(self, settings=None):
@@ -402,7 +413,7 @@ class Suite:
         if r.returncode:
             raise ValueError('Configurazione non accettata dal runtime Pi; nessuna modifica applicata')
         self.settings.update(self.byok.save(config, updates))
-        save_json(self.settings_path, self.settings)
+        self.save_settings_file()
         self.catalog = None
         return self.public_settings()
 
@@ -740,7 +751,7 @@ class Suite:
             pid = __import__('hashlib').sha256(str(repo).encode()).hexdigest()[:16]
             if not any(p['id'] == pid for p in self.settings['projects']):
                 self.settings['projects'].append({'id': pid, 'path': str(repo), 'name': name or repo.name})
-                save_json(self.settings_path, self.settings)
+                self.save_settings_file()
             return self.project(pid)
 
     def project(self, pid):
@@ -822,7 +833,7 @@ class Suite:
                 references[key] = value.strip()
             previous = project.get('workspace', {})
             project['workspace'] = {**previous, section: references}
-            save_json(self.settings_path, self.settings)
+            self.save_settings_file()
             return project['workspace']
 
     def graph(self, pid, query='', node_id=None, identifier=None):
@@ -884,12 +895,11 @@ class Suite:
             **extra,
         }
         # Publish the graph in the library only after extraction and generation succeed.
-        saved = workspace.saved_graphs(self, pid)
-        save_json(self.home / 'graphs' / pid / 'saved.json', [*saved, item])
+        workspace.update_saved_graphs(self, pid, lambda saved: [*saved, item])
         refs = {**project.get('workspace', {}).get('graph', {})}
         refs['sources'] = list(dict.fromkeys([*workspace.source_references(project), sid]))
         project.setdefault('workspace', {})['graph'] = refs
-        save_json(self.settings_path, self.settings)
+        self.save_settings_file()
         return {'project': pid, 'graph': identifier, 'kind': kind, 'stats': graph['stats']}
 
     def document_graph_profile(self):
@@ -996,12 +1006,9 @@ class Suite:
             save_json(Path(item['path']), graph)
             update = {}
         update.update(createdAt=graph['createdAt'], stats=graph['stats'])
-        saved = workspace.saved_graphs(self, pid)
-        if any(g['id'] == identifier for g in saved):
-            save_json(
-                self.home / 'graphs' / pid / 'saved.json',
-                [{**g, **update} if g['id'] == identifier else g for g in saved],
-            )
+        workspace.update_saved_graphs(
+            self, pid, lambda saved: [{**g, **update} if g['id'] == identifier else g for g in saved]
+        )
         return {'project': pid, 'graph': identifier, 'stats': graph['stats']}
 
     def build_document_graph(self, pid, ids, refresh=True, bundle=None, progress=None, include_documentation=False):
@@ -1074,10 +1081,7 @@ class Suite:
             'createdAt': graph['createdAt'],
             'stats': graph['stats'],
         }
-        save_json(
-            self.home / 'graphs' / pid / 'saved.json',
-            [g for g in workspace.saved_graphs(self, pid) if g['id'] != identifier] + [item],
-        )
+        workspace.update_saved_graphs(self, pid, lambda saved: [g for g in saved if g['id'] != identifier] + [item])
         project = workspace.project_record(self, pid)
         prefs = project.setdefault('workspace', {}).setdefault('documentation', {})
         if auto_select:
@@ -1096,7 +1100,7 @@ class Suite:
         project['workspace']['removedGraphPaths'] = [
             p for p in project['workspace'].get('removedGraphPaths', []) if p != item['path']
         ]
-        save_json(self.settings_path, self.settings)
+        self.save_settings_file()
         from suite_graph import digest
 
         save_json(
@@ -1116,11 +1120,8 @@ class Suite:
             prefs['removedGraphPaths'] = list(dict.fromkeys([*prefs.get('removedGraphPaths', []), item['path']]))
             refs = prefs.setdefault('documentation', {})
             refs['graphs'] = [g for g in refs.get('graphs', []) if g != identifier]
-            save_json(
-                self.home / 'graphs' / pid / 'saved.json',
-                [g for g in workspace.saved_graphs(self, pid) if g['id'] != identifier],
-            )
-            save_json(self.settings_path, self.settings)
+            workspace.update_saved_graphs(self, pid, lambda saved: [g for g in saved if g['id'] != identifier])
+            self.save_settings_file()
             return workspace.inventory(self, pid)
 
     def project_for_workspace(self, path):

@@ -96,9 +96,8 @@ def refresh(app, folder, context_path=None, baseline=False, update_context=True)
                 if not path.exists():
                     raise ValueError('Codice supportato non disponibile per ' + item['name'])
                 item.update(path=str(path), snapshot=manifest['id'], stats=read_json(path)['stats'])
-                saved = workspace.saved_graphs(app, pid)
-                save_json(
-                    app.home / 'graphs' / pid / 'saved.json', [item if g['id'] == item['id'] else g for g in saved]
+                workspace.update_saved_graphs(
+                    app, pid, lambda saved: [item if g['id'] == item['id'] else g for g in saved]
                 )
             else:
                 save_json(Path(item['path']), build_graph(root, app.cache, prefix='repo/'))

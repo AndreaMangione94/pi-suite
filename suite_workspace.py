@@ -2,8 +2,8 @@
 
 import json
 import time
-import uuid
 from pathlib import Path
+import suite_storage as storage
 from suite_evidence import CODE_EXTENSIONS
 from suite_documentation_migration import LEGACY, ASSIGNMENT, PRIMARY_DOCUMENT, previous_name, is_primary_document
 import suite_document_graph as document_graph
@@ -42,6 +42,12 @@ def saved_graphs(app, pid):
     return load(path) if path.exists() else []
 
 
+def update_saved_graphs(app, pid, mutate):
+    """Modifica la libreria dei grafi sotto lock: pannello e refresh della chat la aggiornano da processi diversi."""
+    project_record(app, pid)
+    return storage.update_json(app.home / 'graphs' / pid / 'saved.json', mutate, [])
+
+
 def project_source_id(app, root):
     """ID della fonte locale che rappresenta la cartella del progetto, se esiste."""
     return next(
@@ -63,15 +69,12 @@ def stale_markers(app, pid):
 
 def mark_stale(app, pid, graph, reason):
     """Segna un grafo semantico da aggiornare senza chiamare il modello: il segno vale finché il grafo non cambia percorso."""
-    markers = stale_markers(app, pid)
-    if markers.get(graph['id'], {}).get('path') == graph['path']:
-        return
-    markers[graph['id']] = {'path': graph['path'], 'reason': reason, 'since': time.time()}
-    path = app.home / 'graphs' / pid / 'stale.json'
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(path.name + '.' + uuid.uuid4().hex + '.tmp')
-    temporary.write_text(json.dumps(markers, ensure_ascii=False, indent=2), encoding='utf-8')
-    temporary.replace(path)
+
+    def mark(markers):
+        if markers.get(graph['id'], {}).get('path') != graph['path']:
+            markers[graph['id']] = {'path': graph['path'], 'reason': reason, 'since': time.time()}
+
+    storage.update_json(app.home / 'graphs' / pid / 'stale.json', mark, {})
 
 
 def graph_entry(app, pid, identifier):
